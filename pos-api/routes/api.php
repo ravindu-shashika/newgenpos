@@ -13,6 +13,11 @@ use App\Http\Controllers\InvoiceSettingController;
 use App\Http\Controllers\SettingApiController;
 use App\Http\Controllers\Api\AccountApiController;
 use App\Http\Controllers\Api\AttendanceApiController;
+use App\Http\Controllers\Api\CurrencyApiController;
+use App\Http\Controllers\Api\CustomerApiController;
+use App\Http\Controllers\Api\DepartmentApiController;
+use App\Http\Controllers\Api\EmployeeApiController;
+use App\Http\Controllers\Api\ExpenseCategoryApiController;
 use App\Http\Controllers\Api\DiscountPlanApiController;
 use App\Http\Controllers\Api\DiscountApiController;
 use App\Http\Controllers\LabelsController;
@@ -158,6 +163,41 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::delete('/attendances/{date}/{employee_id}', [AttendanceApiController::class, 'destroy']);
     Route::post('/attendances/delete-by-selection', [AttendanceApiController::class, 'deleteBySelection']);
     Route::post('/attendances/import-csv', [AttendanceApiController::class, 'importCsv']);
+
+    // Departments (HRM)
+    Route::get('/departments', [DepartmentApiController::class, 'index']);
+    Route::post('/departments', [DepartmentApiController::class, 'store']);
+    Route::post('/departments/update', [DepartmentApiController::class, 'update']);
+    Route::delete('/departments/{id}', [DepartmentApiController::class, 'destroy']);
+
+    // Currencies
+    Route::get('/currencies', [CurrencyApiController::class, 'index']);
+    Route::post('/currencies', [CurrencyApiController::class, 'store']);
+    Route::post('/currencies/update', [CurrencyApiController::class, 'update']);
+    Route::delete('/currencies/{id}', [CurrencyApiController::class, 'destroy']);
+
+    // Expense Categories
+    Route::get('/expense-categories', [ExpenseCategoryApiController::class, 'index']);
+    Route::post('/expense-categories', [ExpenseCategoryApiController::class, 'store']);
+    Route::post('/expense-categories/update', [ExpenseCategoryApiController::class, 'update']);
+    Route::delete('/expense-categories/{id}', [ExpenseCategoryApiController::class, 'destroy']);
+    Route::get('/expense-categories/generate-code', [ExpenseCategoryApiController::class, 'generateCode']);
+
+    // Customers
+    Route::get('/customers', [CustomerApiController::class, 'index']);
+    Route::get('/customers/form-data', [CustomerApiController::class, 'formData']);
+    Route::get('/customers/{id}', [CustomerApiController::class, 'show']);
+    Route::post('/customers', [CustomerApiController::class, 'store']);
+    Route::post('/customers/update', [CustomerApiController::class, 'update']);
+    Route::delete('/customers/{id}', [CustomerApiController::class, 'destroy']);
+
+    // Employees
+    Route::get('/employees', [EmployeeApiController::class, 'index']);
+    Route::get('/employees/form-data', [EmployeeApiController::class, 'formData']);
+    Route::get('/employees/{id}', [EmployeeApiController::class, 'show']);
+    Route::post('/employees', [EmployeeApiController::class, 'store']);
+    Route::post('/employees/update', [EmployeeApiController::class, 'update']);
+    Route::delete('/employees/{id}', [EmployeeApiController::class, 'destroy']);
 
     // Accounts
     Route::get('/accounts', [AccountApiController::class, 'index']);
