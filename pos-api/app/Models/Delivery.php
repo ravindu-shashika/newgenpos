@@ -56,4 +56,12 @@ class Delivery extends Model
     {
         return $this->belongsTo(Courier::class);
     }
+
+    /**
+     * Get the sale that owns the delivery.
+     */
+    public function sale()
+    {
+        return $this->belongsTo(Sale::class);
+    }
 }

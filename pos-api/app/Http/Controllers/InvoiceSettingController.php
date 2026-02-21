@@ -279,9 +279,10 @@ class InvoiceSettingController extends Controller
         try {
             $request->validate([
                 'template_name' => 'required|string|max:255',
-                'prefix' => 'required|string|max:10',
-                'numbering_type' => 'required|in:sequential,random',
-                'start_number' => 'required|integer|min:1',
+                'prefix' => 'required|string|min:2|max:10',
+                'numbering_type' => 'required|in:sequential,random,datewise',
+                'number_of_digit' => 'nullable|integer|min:6|max:12',
+                'start_number' => 'nullable|integer|min:0',
             ]);
 
             DB::beginTransaction();

@@ -623,6 +623,60 @@ class SettingController extends Controller
         return redirect()->back()->with('message', __('db.SMS sent successfully'));
     }
 
+    /**
+     * API: Get data for Create SMS page (templates + customers for autocomplete).
+     */
+    public function createSmsDataApi()
+    {
+        $smsTemplates = SmsTemplate::orderBy('id')->get(['id', 'name', 'content']);
+        $customers = Customer::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'phone_number']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'sms_templates' => $smsTemplates,
+                'customers' => $customers,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Send SMS (for React Create SMS page).
+     */
+    public function sendSmsApi(Request $request)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $request->validate([
+            'message' => 'required|string|max:1000',
+            'mobile' => 'required|string|max:2000',
+        ]);
+        $smsProvider = ExternalService::where('active', true)->where('type', 'sms')->first();
+        if (!$smsProvider) {
+            return response()->json(['status' => 400, 'message' => __('db.No active SMS provider configured. Please set up SMS setting.')], 400);
+        }
+        $mobile = preg_replace('/\s+/', '', $request->mobile);
+        $numbers = array_filter(array_map('trim', explode(',', $mobile)));
+        if (empty($numbers)) {
+            return response()->json(['status' => 400, 'message' => __('db.Please enter at least one mobile number')], 400);
+        }
+        try {
+            $smsData = [
+                'sms_provider_name' => $smsProvider->name,
+                'details' => $smsProvider->details,
+                'message' => $request->message,
+                'recipent' => $mobile,
+                'numbers' => $numbers,
+            ];
+            $this->_smsService->initialize($smsData);
+            return response()->json(['status' => 200, 'message' => __('db.SMS sent successfully')]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => __('db.Failed to send SMS') . ': ' . $e->getMessage()], 500);
+        }
+    }
+
     public function processSmsData($templateId, $customerId, $referenceNo)
     {
         $smsData = [];

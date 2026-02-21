@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\DiscountPlan;
 
 class Customer extends Model
 {
@@ -72,5 +73,13 @@ class Customer extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the discount plans assigned to the customer.
+     */
+    public function discountPlans()
+    {
+        return $this->belongsToMany(DiscountPlan::class, 'discount_plan_customers', 'customer_id', 'discount_plan_id');
     }
 }

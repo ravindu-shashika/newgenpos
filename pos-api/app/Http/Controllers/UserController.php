@@ -39,6 +39,173 @@ class UserController extends Controller
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
 
+    /**
+     * API: User list for React (name, email, company_name, phone, role, is_active).
+     */
+    public function userListApi(Request $request)
+    {
+        $users = User::where('is_deleted', false)->orderBy('created_at', 'desc')->get();
+        $roles = DB::table('roles')->get()->keyBy('id');
+        $data = [];
+        foreach ($users as $user) {
+            $role = $roles->get($user->role_id);
+            $data[] = [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'company_name' => $user->company_name ?? '—',
+                'phone' => $user->phone ?? '—',
+                'role_id' => $user->role_id,
+                'role_name' => $role ? $role->name : '—',
+                'is_active' => (bool) $user->is_active,
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Form data for user add/edit (roles, billers, warehouses, customer_groups).
+     */
+    public function userFormDataApi(Request $request)
+    {
+        $roles = DB::table('roles')->orderBy('name')->get(['id', 'name']);
+        $billers = Biller::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $warehouses = Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $customer_groups = CustomerGroup::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        return response()->json([
+            'status' => 200,
+            'roles' => $roles,
+            'billers' => $billers,
+            'warehouses' => $warehouses,
+            'customer_groups' => $customer_groups,
+        ]);
+    }
+
+    /**
+     * API: Get one user for edit (React).
+     */
+    public function getUserApi($id)
+    {
+        $user = User::where('is_deleted', false)->find($id);
+        if (!$user) {
+            return response()->json(['status' => 404, 'message' => 'User not found'], 404);
+        }
+        $data = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone ?? '',
+            'company_name' => $user->company_name ?? '',
+            'role_id' => $user->role_id,
+            'biller_id' => $user->biller_id ?? '',
+            'warehouse_id' => $user->warehouse_id ?? '',
+            'is_active' => (bool) $user->is_active,
+        ];
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store user (JSON) for React.
+     */
+    public function storeUserApi(Request $request)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('users')->where(fn ($q) => $q->where('is_deleted', false)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users')->where(fn ($q) => $q->where('is_deleted', false)),
+            ],
+            'password' => 'required|string|min:6',
+            'phone_number' => 'required|string|max:255',
+            'role_id' => 'required|exists:roles,id',
+        ]);
+        $data = $request->all();
+        $data['phone'] = $data['phone_number'] ?? '';
+        $data['is_active'] = isset($data['is_active']) ? (bool) $data['is_active'] : true;
+        $data['is_deleted'] = false;
+        $data['password'] = bcrypt($data['password']);
+        unset($data['phone_number']);
+        $user = User::create($data);
+        if (isset($data['role_id']) && $data['role_id'] == 5) {
+            $data['user_id'] = $user->id;
+            $data['name'] = $data['customer_name'] ?? $user->name;
+            $data['phone_number'] = $data['phone'];
+            $data['is_active'] = true;
+            $data['customer_group_id'] = $data['customer_group_id'] ?? 1;
+            Customer::create($data);
+        }
+        return response()->json(['status' => 200, 'message' => __('db.User created successfully'), 'id' => $user->id]);
+    }
+
+    /**
+     * API: Update user (JSON) for React.
+     */
+    public function updateUserApi(Request $request, $id)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $user = User::where('is_deleted', false)->find($id);
+        if (!$user) {
+            return response()->json(['status' => 404, 'message' => 'User not found'], 404);
+        }
+        $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('users')->ignore($id)->where(fn ($q) => $q->where('is_deleted', false)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('users')->ignore($id)->where(fn ($q) => $q->where('is_deleted', false)),
+            ],
+            'phone' => 'required|string|max:255',
+            'role_id' => 'required|exists:roles,id',
+        ]);
+        $input = $request->only(['name', 'email', 'phone', 'company_name', 'role_id', 'biller_id', 'warehouse_id', 'is_active']);
+        $input['is_active'] = isset($input['is_active']) ? (bool) $input['is_active'] : false;
+        if ($request->filled('password')) {
+            $input['password'] = bcrypt($request->password);
+        }
+        $user->update($input);
+        cache()->forget('user_role');
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfullly')]);
+    }
+
+    /**
+     * API: Destroy user (soft delete) for React.
+     */
+    public function destroyUserApi($id)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['status' => 404, 'message' => 'User not found'], 404);
+        }
+        $user->is_deleted = true;
+        $user->is_active = false;
+        $user->save();
+        if (Auth::id() == $id) {
+            return response()->json(['status' => 200, 'message' => __('db.Data deleted successfullly'), 'logout' => true]);
+        }
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfullly')]);
+    }
+
     public function create()
     {
         $role = Role::find(Auth::user()->role_id);
@@ -280,5 +447,77 @@ class UserController extends Controller
         }
 
         return response()->json($html);
+    }
+
+    /**
+     * API: Get current user profile (for React).
+     */
+    public function getProfileApi(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['status' => 401, 'message' => 'Unauthenticated'], 401);
+        }
+        $data = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone ?? '',
+            'company_name' => $user->company_name ?? '',
+        ];
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Update current user profile (for React).
+     */
+    public function profileUpdateApi(Request $request)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['status' => 401, 'message' => 'Unauthenticated'], 401);
+        }
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string|max:255',
+            'company_name' => 'nullable|string|max:255',
+        ]);
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->phone = $request->phone ?? $user->phone;
+        $user->company_name = $request->company_name ?? $user->company_name;
+        $user->save();
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfullly'), 'data' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '', 'company_name' => $user->company_name ?? '']]);
+    }
+
+    /**
+     * API: Change password for current user (for React). On success returns 200; client should re-login.
+     */
+    public function changePasswordApi(Request $request)
+    {
+        if (!env('USER_VERIFIED', true)) {
+            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
+        }
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['status' => 401, 'message' => 'Unauthenticated'], 401);
+        }
+        $request->validate([
+            'current_pass' => 'required|string',
+            'new_pass' => 'required|string|min:6',
+            'confirm_pass' => 'required|string|same:new_pass',
+        ], [
+            'confirm_pass.same' => __('db.Please Confirm your new password'),
+        ]);
+        if (!Hash::check($request->current_pass, $user->password)) {
+            return response()->json(['status' => 400, 'message' => __('db.Current Password does not match')], 400);
+        }
+        $user->password = bcrypt($request->new_pass);
+        $user->save();
+        return response()->json(['status' => 200, 'message' => __('db.Password updated successfully. Please sign in again.')]);
     }
 }

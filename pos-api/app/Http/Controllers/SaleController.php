@@ -19,6 +19,7 @@ use App\Models\Sale;
 use App\Models\Delivery;
 use App\Models\PosSetting;
 use App\Models\Product_Sale;
+use App\Models\ProductSale;
 use App\Models\ProductWarehouse;
 use App\Models\Payment;
 use App\Models\Account;
@@ -641,6 +642,266 @@ class SaleController extends Controller
         );
 
         echo json_encode($json_data);
+    }
+
+    /**
+     * API: Form data for sales list filters (warehouses).
+     */
+    public function formDataApi()
+    {
+        $q = Warehouse::where('is_active', true);
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $q = $q->where('id', Auth::user()->warehouse_id);
+        }
+        $warehouses = $q->get(['id', 'name']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'warehouses' => $warehouses,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Form data for POS page (warehouses, billers, customers, categories, brands, taxes, currency, payment_options).
+     */
+    public function posFormDataApi()
+    {
+        $warehouses = Cache::remember('warehouse_list', 60 * 60 * 24 * 365, function () {
+            $q = Warehouse::where('is_active', true);
+            if (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+                $q = $q->where('id', Auth::user()->warehouse_id);
+            }
+            return $q->get(['id', 'name']);
+        });
+        $billers = Cache::remember('biller_list', 60 * 60 * 24 * 30, function () {
+            return Biller::where('is_active', true)->get(['id', 'name', 'company_name']);
+        });
+        $customers = Cache::remember('customer_list', 60 * 60 * 24, function () {
+            return Customer::where('is_active', true)->get(['id', 'name', 'phone_number', 'wa_number', 'deposit', 'expense', 'points', 'credit_limit']);
+        });
+        $categories = Cache::remember('category_list', 60 * 60 * 24 * 30, function () {
+            return Category::where('is_active', true)->get(['id', 'name', 'image']);
+        });
+        $brands = Cache::remember('brand_list', 60 * 60 * 24 * 30, function () {
+            return Brand::where('is_active', true)->get(['id', 'title', 'image']);
+        });
+        $taxes = Cache::remember('tax_list', 60 * 60 * 24 * 30, function () {
+            return Tax::where('is_active', true)->get(['id', 'name', 'rate']);
+        });
+        $posSetting = Cache::remember('pos_setting', 60 * 60 * 24 * 30, function () {
+            return PosSetting::latest()->first();
+        });
+        $paymentOptions = $posSetting ? explode(',', $posSetting->payment_options) : [];
+        $currency = Currency::where('is_active', true)->first();
+        if (cache()->has('general_setting')) {
+            $generalSetting = cache()->get('general_setting');
+        } else {
+            $generalSetting = DB::table('general_settings')->first();
+            if ($generalSetting) {
+                cache()->put('general_setting', $generalSetting, 60 * 60 * 24);
+            }
+        }
+        $decimal = $generalSetting->decimal ?? 2;
+        $dateFormat = $generalSetting->date_format ?? 'Y-m-d';
+
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'warehouses' => $warehouses,
+                'billers' => $billers,
+                'customers' => $customers,
+                'categories' => $categories,
+                'brands' => $brands,
+                'taxes' => $taxes,
+                'currency' => $currency,
+                'payment_options' => $paymentOptions,
+                'decimal' => $decimal,
+                'date_format' => $dateFormat,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Sales list for React (filter by date, warehouse, status, payment, etc).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-d', strtotime('-1 year')));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $warehouse_id = (int) $request->input('warehouse_id', 0);
+        $sale_status = (int) $request->input('sale_status', 0);
+        $payment_status = (int) $request->input('payment_status', 0);
+        $payment_method = $request->input('payment_method', '');
+        $sale_type = $request->input('sale_type', '');
+
+        $query = Sale::with(['user', 'customer', 'biller'])
+            ->select('sales.*', DB::raw('(sales.grand_total - sales.paid_amount) as due'))
+            ->whereNull('sales.deleted_at')
+            ->whereDate('sales.created_at', '>=', $starting_date)
+            ->whereDate('sales.created_at', '<=', $ending_date);
+
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'own') {
+            $query->where('sales.user_id', Auth::id());
+        } elseif (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $query->where('sales.warehouse_id', Auth::user()->warehouse_id);
+        }
+        if ($warehouse_id > 0) {
+            $query->where('sales.warehouse_id', $warehouse_id);
+        }
+        if ($sale_status > 0) {
+            $query->where('sales.sale_status', $sale_status);
+        }
+        if ($payment_status > 0) {
+            $query->where('sales.payment_status', $payment_status);
+        }
+        if ($sale_type !== '' && $sale_type !== '0') {
+            $query->where('sales.sale_type', $sale_type);
+        }
+        if ($payment_method !== '' && $payment_method !== '0') {
+            $query->join('payments', 'sales.id', '=', 'payments.sale_id')
+                ->where('payments.paying_method', $payment_method)
+                ->groupBy('sales.id');
+        }
+
+        $sales = $query->orderBy('sales.created_at', 'desc')->get();
+
+        $list = [];
+        foreach ($sales as $sale) {
+            $warehouse = Warehouse::find($sale->warehouse_id);
+            $currency = $sale->currency_id ? Currency::find($sale->currency_id) : null;
+            $returned_amount = DB::table('returns')->where('sale_id', $sale->id)->sum('grand_total');
+            $exchange_rate = $sale->exchange_rate && $sale->exchange_rate != 0 ? $sale->exchange_rate : 1;
+            $sale_status_text = $this->saleStatusLabel($sale->sale_status);
+            $payment_status_text = $this->paymentStatusLabel($sale->payment_status);
+            $payments = Payment::where('sale_id', $sale->id)->select('amount', 'paying_method')->get();
+            $payment_method_str = $payments->map(function ($p) use ($exchange_rate) {
+                return ucfirst($p->paying_method ?? '') . '(' . number_format($p->amount / $exchange_rate, config('decimal', 2)) . ')';
+            })->implode(', ');
+            $delivery = DB::table('deliveries')->where('sale_id', $sale->id)->first();
+            $delivery_status = $delivery ? $this->deliveryStatusLabel($delivery->status) : 'N/A';
+
+            $list[] = [
+                'id' => $sale->id,
+                'date' => $sale->created_at ? $sale->created_at->format('Y-m-d H:i') : null,
+                'reference_no' => $sale->reference_no,
+                'created_by' => $sale->user ? $sale->user->name : null,
+                'customer' => $sale->customer ? $sale->customer->name : null,
+                'customer_phone' => $sale->customer ? $sale->customer->phone_number : null,
+                'warehouse_name' => $warehouse ? $warehouse->name : null,
+                'sale_status' => $sale_status_text,
+                'sale_status_value' => $sale->sale_status,
+                'payment_status' => $payment_status_text,
+                'payment_status_value' => $sale->payment_status,
+                'payment_method' => $payment_method_str,
+                'currency' => $currency ? $currency->code : 'N/A',
+                'exchange_rate' => $sale->exchange_rate,
+                'delivery_status' => $delivery_status,
+                'grand_total' => round($sale->grand_total / $exchange_rate, config('decimal', 2)),
+                'returned_amount' => round($returned_amount / $exchange_rate, config('decimal', 2)),
+                'paid_amount' => round($sale->paid_amount / $exchange_rate, config('decimal', 2)),
+                'due' => round(($sale->grand_total - $returned_amount - $sale->paid_amount) / $exchange_rate, config('decimal', 2)),
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $list]);
+    }
+
+    private function saleStatusLabel($status)
+    {
+        $labels = [1 => __('db.Completed'), 2 => __('db.Pending'), 3 => __('db.Draft'), 4 => __('db.Returned'), 5 => __('db.Processing'), 6 => __('db.Cooked'), 7 => __('db.Served')];
+        return $labels[$status] ?? 'N/A';
+    }
+
+    private function paymentStatusLabel($status)
+    {
+        $labels = [1 => __('db.Pending'), 2 => __('db.Due'), 3 => __('db.Partial'), 4 => __('db.Paid')];
+        return $labels[$status] ?? 'N/A';
+    }
+
+    private function deliveryStatusLabel($status)
+    {
+        $labels = [1 => __('db.Packing'), 2 => __('db.Delivering'), 3 => __('db.Delivered')];
+        return $labels[$status] ?? 'N/A';
+    }
+
+    /**
+     * API: Single sale details for React (view modal) – header + product lines.
+     */
+    public function detailsApi($id)
+    {
+        $sale = Sale::with(['user', 'customer', 'biller'])->find($id);
+        if (!$sale) {
+            return response()->json(['status' => 404, 'message' => 'Sale not found'], 404);
+        }
+        $warehouse = Warehouse::find($sale->warehouse_id);
+        $currency = $sale->currency_id ? Currency::find($sale->currency_id) : null;
+        $returned_amount = DB::table('returns')->where('sale_id', $sale->id)->sum('grand_total');
+        $exchange_rate = $sale->exchange_rate && $sale->exchange_rate != 0 ? $sale->exchange_rate : 1;
+
+        $header = [
+            'id' => $sale->id,
+            'date' => $sale->created_at ? $sale->created_at->format('Y-m-d') : null,
+            'reference_no' => $sale->reference_no,
+            'created_by' => $sale->user ? $sale->user->name : null,
+            'customer' => $sale->customer ? $sale->customer->name : null,
+            'customer_phone' => $sale->customer ? $sale->customer->phone_number : null,
+            'customer_address' => $sale->customer ? $sale->customer->address : null,
+            'biller' => $sale->biller ? $sale->biller->name : null,
+            'warehouse' => $warehouse ? $warehouse->name : null,
+            'sale_status' => $this->saleStatusLabel($sale->sale_status),
+            'payment_status' => $this->paymentStatusLabel($sale->payment_status),
+            'currency' => $currency ? $currency->code : 'N/A',
+            'exchange_rate' => $sale->exchange_rate,
+            'total_tax' => $sale->total_tax,
+            'total_discount' => $sale->total_discount,
+            'total_price' => $sale->total_price,
+            'order_tax' => $sale->order_tax,
+            'order_tax_rate' => $sale->order_tax_rate,
+            'order_discount' => $sale->order_discount,
+            'shipping_cost' => $sale->shipping_cost,
+            'grand_total' => round($sale->grand_total / $exchange_rate, config('decimal', 2)),
+            'paid_amount' => round($sale->paid_amount / $exchange_rate, config('decimal', 2)),
+            'returned_amount' => round($returned_amount / $exchange_rate, config('decimal', 2)),
+            'due' => round(($sale->grand_total - $returned_amount - $sale->paid_amount) / $exchange_rate, config('decimal', 2)),
+            'sale_note' => $sale->sale_note,
+            'staff_note' => $sale->staff_note,
+        ];
+
+        $product_sales = ProductSale::where('sale_id', $id)->get();
+        $products = [];
+        foreach ($product_sales as $ps) {
+            $product = Product::find($ps->product_id);
+            $code = $product ? $product->code : '';
+            if ($ps->variant_id) {
+                $pv = ProductVariant::select('item_code')->FindExactProduct($ps->product_id, $ps->variant_id)->first();
+                if ($pv) {
+                    $code = $pv->item_code;
+                }
+            }
+            $unit = $ps->sale_unit_id ? optional(Unit::find($ps->sale_unit_id))->unit_code : '';
+            $batch_no = $ps->product_batch_id ? optional(ProductBatch::find($ps->product_batch_id))->batch_no : 'N/A';
+            $products[] = [
+                'product_name' => $product ? $product->name : '',
+                'product_code' => $code,
+                'batch_no' => $batch_no,
+                'qty' => $ps->qty,
+                'unit_code' => $unit,
+                'return_qty' => $ps->return_qty,
+                'net_unit_price' => $ps->net_unit_price,
+                'tax_rate' => $ps->tax_rate,
+                'tax' => $ps->tax,
+                'discount' => $ps->discount,
+                'total' => $ps->total,
+                'is_delivered' => $ps->is_delivered ? __('db.Yes') : __('db.No'),
+            ];
+        }
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'sale' => $header,
+                'products' => $products,
+            ],
+        ]);
     }
 
     public function create()

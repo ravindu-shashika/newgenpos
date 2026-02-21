@@ -78,6 +78,104 @@ class CustomerController extends Controller
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
 
+    /**
+     * API: Form data for customer add/edit (customer groups, custom fields).
+     */
+    public function formData(Request $request)
+    {
+        $customer_groups = CustomerGroup::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $custom_fields = CustomField::where('belongs_to', 'customer')->get();
+        $types = [];
+        foreach (CustomerTypeEnum::cases() as $case) {
+            $types[] = ['value' => $case->value, 'name' => $case->name];
+        }
+        return response()->json([
+            'status' => 200,
+            'customer_groups' => $customer_groups,
+            'custom_fields' => $custom_fields,
+            'types' => $types,
+        ]);
+    }
+
+    /**
+     * API: Customer list for React (with customer_group, details, discount_plan, reward_point, deposited_balance, total_due).
+     */
+    public function customerListApi(Request $request)
+    {
+        $custom_fields = CustomField::where([
+            ['belongs_to', 'customer'],
+            ['is_table', true],
+        ])->pluck('name');
+        $field_names = [];
+        foreach ($custom_fields as $fieldName) {
+            $field_names[] = str_replace(' ', '_', strtolower($fieldName));
+        }
+
+        $q = Customer::with(['customerGroup', 'discountPlans'])->where('is_active', true);
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $q->where(function ($query) use ($search, $field_names) {
+                $query->where('customers.name', 'LIKE', "%{$search}%")
+                    ->orWhere('customers.company_name', 'LIKE', "%{$search}%")
+                    ->orWhere('customers.phone_number', 'LIKE', "%{$search}%");
+                foreach ($field_names as $fn) {
+                    $query->orWhere('customers.' . $fn, 'LIKE', "%{$search}%");
+                }
+            });
+        }
+        $customers = $q->orderBy('created_at', 'desc')->get();
+
+        $data = [];
+        foreach ($customers as $customer) {
+            $customer_details = $customer->name;
+            if ($customer->company_name) {
+                $customer_details .= "\n" . $customer->company_name;
+            }
+            if ($customer->email) {
+                $customer_details .= "\n" . $customer->email;
+            }
+            $customer_details .= "\n" . $customer->phone_number . "\n" . ($customer->address ?? '') . "\n" . ($customer->city ?? '');
+            if ($customer->country) {
+                $customer_details .= "\n" . $customer->country;
+            }
+
+            $discount_plan = '';
+            foreach ($customer->discountPlans ?? [] as $index => $dp) {
+                $discount_plan .= ($index ? ', ' : '') . $dp->name;
+            }
+
+            $deposited_balance = $customer->deposit - $customer->expense;
+            $opening_balance_amount = $customer->opening_balance ?? 0;
+            $total_sales_amount = 0;
+            $total_paid_amount = 0;
+            $lims_sale_data = Sale::select('id', 'grand_total')->where('customer_id', $customer->id)->whereNull('deleted_at')->get();
+            foreach ($lims_sale_data as $sale) {
+                $total_sales_amount += $sale->grand_total;
+                $total_paid_amount += Payment::where('sale_id', $sale->id)->sum('amount');
+            }
+            $total_returns_amount = Returns::where('customer_id', $customer->id)->sum('grand_total');
+            $total_due = $total_sales_amount - ($opening_balance_amount + $total_paid_amount + $total_returns_amount);
+
+            $row = [
+                'id' => $customer->id,
+                'customer_group' => $customer->customerGroup ? $customer->customerGroup->name : '—',
+                'customer_details' => $customer_details,
+                'discount_plan' => $discount_plan ?: '—',
+                'reward_point' => $customer->points ?? 0,
+                'deposited_balance' => round($deposited_balance, 2),
+                'deposited_balance_formatted' => number_format($deposited_balance, 2, '.', ''),
+                'total_due' => round($total_due, 2),
+                'total_due_formatted' => number_format($total_due, 2, '.', ''),
+            ];
+            foreach ($field_names as $fn) {
+                $row[$fn] = $customer->$fn ?? '';
+            }
+            $data[] = $row;
+        }
+
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
     public function customerData(Request $request)
     {
         $lims_reward_point_setting_data = RewardPointSetting::latest()->first();
@@ -591,6 +689,170 @@ class CustomerController extends Controller
             return $customerInfo;
         else
             return redirect('customer')->with('create_message', $message);
+    }
+
+    /**
+     * API: Store customer (JSON) for React.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'customer_group_id' => 'required|exists:customer_groups,id',
+            'customer_name' => 'required|string|max:255',
+            'phone_number' => [
+                'required',
+                'max:255',
+                Rule::unique('customers')->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+        ]);
+        $customer_data = $request->all();
+        $customer_data['is_active'] = true;
+        $customer_data['name'] = $customer_data['customer_name'];
+        $customer_data['deposit'] = $customer_data['deposit'] ?? 0;
+        $customer_data['opening_balance'] = $customer_data['opening_balance'] ?? 0;
+        $customer_data['credit_limit'] = $customer_data['credit_limit'] ?? 0;
+        if (isset($customer_data['user']) && $customer_data['user']) {
+            $customer_data['phone'] = $customer_data['phone_number'];
+            $customer_data['role_id'] = 5;
+            $customer_data['is_deleted'] = false;
+            $customer_data['password'] = bcrypt($customer_data['password'] ?? 'password');
+            $user = User::create($customer_data);
+            $customer_data['user_id'] = $user->id;
+        }
+        unset($customer_data['user'], $customer_data['both']);
+        $lims_customer_data = Customer::create($customer_data);
+        $custom_field_data = [];
+        $custom_fields = CustomField::where('belongs_to', 'customer')->select('name', 'type')->get();
+        foreach ($custom_fields as $custom_field) {
+            $field_name = str_replace(' ', '_', strtolower($custom_field->name));
+            if (isset($customer_data[$field_name])) {
+                $custom_field_data[$field_name] = is_array($customer_data[$field_name]) ? implode(',', $customer_data[$field_name]) : $customer_data[$field_name];
+            }
+        }
+        if (count($custom_field_data)) {
+            DB::table('customers')->where('id', $lims_customer_data->id)->update($custom_field_data);
+        }
+        $lims_discount_plan_data = DiscountPlan::where([
+            'is_active' => true,
+            'type' => DiscountPlanTypeEnum::GENERIC->value,
+        ])->get();
+        foreach ($lims_discount_plan_data as $dp) {
+            DiscountPlanCustomer::create([
+                'discount_plan_id' => $dp->id,
+                'customer_id' => $lims_customer_data->id,
+            ]);
+        }
+        if (($lims_customer_data->deposit ?? 0) > 0) {
+            Deposit::create([
+                'user_id' => Auth::id(),
+                'customer_id' => $lims_customer_data->id,
+                'amount' => $lims_customer_data->deposit,
+            ]);
+        }
+        if (isset($customer_data['opening_balance']) && $customer_data['opening_balance'] > 0) {
+            $lims_sale_data = new Sale();
+            $lims_sale_data->reference_no = 'cob-' . date('Ymd') . '-' . date('his');
+            $lims_sale_data->customer_id = $lims_customer_data->id;
+            $lims_sale_data->user_id = Auth::id();
+            $lims_sale_data->warehouse_id = 1;
+            $lims_sale_data->item = 0;
+            $lims_sale_data->total_qty = 0;
+            $lims_sale_data->total_discount = 0;
+            $lims_sale_data->total_tax = 0;
+            $lims_sale_data->total_price = $customer_data['opening_balance'];
+            $lims_sale_data->grand_total = $customer_data['opening_balance'];
+            $lims_sale_data->sale_status = 1;
+            $lims_sale_data->payment_status = 1;
+            $lims_sale_data->sale_type = 'Opening balance';
+            $lims_sale_data->created_at = '1970-01-01 12:00:00';
+            $lims_sale_data->save();
+        }
+        $this->cacheForget('customer_list');
+        return response()->json(['status' => 200, 'message' => __('db.Customer created successfully'), 'id' => $lims_customer_data->id]);
+    }
+
+    /**
+     * API: Update customer (JSON) for React.
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $lims_customer_data = Customer::where('is_active', true)->find($id);
+        if (!$lims_customer_data) {
+            return response()->json(['status' => 404, 'message' => 'Customer not found'], 404);
+        }
+        $request->validate([
+            'customer_group_id' => 'required|exists:customer_groups,id',
+            'customer_name' => 'required|string|max:255',
+            'phone_number' => [
+                'required',
+                'max:255',
+                Rule::unique('customers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+        ]);
+        $input = $request->all();
+        $input['name'] = $input['customer_name'];
+        $lims_customer_data->update($input);
+        $custom_field_data = [];
+        $custom_fields = CustomField::where('belongs_to', 'customer')->select('name', 'type')->get();
+        foreach ($custom_fields as $custom_field) {
+            $field_name = str_replace(' ', '_', strtolower($custom_field->name));
+            if (isset($input[$field_name])) {
+                $custom_field_data[$field_name] = is_array($input[$field_name]) ? implode(',', $input[$field_name]) : $input[$field_name];
+            }
+        }
+        if (count($custom_field_data)) {
+            DB::table('customers')->where('id', $lims_customer_data->id)->update($custom_field_data);
+        }
+        $this->cacheForget('customer_list');
+        return response()->json(['status' => 200, 'message' => __('db.Customer updated successfully')]);
+    }
+
+    /**
+     * API: Destroy customer (soft delete) for React.
+     */
+    public function destroyApi($id)
+    {
+        $lims_customer_data = Customer::find($id);
+        if (!$lims_customer_data) {
+            return response()->json(['status' => 404, 'message' => 'Customer not found'], 404);
+        }
+        $lims_discount_plan_data = DiscountPlan::where([
+            'is_active' => true,
+            'type' => DiscountPlanTypeEnum::GENERIC->value,
+        ])->get();
+        foreach ($lims_discount_plan_data as $dp) {
+            $link = DiscountPlanCustomer::where([
+                'discount_plan_id' => $dp->id,
+                'customer_id' => $lims_customer_data->id,
+            ])->first();
+            if ($link) {
+                $link->delete();
+            }
+        }
+        $lims_customer_data->is_active = false;
+        $lims_customer_data->save();
+        $this->cacheForget('customer_list');
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+    }
+
+    /**
+     * API: Get one customer for edit (React).
+     */
+    public function getApi($id)
+    {
+        $customer = Customer::where('is_active', true)->find($id);
+        if (!$customer) {
+            return response()->json(['status' => 404, 'message' => 'Customer not found'], 404);
+        }
+        $custom_fields = CustomField::where('belongs_to', 'customer')->get();
+        $field_names = [];
+        $data = $customer->toArray();
+        foreach ($custom_fields as $f) {
+            $fn = str_replace(' ', '_', strtolower($f->name));
+            $data[$fn] = $customer->$fn ?? '';
+        }
+        $data['customer_name'] = $customer->name;
+        return response()->json(['status' => 200, 'data' => $data]);
     }
 
     public function show($id)

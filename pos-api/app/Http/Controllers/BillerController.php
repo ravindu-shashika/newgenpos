@@ -237,4 +237,151 @@ class BillerController extends Controller
         $this->cacheForget('biller_list');
         return redirect('biller')->with('not_permitted', __('db.Data deleted successfully'));
     }
+
+    /**
+     * API: Biller list for React.
+     */
+    public function listApi(Request $request)
+    {
+        $q = Biller::where('is_active', true);
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $q->where(function ($query) use ($search) {
+                $query->where('name', 'LIKE', "%{$search}%")
+                    ->orWhere('company_name', 'LIKE', "%{$search}%")
+                    ->orWhere('email', 'LIKE', "%{$search}%")
+                    ->orWhere('phone_number', 'LIKE', "%{$search}%");
+            });
+        }
+        $billers = $q->orderBy('created_at', 'desc')->get();
+        $baseUrl = rtrim(config('app.url'), '/');
+        $data = [];
+        foreach ($billers as $biller) {
+            $addr = trim($biller->address ?? '');
+            if ($biller->city) {
+                $addr .= ($addr ? ', ' : '') . $biller->city;
+            }
+            if ($biller->state) {
+                $addr .= ', ' . $biller->state;
+            }
+            if ($biller->postal_code) {
+                $addr .= ', ' . $biller->postal_code;
+            }
+            if ($biller->country) {
+                $addr .= ', ' . $biller->country;
+            }
+            $imageUrl = $biller->image ? $baseUrl . '/images/biller/' . $biller->image : null;
+            $data[] = [
+                'id' => $biller->id,
+                'image' => $biller->image,
+                'image_url' => $imageUrl,
+                'name' => $biller->name,
+                'company_name' => $biller->company_name,
+                'vat_number' => $biller->vat_number,
+                'email' => $biller->email,
+                'phone_number' => $biller->phone_number,
+                'address' => $addr,
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Get one biller for edit (React).
+     */
+    public function getApi($id)
+    {
+        $biller = Biller::where('is_active', true)->find($id);
+        if (!$biller) {
+            return response()->json(['status' => 404, 'message' => 'Biller not found'], 404);
+        }
+        $data = $biller->toArray();
+        $data['image_url'] = $biller->image ? rtrim(config('app.url'), '/') . '/images/biller/' . $biller->image : null;
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store biller (JSON) for React.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'company_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('billers')->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('billers')->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'company_name', 'vat_number', 'email', 'phone_number',
+            'address', 'city', 'state', 'postal_code', 'country',
+        ]);
+        $data['is_active'] = true;
+        Biller::create($data);
+        $this->cacheForget('biller_list');
+        return response()->json(['status' => 200, 'message' => __('db.Data inserted successfully')]);
+    }
+
+    /**
+     * API: Update biller (JSON) for React.
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $biller = Biller::where('is_active', true)->find($id);
+        if (!$biller) {
+            return response()->json(['status' => 404, 'message' => 'Biller not found'], 404);
+        }
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'company_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('billers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('billers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'company_name', 'vat_number', 'email', 'phone_number',
+            'address', 'city', 'state', 'postal_code', 'country',
+        ]);
+        $biller->update($data);
+        $this->cacheForget('biller_list');
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfully')]);
+    }
+
+    /**
+     * API: Delete biller (soft) for React.
+     */
+    public function destroyApi($id)
+    {
+        $biller = Biller::find($id);
+        if (!$biller) {
+            return response()->json(['status' => 404, 'message' => 'Biller not found'], 404);
+        }
+        $this->fileDelete(public_path('images/biller'), $biller->image);
+        $biller->is_active = false;
+        $biller->save();
+        $this->cacheForget('biller_list');
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+    }
 }

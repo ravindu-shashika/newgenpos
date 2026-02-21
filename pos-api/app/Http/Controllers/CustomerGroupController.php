@@ -158,7 +158,7 @@ class CustomerGroupController extends Controller
     public function customerGroupAll()
     {
         $lims_customer_group_list = DB::table('customer_groups')->where('is_active', true)->get();
-        
+
         $html = '';
         foreach($lims_customer_group_list as $customer_group){
             $html .='<option value="'.$customer_group->id.'">'.$customer_group->name .'</option>';
@@ -167,4 +167,74 @@ class CustomerGroupController extends Controller
         return response()->json($html);
     }
 
+    /**
+     * API: Get all customer groups (active only).
+     */
+    public function getAllCustomerGroups()
+    {
+        try {
+            $list = CustomerGroup::where('is_active', true)->orderBy('id', 'desc')->get();
+            return response()->json(['status' => 200, 'data' => $list]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to fetch customer groups', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * API: Save (create or update) customer group.
+     */
+    public function saveCustomerGroup(Request $request)
+    {
+        try {
+            $request->validate([
+                'name' => [
+                    'required',
+                    'max:255',
+                    Rule::unique('customer_groups')->ignore($request->id)->where(function ($query) {
+                        return $query->where('is_active', 1);
+                    }),
+                ],
+                'percentage' => 'required|numeric|min:0',
+            ]);
+
+            if ($request->id) {
+                $item = CustomerGroup::findOrFail($request->id);
+                $item->name = $request->name;
+                $item->percentage = $request->percentage;
+                $item->save();
+                $message = __('db.Data updated successfully');
+            } else {
+                CustomerGroup::create([
+                    'name' => $request->name,
+                    'percentage' => $request->percentage,
+                    'is_active' => true,
+                ]);
+                $message = __('db.Data inserted successfully');
+            }
+
+            $this->cacheForget('customer_group_list');
+
+            return response()->json(['status' => 200, 'message' => $message]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 400, 'message' => $e->errors()], 400);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * API: Delete (soft) customer group.
+     */
+    public function deleteCustomerGroup($id)
+    {
+        try {
+            $item = CustomerGroup::findOrFail($id);
+            $item->is_active = false;
+            $item->save();
+            $this->cacheForget('customer_group_list');
+            return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to delete', 'error' => $e->getMessage()], 500);
+        }
+    }
 }

@@ -511,6 +511,158 @@ class TransferController extends Controller
         return redirect('transfers')->with('message', $message);
     }
 
+    /**
+     * API: Create transfer from JSON payload (same fields as store(), no document).
+     */
+    public function storeApi(Request $request)
+    {
+        $data = $request->all();
+        $data['user_id'] = Auth::id();
+        $data['reference_no'] = 'tr-' . date("Ymd") . '-'. date("his");
+
+        if (isset($data['created_at'])) {
+            $data['created_at'] = normalize_to_sql_datetime($data['created_at']);
+        } else {
+            $data['created_at'] = date('Y-m-d H:i:s');
+        }
+
+        $product_id = $data['product_id'] ?? [];
+        if (!is_array($product_id) || count($product_id) === 0) {
+            return response()->json(['status' => 422, 'message' => 'Please add at least one product.'], 422);
+        }
+        if (isset($data['from_warehouse_id']) && isset($data['to_warehouse_id']) && (int) $data['from_warehouse_id'] === (int) $data['to_warehouse_id']) {
+            return response()->json(['status' => 422, 'message' => 'From and To warehouse cannot be the same.'], 422);
+        }
+
+        $lims_transfer_data = Transfer::create($data);
+
+        $imei_number = $data['imei_number'] ?? null;
+        $product_batch_id = $data['product_batch_id'] ?? null;
+        $product_code = $data['product_code'] ?? [];
+        $qty = $data['qty'] ?? [];
+        $purchase_unit = $data['purchase_unit'] ?? [];
+        $net_unit_cost = $data['net_unit_cost'] ?? [];
+        $tax_rate = $data['tax_rate'] ?? [];
+        $tax = $data['tax'] ?? [];
+        $total = $data['subtotal'] ?? [];
+        $product_transfer = [];
+
+        foreach ($product_id as $i => $id) {
+            $lims_product_variant_data = null;
+            $lims_purchase_unit_data = Unit::where('unit_name', $purchase_unit[$i] ?? '')->first();
+            if (!$lims_purchase_unit_data) {
+                continue;
+            }
+            $product_transfer['variant_id'] = null;
+            $product_transfer['product_batch_id'] = null;
+
+            $lims_product_data = Product::select('is_variant')->find($id);
+            if ($lims_product_data && $lims_product_data->is_variant) {
+                $lims_product_variant_data = ProductVariant::select('variant_id')->FindExactProductWithCode($id, $product_code[$i] ?? '')->first();
+                if ($lims_product_variant_data) {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($id, $lims_product_variant_data->variant_id, $data['from_warehouse_id'])->first();
+                    $product_transfer['variant_id'] = $lims_product_variant_data->variant_id;
+                } else {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_id', $id],
+                        ['warehouse_id', $data['from_warehouse_id']],
+                    ])->first();
+                }
+            } elseif (isset($data['product_batch_id']) && $product_batch_id && isset($product_batch_id[$i]) && $product_batch_id[$i]) {
+                $lims_product_warehouse_data = ProductWarehouse::where([
+                    ['product_batch_id', $product_batch_id[$i]],
+                    ['warehouse_id', $data['from_warehouse_id']],
+                ])->first();
+                $product_transfer['product_batch_id'] = $product_batch_id[$i];
+            } else {
+                $lims_product_warehouse_data = ProductWarehouse::where([
+                    ['product_id', $id],
+                    ['warehouse_id', $data['from_warehouse_id']],
+                ])->first();
+            }
+
+            if (!$lims_product_warehouse_data) {
+                continue;
+            }
+            if (!isset($lims_product_data)) {
+                $lims_product_data = Product::select('is_variant')->find($id);
+            }
+
+            if ($data['status'] != 2) {
+                if ($lims_purchase_unit_data->operator == '*') {
+                    $quantity = $qty[$i] * $lims_purchase_unit_data->operation_value;
+                } else {
+                    $quantity = $qty[$i] / $lims_purchase_unit_data->operation_value;
+                }
+                if ($imei_number && isset($imei_number[$i]) && $imei_number[$i]) {
+                    $imei_numbers = explode(",", $imei_number[$i]);
+                    $all_imei_numbers = explode(",", $lims_product_warehouse_data->imei_number ?? '');
+                    foreach ($imei_numbers as $number) {
+                        if (($j = array_search($number, $all_imei_numbers)) !== false) {
+                            unset($all_imei_numbers[$j]);
+                        }
+                    }
+                    $lims_product_warehouse_data->imei_number = implode(",", $all_imei_numbers);
+                }
+            } else {
+                $quantity = 0;
+            }
+            $lims_product_warehouse_data->qty -= $quantity;
+            $lims_product_warehouse_data->save();
+
+            if ($data['status'] == 1) {
+                if ($lims_product_data && $lims_product_data->is_variant && isset($lims_product_variant_data)) {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($id, $lims_product_variant_data->variant_id, $data['to_warehouse_id'])->first();
+                } elseif (isset($data['product_batch_id']) && $product_batch_id && isset($product_batch_id[$i]) && $product_batch_id[$i]) {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_batch_id', $product_batch_id[$i]],
+                        ['warehouse_id', $data['to_warehouse_id']],
+                    ])->first();
+                } else {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_id', $id],
+                        ['warehouse_id', $data['to_warehouse_id']],
+                    ])->first();
+                }
+                if ($lims_product_warehouse_data) {
+                    $lims_product_warehouse_data->qty += $quantity;
+                } else {
+                    $lims_product_warehouse_data = new ProductWarehouse();
+                    $lims_product_warehouse_data->product_id = $id;
+                    $lims_product_warehouse_data->product_batch_id = $product_transfer['product_batch_id'] ?? null;
+                    $lims_product_warehouse_data->variant_id = $product_transfer['variant_id'] ?? null;
+                    $lims_product_warehouse_data->warehouse_id = $data['to_warehouse_id'];
+                    $lims_product_warehouse_data->qty = $quantity;
+                }
+                if ($imei_number && isset($imei_number[$i]) && $imei_number[$i]) {
+                    if ($lims_product_warehouse_data->imei_number) {
+                        $lims_product_warehouse_data->imei_number .= ',' . $imei_number[$i];
+                    } else {
+                        $lims_product_warehouse_data->imei_number = $imei_number[$i];
+                    }
+                }
+                $lims_product_warehouse_data->save();
+            }
+
+            $product_transfer['transfer_id'] = $lims_transfer_data->id;
+            $product_transfer['product_id'] = $id;
+            $product_transfer['imei_number'] = $imei_number[$i] ?? null;
+            $product_transfer['qty'] = $qty[$i];
+            $product_transfer['purchase_unit_id'] = $lims_purchase_unit_data->id;
+            $product_transfer['net_unit_cost'] = $net_unit_cost[$i] ?? 0;
+            $product_transfer['tax_rate'] = $tax_rate[$i] ?? 0;
+            $product_transfer['tax'] = $tax[$i] ?? 0;
+            $product_transfer['total'] = $total[$i] ?? 0;
+            ProductTransfer::create($product_transfer);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => 'Transfer created successfully',
+            'data' => ['id' => $lims_transfer_data->id, 'reference_no' => $lims_transfer_data->reference_no],
+        ]);
+    }
+
     public function getProduct($id)
     {
         $query = Product::join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id');
@@ -1613,5 +1765,212 @@ class TransferController extends Controller
         $this->fileDelete(public_path('documents/transfer/'), $lims_transfer_data->document);
 
         return redirect('transfers')->with('not_permitted', __('db.Transfer deleted successfully'));
+    }
+
+    /**
+     * API: Form data for React (warehouses).
+     */
+    public function formDataApi()
+    {
+        $warehouses = Warehouse::where('is_active', true)->get(['id', 'name']);
+        return response()->json(['status' => 200, 'data' => ['warehouses' => $warehouses]]);
+    }
+
+    /**
+     * API: Transfer list for React (filter by date range, from/to warehouse).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-d', strtotime('-1 year', strtotime(date('Y-m-d')))));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $from_warehouse_id = (int) $request->input('from_warehouse_id', 0);
+        $to_warehouse_id = (int) $request->input('to_warehouse_id', 0);
+
+        $q = Transfer::with('fromWarehouse', 'toWarehouse', 'user')
+            ->whereDate('created_at', '>=', $starting_date)
+            ->whereDate('created_at', '<=', $ending_date);
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'own') {
+            $q->where('user_id', Auth::id());
+        } elseif (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $q->where(function ($q2) {
+                $q2->where('from_warehouse_id', Auth::user()->warehouse_id)
+                    ->orWhere('to_warehouse_id', Auth::user()->warehouse_id);
+            });
+        }
+        if ($from_warehouse_id > 0) {
+            $q->where('from_warehouse_id', $from_warehouse_id);
+        }
+        if ($to_warehouse_id > 0) {
+            $q->where('to_warehouse_id', $to_warehouse_id);
+        }
+        $transfers = $q->orderBy('created_at', 'desc')->get();
+
+        $data = [];
+        foreach ($transfers as $t) {
+            $statusText = $t->status == 1 ? __('db.Completed') : ($t->status == 3 ? __('db.Sent') : __('db.Pending'));
+            $data[] = [
+                'id' => $t->id,
+                'date' => $t->created_at->format('Y-m-d'),
+                'reference_no' => $t->reference_no,
+                'from_warehouse' => $t->fromWarehouse ? $t->fromWarehouse->name : '',
+                'to_warehouse' => $t->toWarehouse ? $t->toWarehouse->name : '',
+                'shipping_cost' => (float) $t->shipping_cost,
+                'grand_total' => (float) $t->grand_total,
+                'status' => $statusText,
+                'status_value' => $t->status,
+                'is_sent' => (bool) $t->is_sent,
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Transfer details + product lines for React view modal.
+     */
+    public function detailsApi($id)
+    {
+        $transfer = Transfer::with('fromWarehouse', 'toWarehouse', 'user')->find($id);
+        if (!$transfer) {
+            return response()->json(['status' => 404, 'message' => 'Transfer not found'], 404);
+        }
+        $lims_product_transfer_data = ProductTransfer::where('transfer_id', $id)->get();
+        $products = [];
+        foreach ($lims_product_transfer_data as $pt) {
+            $product = Product::find($pt->product_id);
+            $unit = Unit::find($pt->purchase_unit_id);
+            $name = $product ? $product->name : '';
+            $code = $product ? $product->code : '';
+            if ($pt->variant_id) {
+                $pv = ProductVariant::select('item_code')->FindExactProduct($pt->product_id, $pt->variant_id)->first();
+                if ($pv) {
+                    $code = $pv->item_code;
+                }
+            }
+            $batch_no = 'N/A';
+            if ($pt->product_batch_id) {
+                $batch = ProductBatch::select('batch_no')->find($pt->product_batch_id);
+                if ($batch) {
+                    $batch_no = $batch->batch_no;
+                }
+            }
+            $products[] = [
+                'product_name' => $name . ' [' . $code . ']',
+                'qty' => (float) $pt->qty,
+                'unit_code' => $unit ? $unit->unit_code : '',
+                'tax' => (float) $pt->tax,
+                'tax_rate' => (float) $pt->tax_rate,
+                'total' => (float) $pt->total,
+                'batch_no' => $batch_no,
+            ];
+        }
+        $header = [
+            'id' => $transfer->id,
+            'date' => $transfer->created_at->format('Y-m-d'),
+            'reference_no' => $transfer->reference_no,
+            'status' => $transfer->status == 1 ? __('db.Completed') : ($transfer->status == 3 ? __('db.Sent') : __('db.Pending')),
+            'from_warehouse' => $transfer->fromWarehouse ? $transfer->fromWarehouse->name : '',
+            'to_warehouse' => $transfer->toWarehouse ? $transfer->toWarehouse->name : '',
+            'total_tax' => (float) $transfer->total_tax,
+            'total_cost' => (float) $transfer->total_cost,
+            'shipping_cost' => (float) $transfer->shipping_cost,
+            'grand_total' => (float) $transfer->grand_total,
+            'note' => $transfer->note ?? '',
+            'created_by' => $transfer->user ? $transfer->user->name : '',
+            'created_by_email' => $transfer->user ? $transfer->user->email : '',
+        ];
+        return response()->json(['status' => 200, 'data' => ['transfer' => $header, 'products' => $products]]);
+    }
+
+    /**
+     * API: Delete transfer (React).
+     */
+    public function destroyApi($id)
+    {
+        $lims_transfer_data = Transfer::find($id);
+        if (!$lims_transfer_data) {
+            return response()->json(['status' => 404, 'message' => 'Transfer not found'], 404);
+        }
+        $lims_product_transfer_data = ProductTransfer::where('transfer_id', $id)->get();
+        foreach ($lims_product_transfer_data as $product_transfer_data) {
+            $lims_transfer_unit_data = Unit::find($product_transfer_data->purchase_unit_id);
+            if ($lims_transfer_unit_data && $lims_transfer_unit_data->operator == '*') {
+                $quantity = $product_transfer_data->qty * $lims_transfer_unit_data->operation_value;
+            } else {
+                $quantity = $lims_transfer_unit_data ? $product_transfer_data->qty / $lims_transfer_unit_data->operation_value : $product_transfer_data->qty;
+            }
+            if ($lims_transfer_data->status == 1) {
+                if ($product_transfer_data->variant_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($product_transfer_data->product_id, $product_transfer_data->variant_id, $lims_transfer_data->from_warehouse_id)->first();
+                } elseif ($product_transfer_data->product_batch_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_batch_id', $product_transfer_data->product_batch_id],
+                        ['warehouse_id', $lims_transfer_data->from_warehouse_id],
+                    ])->first();
+                } else {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithoutVariant($product_transfer_data->product_id, $lims_transfer_data->from_warehouse_id)->first();
+                }
+                if ($lims_product_warehouse_data) {
+                    if ($product_transfer_data->imei_number) {
+                        if ($lims_product_warehouse_data->imei_number) {
+                            $lims_product_warehouse_data->imei_number .= ',' . $product_transfer_data->imei_number;
+                        } else {
+                            $lims_product_warehouse_data->imei_number = $product_transfer_data->imei_number;
+                        }
+                    }
+                    $lims_product_warehouse_data->qty += $quantity;
+                    $lims_product_warehouse_data->save();
+                }
+                if ($product_transfer_data->variant_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($product_transfer_data->product_id, $product_transfer_data->variant_id, $lims_transfer_data->to_warehouse_id)->first();
+                } elseif ($product_transfer_data->product_batch_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_batch_id', $product_transfer_data->product_batch_id],
+                        ['warehouse_id', $lims_transfer_data->to_warehouse_id],
+                    ])->first();
+                } else {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithoutVariant($product_transfer_data->product_id, $lims_transfer_data->to_warehouse_id)->first();
+                }
+                if ($lims_product_warehouse_data) {
+                    if ($product_transfer_data->imei_number) {
+                        $imei_numbers = explode(',', $product_transfer_data->imei_number);
+                        $all_imei_numbers = explode(',', $lims_product_warehouse_data->imei_number ?? '');
+                        foreach ($imei_numbers as $number) {
+                            if (($j = array_search($number, $all_imei_numbers)) !== false) {
+                                unset($all_imei_numbers[$j]);
+                            }
+                        }
+                        $lims_product_warehouse_data->imei_number = implode(',', $all_imei_numbers);
+                    }
+                    $lims_product_warehouse_data->qty -= $quantity;
+                    $lims_product_warehouse_data->save();
+                }
+            } elseif ($lims_transfer_data->status == 3) {
+                if ($product_transfer_data->variant_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($product_transfer_data->product_id, $product_transfer_data->variant_id, $lims_transfer_data->from_warehouse_id)->first();
+                } elseif ($product_transfer_data->product_batch_id) {
+                    $lims_product_warehouse_data = ProductWarehouse::where([
+                        ['product_batch_id', $product_transfer_data->product_batch_id],
+                        ['warehouse_id', $lims_transfer_data->from_warehouse_id],
+                    ])->first();
+                } else {
+                    $lims_product_warehouse_data = ProductWarehouse::FindProductWithoutVariant($product_transfer_data->product_id, $lims_transfer_data->from_warehouse_id)->first();
+                }
+                if ($lims_product_warehouse_data) {
+                    if ($product_transfer_data->imei_number) {
+                        if ($lims_product_warehouse_data->imei_number) {
+                            $lims_product_warehouse_data->imei_number .= ',' . $product_transfer_data->imei_number;
+                        } else {
+                            $lims_product_warehouse_data->imei_number = $product_transfer_data->imei_number;
+                        }
+                    }
+                    $lims_product_warehouse_data->qty += $quantity;
+                    $lims_product_warehouse_data->save();
+                }
+            }
+            $product_transfer_data->delete();
+        }
+        $this->fileDelete(public_path('documents/transfer/'), $lims_transfer_data->document);
+        $lims_transfer_data->delete();
+        return response()->json(['status' => 200, 'message' => __('db.Transfer deleted successfully')]);
     }
 }

@@ -75,6 +75,14 @@ class Expense extends Model
     }
 
     /**
+     * Get the warehouse that owns the expense.
+     */
+    public function warehouse()
+    {
+        return $this->belongsTo(\App\Models\Warehouse::class);
+    }
+
+    /**
      * Get the cash register that owns the expense.
      */
     public function cashRegister()

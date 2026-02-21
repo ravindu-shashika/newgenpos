@@ -96,10 +96,9 @@ class MenuController extends Controller
 
 
 
-    public function getMenuCurrentRole()
+    public function getMenu()
     {
         $user = auth()->user();
-        $role_id = $user->role_id;
 
 
         $menus = Menu::orderBy('main_menu_order')

@@ -39,4 +39,9 @@ class ProductVariant extends Model
             'updated_at' => 'datetime',
         ];
     }
+
+    public function variant()
+    {
+        return $this->belongsTo(Variant::class);
+    }
 }

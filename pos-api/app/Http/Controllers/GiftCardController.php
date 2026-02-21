@@ -31,6 +31,156 @@ class GiftCardController extends Controller
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
 
+    /**
+     * API: List active gift cards for React app.
+     */
+    public function listApi()
+    {
+        $cards = GiftCard::where('is_active', true)
+            ->with(['customer', 'user', 'creator'])
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $list = $cards->map(function ($card) {
+            $balance = $card->amount - $card->expense;
+            $client = $card->customer_id
+                ? ($card->customer ? $card->customer->name : '')
+                : ($card->user ? $card->user->name : '');
+            return [
+                'id' => $card->id,
+                'card_no' => $card->card_no,
+                'customer_id' => $card->customer_id,
+                'user_id' => $card->user_id,
+                'client' => $client,
+                'amount' => $card->amount,
+                'expense' => $card->expense,
+                'balance' => $balance,
+                'created_by' => $card->creator ? $card->creator->name : null,
+                'expired_date' => $card->expired_date ? $card->expired_date->format('Y-m-d') : null,
+                'expired_date_formatted' => $card->expired_date ? $card->expired_date->format('d-m-Y') : null,
+                'is_expired' => $card->expired_date ? $card->expired_date->isPast() : false,
+            ];
+        });
+
+        return response()->json(['status' => 200, 'data' => $list]);
+    }
+
+    /**
+     * API: Store new gift card.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'card_no' => [
+                'required',
+                'max:255',
+                Rule::unique('gift_cards')->where(function ($query) {
+                    return $query->where('is_active', 1);
+                }),
+            ],
+            'amount' => 'required|numeric|min:0',
+            'expired_date' => 'nullable|date',
+        ]);
+
+        $user = $request->input('user');
+        if ($user) {
+            $request->validate(['user_id' => 'required|exists:users,id']);
+        } else {
+            $request->validate(['customer_id' => 'required|exists:customers,id']);
+        }
+
+        $data = [
+            'card_no' => $request->card_no,
+            'amount' => $request->amount,
+            'expense' => 0,
+            'expired_date' => $request->expired_date,
+            'created_by' => Auth::id(),
+            'is_active' => true,
+        ];
+        if ($user) {
+            $data['user_id'] = $request->user_id;
+            $data['customer_id'] = null;
+        } else {
+            $data['customer_id'] = $request->customer_id;
+            $data['user_id'] = null;
+        }
+
+        GiftCard::create($data);
+        return response()->json(['status' => 200, 'message' => 'Gift card created successfully']);
+    }
+
+    /**
+     * API: Get one gift card for edit.
+     */
+    public function editApi($id)
+    {
+        $card = GiftCard::where('is_active', true)->findOrFail($id);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'id' => $card->id,
+                'card_no' => $card->card_no,
+                'amount' => $card->amount,
+                'expense' => $card->expense,
+                'customer_id' => $card->customer_id,
+                'user_id' => $card->user_id,
+                'expired_date' => $card->expired_date ? $card->expired_date->format('Y-m-d') : null,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Update gift card.
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $card = GiftCard::where('is_active', true)->findOrFail($id);
+
+        $request->validate([
+            'card_no' => [
+                'required',
+                'max:255',
+                Rule::unique('gift_cards')->ignore($id)->where(function ($query) {
+                    return $query->where('is_active', 1);
+                }),
+            ],
+            'amount' => 'required|numeric|min:0',
+            'expired_date' => 'nullable|date',
+        ]);
+
+        $user = $request->input('user_edit');
+        if ($user) {
+            $request->validate(['user_id_edit' => 'required|exists:users,id']);
+        } else {
+            $request->validate(['customer_id_edit' => 'required|exists:customers,id']);
+        }
+
+        $card->card_no = $request->card_no;
+        $card->amount = $request->amount;
+        if ($user) {
+            $card->user_id = $request->user_id_edit;
+            $card->customer_id = null;
+        } else {
+            $card->customer_id = $request->customer_id_edit;
+            $card->user_id = null;
+        }
+        $card->expired_date = $request->expired_date_edit;
+        $card->save();
+
+        return response()->json(['status' => 200, 'message' => __('db.GiftCard updated successfully')]);
+    }
+
+    /**
+     * API: Soft delete gift card.
+     */
+    public function destroyApi($id)
+    {
+        $card = GiftCard::where('is_active', true)->findOrFail($id);
+        $card->is_active = false;
+        $card->save();
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+    }
+
     public function create()
     {
         //
@@ -136,6 +286,23 @@ class GiftCardController extends Controller
         $lims_gift_card_data->expired_date = $data['expired_date_edit'];
         $lims_gift_card_data->save();
         return redirect('gift_cards')->with('message', __('db.GiftCard updated successfully'));
+    }
+
+    /**
+     * API: Recharge gift card (JSON response).
+     */
+    public function rechargeApi(Request $request, $id)
+    {
+        $request->validate(['amount' => 'required|numeric|min:0.01']);
+        $card = GiftCard::where('is_active', true)->findOrFail($id);
+        $card->amount += $request->amount;
+        $card->save();
+        GiftCardRecharge::create([
+            'gift_card_id' => $card->id,
+            'amount' => $request->amount,
+            'user_id' => Auth::id(),
+        ]);
+        return response()->json(['status' => 200, 'message' => 'Gift card recharged successfully']);
     }
 
     public function recharge(Request $request, $id)

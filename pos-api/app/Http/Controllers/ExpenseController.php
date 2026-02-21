@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Expense;
 use App\Models\Account;
 use App\Models\Warehouse;
+use App\Models\ExpenseCategory;
+use App\Models\Employee;
 use App\Models\CashRegister;
 use App\Traits\StaffAccess;
 use App\Traits\TenantInfo;
@@ -327,5 +329,170 @@ class ExpenseController extends Controller
         $lims_expense_data = Expense::find($id);
         $lims_expense_data->delete();
         return redirect('expenses')->with('not_permitted', __('db.Data deleted successfully'));
+    }
+
+    /**
+     * API: Form data for React (expense categories, warehouses, accounts, employees).
+     */
+    public function formDataApi()
+    {
+        $expense_categories = ExpenseCategory::where('is_active', true)->get(['id', 'name', 'code']);
+        if (Auth::user()->role_id > 2) {
+            $warehouses = Warehouse::where('is_active', true)->where('id', Auth::user()->warehouse_id)->get(['id', 'name']);
+        } else {
+            $warehouses = Warehouse::where('is_active', true)->get(['id', 'name']);
+        }
+        $accounts = Account::where('is_active', true)->get(['id', 'name', 'account_no', 'is_default']);
+        $employees = Employee::where('is_active', 1)->get(['id', 'name']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'expense_categories' => $expense_categories,
+                'warehouses' => $warehouses,
+                'accounts' => $accounts,
+                'employees' => $employees,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Expense list for React (filter by date range and warehouse).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-01', strtotime('-1 year', strtotime(date('Y-m-d')))));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $warehouse_id = (int) $request->input('warehouse_id', 0);
+
+        $q = Expense::with('warehouse', 'expenseCategory')
+            ->whereDate('created_at', '>=', $starting_date)
+            ->whereDate('created_at', '<=', $ending_date);
+        $this->staffAccessCheck($q);
+        if ($warehouse_id > 0) {
+            $q->where('warehouse_id', $warehouse_id);
+        }
+        $expenses = $q->orderBy('created_at', 'desc')->get();
+
+        $data = [];
+        $total_amount = 0;
+        foreach ($expenses as $expense) {
+            $total_amount += $expense->amount;
+            $categoryName = $expense->expense_category_id == 0 ? 'Employee Expense' : ($expense->expenseCategory ? $expense->expenseCategory->name : '');
+            $data[] = [
+                'id' => $expense->id,
+                'date' => $expense->created_at->format('Y-m-d'),
+                'reference_no' => $expense->reference_no,
+                'warehouse' => $expense->warehouse ? $expense->warehouse->name : '',
+                'warehouse_id' => $expense->warehouse_id,
+                'expense_category' => $categoryName,
+                'expense_category_id' => $expense->expense_category_id,
+                'amount' => (float) $expense->amount,
+                'note' => $expense->note ?? '',
+            ];
+        }
+        return response()->json([
+            'status' => 200,
+            'data' => $data,
+            'total_amount' => round($total_amount, (int) (config('decimal') ?? 2)),
+        ]);
+    }
+
+    /**
+     * API: Get one expense for edit (React).
+     */
+    public function getApi($id)
+    {
+        $expense = Expense::with('warehouse', 'expenseCategory')->find($id);
+        if (!$expense) {
+            return response()->json(['status' => 404, 'message' => 'Expense not found'], 404);
+        }
+        $data = [
+            'id' => $expense->id,
+            'reference_no' => $expense->reference_no,
+            'date' => $expense->created_at->format('d-m-Y'),
+            'created_at' => $expense->created_at->format('Y-m-d'),
+            'warehouse_id' => $expense->warehouse_id,
+            'expense_category_id' => $expense->expense_category_id,
+            'account_id' => $expense->account_id,
+            'amount' => (float) $expense->amount,
+            'note' => $expense->note ?? '',
+            'employee_id' => $expense->employee_id,
+            'type' => $expense->type ?? 'expense',
+        ];
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store expense (React). Document upload not supported in JSON API.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'expense_category_id' => 'required|integer|min:0',
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'amount' => 'required|numeric|min:0',
+        ]);
+        if ($request->expense_category_id > 0) {
+            $request->validate(['expense_category_id' => 'exists:expense_categories,id']);
+        }
+        $data = $request->only(['expense_category_id', 'warehouse_id', 'account_id', 'amount', 'note']);
+        if ($request->expense_category_id == 0) {
+            $data['employee_id'] = $request->employee_id ? (int) $request->employee_id : null;
+            $data['type'] = in_array($request->type, ['expense', 'advance']) ? $request->type : 'expense';
+        }
+        if ($request->has('created_at') && $request->created_at) {
+            $data['created_at'] = normalize_to_sql_datetime($request->created_at);
+        } else {
+            $data['created_at'] = date('Y-m-d H:i:s');
+        }
+        $data['reference_no'] = 'er-' . date('Ymd') . '-' . date('his');
+        $data['user_id'] = Auth::id();
+        Expense::create($data);
+        return response()->json(['status' => 200, 'message' => __('db.Data inserted successfully')]);
+    }
+
+    /**
+     * API: Update expense (React).
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $expense = Expense::find($id);
+        if (!$expense) {
+            return response()->json(['status' => 404, 'message' => 'Expense not found'], 404);
+        }
+        $request->validate([
+            'expense_category_id' => 'required|integer|min:0',
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'amount' => 'required|numeric|min:0',
+        ]);
+        if ($request->expense_category_id > 0) {
+            $request->validate(['expense_category_id' => 'exists:expense_categories,id']);
+        }
+        $data = $request->only(['expense_category_id', 'warehouse_id', 'account_id', 'amount', 'note']);
+        if ($request->expense_category_id == 0) {
+            $data['employee_id'] = $request->employee_id ? (int) $request->employee_id : null;
+            $data['type'] = in_array($request->type, ['expense', 'advance']) ? $request->type : 'expense';
+        } else {
+            $data['employee_id'] = null;
+            $data['type'] = null;
+        }
+        if ($request->has('created_at') && $request->created_at) {
+            $data['created_at'] = normalize_to_sql_datetime($request->created_at);
+        }
+        $expense->update($data);
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfully')]);
+    }
+
+    /**
+     * API: Delete expense (React).
+     */
+    public function destroyApi($id)
+    {
+        $expense = Expense::find($id);
+        if (!$expense) {
+            return response()->json(['status' => 404, 'message' => 'Expense not found'], 404);
+        }
+        $expense->delete();
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
     }
 }

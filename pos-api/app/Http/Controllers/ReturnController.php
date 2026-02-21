@@ -291,6 +291,153 @@ class ReturnController extends Controller
         echo json_encode($json_data);
     }
 
+    /**
+     * API: Form data for sale return list filters (warehouses).
+     */
+    public function formDataApi()
+    {
+        $q = Warehouse::where('is_active', true);
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $q = $q->where('id', Auth::user()->warehouse_id);
+        }
+        $warehouses = $q->get(['id', 'name']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'warehouses' => $warehouses,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Sale return list for React (filter by date range, warehouse).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-d', strtotime('-1 year')));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $warehouse_id = (int) $request->input('warehouse_id', 0);
+
+        $query = Returns::with(['user', 'customer', 'biller'])
+            ->whereDate('created_at', '>=', $starting_date)
+            ->whereDate('created_at', '<=', $ending_date);
+
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'own') {
+            $query->where('user_id', Auth::id());
+        } elseif (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $query->where('warehouse_id', Auth::user()->warehouse_id);
+        }
+        if ($warehouse_id > 0) {
+            $query->where('warehouse_id', $warehouse_id);
+        }
+
+        $returns = $query->orderBy('created_at', 'desc')->get();
+
+        $list = [];
+        foreach ($returns as $ret) {
+            $warehouse = $ret->warehouse_id ? \App\Models\Warehouse::find($ret->warehouse_id) : null;
+            $sale_reference = 'N/A';
+            if ($ret->sale_id) {
+                $sale = Sale::whereNull('deleted_at')->select('reference_no')->find($ret->sale_id);
+                if ($sale) {
+                    $sale_reference = $sale->reference_no;
+                }
+            }
+            $exchange_rate = $ret->exchange_rate && $ret->exchange_rate != 0 ? $ret->exchange_rate : 1;
+            $list[] = [
+                'id' => $ret->id,
+                'date' => $ret->created_at ? $ret->created_at->format('Y-m-d') : null,
+                'reference_no' => $ret->reference_no,
+                'sale_reference' => $sale_reference,
+                'warehouse' => $warehouse ? $warehouse->name : null,
+                'biller' => $ret->biller ? $ret->biller->name : null,
+                'customer' => $ret->customer ? $ret->customer->name : null,
+                'grand_total' => round($ret->grand_total / $exchange_rate, config('decimal', 2)),
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $list]);
+    }
+
+    /**
+     * API: Single return details for React (view modal) – header + product lines.
+     */
+    public function detailsApi($id)
+    {
+        $ret = Returns::with(['user', 'customer', 'biller'])->find($id);
+        if (!$ret) {
+            return response()->json(['status' => 404, 'message' => 'Return not found'], 404);
+        }
+        $warehouse = $ret->warehouse_id ? \App\Models\Warehouse::find($ret->warehouse_id) : null;
+        $currency = $ret->currency_id ? Currency::find($ret->currency_id) : null;
+        $sale_reference = 'N/A';
+        if ($ret->sale_id) {
+            $sale = Sale::whereNull('deleted_at')->select('reference_no')->find($ret->sale_id);
+            if ($sale) {
+                $sale_reference = $sale->reference_no;
+            }
+        }
+        $exchange_rate = $ret->exchange_rate && $ret->exchange_rate != 0 ? $ret->exchange_rate : 1;
+
+        $header = [
+            'id' => $ret->id,
+            'date' => $ret->created_at ? $ret->created_at->format('Y-m-d') : null,
+            'reference_no' => $ret->reference_no,
+            'sale_reference' => $sale_reference,
+            'warehouse' => $warehouse ? $warehouse->name : null,
+            'biller' => $ret->biller ? $ret->biller->name : null,
+            'customer' => $ret->customer ? $ret->customer->name : null,
+            'customer_phone' => $ret->customer ? $ret->customer->phone_number : null,
+            'currency' => $currency ? $currency->code : 'N/A',
+            'exchange_rate' => $ret->exchange_rate,
+            'total_tax' => $ret->total_tax,
+            'total_discount' => $ret->total_discount,
+            'total_price' => $ret->total_price,
+            'order_tax' => $ret->order_tax,
+            'order_tax_rate' => $ret->order_tax_rate,
+            'grand_total' => round($ret->grand_total / $exchange_rate, config('decimal', 2)),
+            'return_note' => $ret->return_note,
+            'staff_note' => $ret->staff_note,
+            'created_by' => $ret->user ? $ret->user->name : null,
+            'created_by_email' => $ret->user ? $ret->user->email : null,
+            'document' => $ret->document,
+        ];
+
+        $product_returns = ProductReturn::where('return_id', $id)->get();
+        $products = [];
+        foreach ($product_returns as $pr) {
+            $product = Product::find($pr->product_id);
+            $code = $product ? $product->code : '';
+            if ($pr->variant_id) {
+                $pv = ProductVariant::select('item_code')->FindExactProduct($pr->product_id, $pr->variant_id)->first();
+                if ($pv) {
+                    $code = $pv->item_code;
+                }
+            }
+            $unit = $pr->sale_unit_id ? optional(Unit::find($pr->sale_unit_id))->unit_code : '';
+            $batch_no = $pr->product_batch_id ? optional(ProductBatch::find($pr->product_batch_id))->batch_no : 'N/A';
+            $unit_price = $pr->qty > 0 ? $pr->total / $pr->qty : 0;
+            $products[] = [
+                'product_name' => $product ? $product->name : '',
+                'product_code' => $code,
+                'batch_no' => $batch_no,
+                'qty' => $pr->qty,
+                'unit_code' => $unit,
+                'unit_price' => $unit_price,
+                'tax_rate' => $pr->tax_rate,
+                'tax' => $pr->tax,
+                'discount' => $pr->discount,
+                'total' => $pr->total,
+            ];
+        }
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'return' => $header,
+                'products' => $products,
+            ],
+        ]);
+    }
+
     public function create(Request $request)
     {
         $role = Role::find(Auth::user()->role_id);

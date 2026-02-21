@@ -139,12 +139,25 @@ class WarehouseController extends Controller
     }
 
     // API methods for Vue frontend
-    public function getAllWarehouses()
+    public function getAllWarehouses(Request $request)
     {
         try {
             $warehouses = Warehouse::where('is_active', true)
                 ->orderBy('created_at', 'desc')
                 ->get();
+
+            if ($request->boolean('with_stats')) {
+                $warehouses->each(function ($warehouse) {
+                    $warehouse->number_of_product = ProductWarehouse::join('products', 'product_warehouses.product_id', '=', 'products.id')
+                        ->where('product_warehouses.warehouse_id', $warehouse->id)
+                        ->where('products.is_active', true)
+                        ->count();
+                    $warehouse->stock_qty = (int) ProductWarehouse::join('products', 'product_warehouses.product_id', '=', 'products.id')
+                        ->where('product_warehouses.warehouse_id', $warehouse->id)
+                        ->where('products.is_active', true)
+                        ->sum('product_warehouses.qty');
+                });
+            }
 
             return response()->json([
                 'status' => 200,

@@ -81,4 +81,20 @@ class Quotation extends Model
     {
         return $this->belongsTo(Customer::class);
     }
+
+    /**
+     * Get the supplier.
+     */
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    /**
+     * Get the warehouse.
+     */
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
 }

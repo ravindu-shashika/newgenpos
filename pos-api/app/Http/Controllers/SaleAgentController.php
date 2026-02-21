@@ -14,10 +14,193 @@ use Illuminate\Validation\Rule;
 use App\Traits\TenantInfo;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class SaleAgentController extends Controller
 {
     use TenantInfo;
+
+    /**
+     * API: Sale agent list for React.
+     */
+    public function listApi(Request $request)
+    {
+        $agents = Employee::with('department')
+            ->where('is_active', true)
+            ->where('is_sale_agent', 1)
+            ->orderBy('created_at', 'desc')
+            ->get();
+        $baseUrl = rtrim(config('app.url'), '/');
+        $data = [];
+        foreach ($agents as $agent) {
+            $addr = trim($agent->address ?? '');
+            if ($agent->city) {
+                $addr .= ($addr ? ', ' : '') . $agent->city;
+            }
+            if ($agent->country) {
+                $addr .= ($addr ? ', ' : '') . $agent->country;
+            }
+            $imageUrl = null;
+            if ($agent->image) {
+                $imageUrl = $baseUrl . '/images/sale_agent/' . $agent->image;
+                if (!is_file(public_path('images/sale_agent/' . $agent->image))) {
+                    $imageUrl = $baseUrl . '/images/employee/' . $agent->image;
+                }
+            }
+            $data[] = [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'email' => $agent->email ?? '—',
+                'phone_number' => $agent->phone_number ?? '—',
+                'department_id' => $agent->department_id,
+                'department_name' => $agent->department ? $agent->department->name : '—',
+                'address' => $addr ?: '—',
+                'staff_id' => $agent->staff_id ?? '—',
+                'image' => $agent->image,
+                'image_url' => $imageUrl,
+                'sales_target' => $agent->sales_target ?? [],
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Form data for sale agent add/edit.
+     */
+    public function formDataApi(Request $request)
+    {
+        $departments = Department::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $roles = DB::table('roles')->orderBy('name')->get(['id', 'name']);
+        $warehouses = Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $billers = Biller::where('is_active', true)->orderBy('name')->get(['id', 'name', 'company_name']);
+        return response()->json([
+            'status' => 200,
+            'departments' => $departments,
+            'roles' => $roles,
+            'warehouses' => $warehouses,
+            'billers' => $billers,
+        ]);
+    }
+
+    /**
+     * API: Get one sale agent for edit.
+     */
+    public function getApi($id)
+    {
+        $agent = Employee::where('is_active', true)->where('is_sale_agent', 1)->find($id);
+        if (!$agent) {
+            return response()->json(['status' => 404, 'message' => 'Sale agent not found'], 404);
+        }
+        $data = $agent->toArray();
+        $data['image_url'] = $agent->image ? (rtrim(config('app.url'), '/') . '/images/sale_agent/' . $agent->image) : null;
+        $data['sales_target'] = $agent->sales_target ?? [];
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store sale agent (JSON) for React.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'email', 'phone_number', 'address', 'city', 'country',
+            'department_id', 'sales_target',
+        ]);
+        $data['department_id'] = $data['department_id'] ?? 0;
+        $data['is_active'] = true;
+        $data['is_sale_agent'] = 1;
+        if (is_array($data['sales_target'] ?? null)) {
+            $data['sales_target'] = array_values(array_filter($data['sales_target'], function ($row) {
+                return isset($row['sales_from']) || isset($row['sales_to']) || isset($row['percent']);
+            }));
+        } else {
+            $data['sales_target'] = null;
+        }
+        if (isset($request->user) && $request->user) {
+            $request->validate([
+                'username' => 'required|string|max:255|unique:users,name,NULL,id,is_deleted,0',
+                'password' => 'required|string|min:6',
+                'role_id' => 'required|exists:roles,id',
+            ]);
+            $userData = [
+                'name' => $request->username,
+                'email' => $request->email ?? $request->username . '@saleagent.local',
+                'password' => bcrypt($request->password),
+                'phone' => $data['phone_number'],
+                'role_id' => $request->role_id,
+                'warehouse_id' => $request->warehouse_id ?? null,
+                'biller_id' => $request->biller_id ?? null,
+                'is_active' => true,
+                'is_deleted' => false,
+            ];
+            $user = User::create($userData);
+            $data['user_id'] = $user->id;
+        }
+        $agent = Employee::create($data);
+        return response()->json(['status' => 200, 'message' => __('db.Sale Agent created successfully'), 'id' => $agent->id]);
+    }
+
+    /**
+     * API: Update sale agent (JSON) for React.
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $agent = Employee::where('is_active', true)->where('is_sale_agent', 1)->find($id);
+        if (!$agent) {
+            return response()->json(['status' => 404, 'message' => 'Sale agent not found'], 404);
+        }
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'email', 'phone_number', 'address', 'city', 'country',
+            'department_id', 'sales_target',
+        ]);
+        $data['department_id'] = $data['department_id'] ?? 0;
+        if (array_key_exists('sales_target', $data) && is_array($data['sales_target'])) {
+            $data['sales_target'] = array_values(array_filter($data['sales_target'], function ($row) {
+                return isset($row['sales_from']) || isset($row['sales_to']) || isset($row['percent']);
+            }));
+        }
+        if ($agent->user_id && $request->filled('name')) {
+            User::where('id', $agent->user_id)->update(['name' => $request->name, 'email' => $request->email ?? $agent->email, 'phone' => $request->phone_number]);
+        }
+        $agent->update($data);
+        return response()->json(['status' => 200, 'message' => __('db.Employee updated successfully')]);
+    }
+
+    /**
+     * API: Destroy sale agent (soft delete) for React.
+     */
+    public function destroyApi($id)
+    {
+        $agent = Employee::find($id);
+        if (!$agent) {
+            return response()->json(['status' => 404, 'message' => 'Sale agent not found'], 404);
+        }
+        if ($agent->user_id) {
+            $u = User::find($agent->user_id);
+            if ($u) {
+                $u->is_deleted = true;
+                $u->is_active = false;
+                $u->save();
+            }
+        }
+        $agent->is_active = false;
+        $agent->save();
+        $this->fileDelete(public_path('images/sale_agent/'), $agent->image);
+        $this->fileDelete(public_path('images/employee/'), $agent->image);
+        return response()->json(['status' => 200, 'message' => __('db.Employee deleted successfully')]);
+    }
 
     public function index()
     {

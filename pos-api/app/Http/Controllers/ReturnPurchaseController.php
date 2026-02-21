@@ -18,6 +18,7 @@ use App\Models\Variant;
 use App\Models\Purchase;
 use App\Models\ProductPurchase;
 use App\Models\Currency;
+use App\Models\GeneralSetting;
 use Auth;
 use DB;
 use Spatie\Permission\Models\Role;
@@ -272,6 +273,244 @@ class ReturnPurchaseController extends Controller
         }
         else
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
+    }
+
+    /**
+     * API: Data for Add Return form (purchase + product rows + accounts, taxes).
+     */
+    public function createDataApi(Request $request)
+    {
+        $role = Role::find(Auth::user()->role_id);
+        if (!$role->hasPermissionTo('purchase-return-add')) {
+            return response()->json(['status' => 403, 'message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+        $purchase_id = $request->query('purchase_id') ?? $request->input('purchase_id');
+        $reference_no = $request->query('reference_no') ?? $request->input('reference_no');
+        if ($purchase_id) {
+            $lims_purchase_data = Purchase::find($purchase_id);
+        } elseif ($reference_no) {
+            $lims_purchase_data = Purchase::where('reference_no', $reference_no)->first();
+        } else {
+            return response()->json(['status' => 422, 'message' => __('db.This reference no does not exist!')], 422);
+        }
+        if (!$lims_purchase_data) {
+            return response()->json(['status' => 404, 'message' => __('db.This reference no does not exist!')], 404);
+        }
+        $lims_product_purchase_data = ProductPurchase::where('purchase_id', $lims_purchase_data->id)->get();
+        $lims_product_purchase_payment_acc_id = Payment::select('account_id')->where('purchase_id', $lims_purchase_data->id)->first();
+        $lims_account_list = Account::where('is_active', true)->get(['id', 'name', 'account_no', 'is_default']);
+        $lims_tax_list = Tax::where('is_active', true)->get(['id', 'name', 'rate']);
+        $general_setting = GeneralSetting::select('decimal')->first();
+        $decimal = (int) ($general_setting->decimal ?? 2);
+
+        $product_rows = [];
+        foreach ($lims_product_purchase_data as $product_purchase) {
+            $product_data = DB::table('products')->find($product_purchase->product_id);
+            if (!$product_data) {
+                continue;
+            }
+            $product_data = (object) (is_array($product_data) ? $product_data : (array) $product_data);
+            if ($product_purchase->variant_id) {
+                $product_variant_data = ProductVariant::select('id', 'item_code')->FindExactProduct($product_data->id, $product_purchase->variant_id)->first();
+                $product_data->code = $product_variant_data ? $product_variant_data->item_code : $product_purchase->product_id;
+            }
+            if ($product_data->tax_method == 1) {
+                $product_cost = $product_purchase->net_unit_cost + ($product_purchase->discount / $product_purchase->qty);
+            } else {
+                $product_cost = ($product_purchase->total / $product_purchase->qty) + ($product_purchase->discount / $product_purchase->qty);
+            }
+            $tax = DB::table('taxes')->where('rate', $product_purchase->tax_rate)->first();
+            $unit_name = 'n/a';
+            if (isset($product_data->type) && $product_data->type == 'standard' && isset($product_data->unit_id)) {
+                $unit = DB::table('units')->select('unit_name')->find($product_data->unit_id);
+                $unit_name = $unit ? $unit->unit_name : 'n/a';
+            }
+            $product_batch_data = ProductBatch::select('batch_no')->find($product_purchase->product_batch_id);
+            $product_rows[] = [
+                'product_purchase_id' => $product_purchase->id,
+                'product_id' => $product_data->id,
+                'product_code' => $product_data->code ?? '',
+                'product_name' => $product_data->name ?? '',
+                'batch_no' => $product_batch_data ? $product_batch_data->batch_no : null,
+                'product_batch_id' => $product_purchase->product_batch_id,
+                'actual_qty' => $product_purchase->qty,
+                'qty' => $product_purchase->qty,
+                'net_unit_cost' => (float) $product_purchase->net_unit_cost,
+                'discount' => (float) $product_purchase->discount,
+                'tax' => (float) $product_purchase->tax,
+                'total' => (float) $product_purchase->total,
+                'unit_cost' => $product_purchase->qty ? $product_purchase->total / $product_purchase->qty : 0,
+                'tax_rate' => (float) $product_purchase->tax_rate,
+                'tax_name' => $tax ? $tax->name : 'No Tax',
+                'tax_method' => $product_data->tax_method ?? 1,
+                'purchase_unit' => $unit_name,
+                'imei_number' => $product_purchase->imei_number ?? '',
+            ];
+        }
+
+        $default_account_id = null;
+        if ($lims_product_purchase_payment_acc_id) {
+            $default_account_id = $lims_product_purchase_payment_acc_id->account_id;
+        } else {
+            $def = $lims_account_list->where('is_default', true)->first();
+            $default_account_id = $def ? $def->id : ($lims_account_list->first()->id ?? null);
+        }
+
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'purchase_id' => $lims_purchase_data->id,
+                'purchase_reference_no' => $lims_purchase_data->reference_no,
+                'product_rows' => $product_rows,
+                'accounts' => $lims_account_list,
+                'taxes' => $lims_tax_list,
+                'decimal' => $decimal,
+                'default_account_id' => $default_account_id,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Store purchase return (JSON body).
+     */
+    public function storeApi(Request $request)
+    {
+        $role = Role::find(Auth::user()->role_id);
+        if (!$role->hasPermissionTo('purchase-return-add')) {
+            return response()->json(['status' => 403, 'message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+        $data = $request->except('document');
+        $data['reference_no'] = 'prr-' . date('Ymd') . '-' . date('his');
+        $data['user_id'] = Auth::id();
+        $lims_purchase_data = Purchase::select('warehouse_id', 'supplier_id', 'currency_id', 'exchange_rate')->find($data['purchase_id'] ?? 0);
+        if (!$lims_purchase_data) {
+            return response()->json(['status' => 422, 'message' => 'Purchase not found'], 422);
+        }
+        $data['supplier_id'] = $lims_purchase_data->supplier_id;
+        $data['warehouse_id'] = $lims_purchase_data->warehouse_id;
+        $data['currency_id'] = $lims_purchase_data->currency_id;
+        $data['exchange_rate'] = $lims_purchase_data->exchange_rate ?? 1;
+
+        $product_purchase_ids = $data['is_return'] ?? [];
+        if (empty($product_purchase_ids)) {
+            return response()->json(['status' => 422, 'message' => 'Please select at least one product to return'], 422);
+        }
+
+        $lims_return_data = ReturnPurchase::create($data);
+
+        $imei_number = $data['imei_number'] ?? [];
+        $product_batch_id = $data['product_batch_id'] ?? [];
+        $product_code = $data['product_code'] ?? [];
+        $qty = $data['qty'] ?? [];
+        $purchase_unit = $data['purchase_unit'] ?? [];
+        $net_unit_cost = $data['net_unit_cost'] ?? [];
+        $discount = $data['discount'] ?? [];
+        $tax_rate = $data['tax_rate'] ?? [];
+        $tax = $data['tax'] ?? [];
+        $total = $data['subtotal'] ?? [];
+
+        foreach ($product_purchase_ids as $product_purchase_id) {
+            $key = array_search($product_purchase_id, $data['product_purchase_id']);
+            if ($key === false) {
+                continue;
+            }
+            $pro_id = $data['product_id'][$key] ?? null;
+            $lims_product_data = Product::find($pro_id);
+            if (!$lims_product_data) {
+                continue;
+            }
+            $variant_id = null;
+            $lims_product_warehouse_data = null;
+            $lims_purchase_unit_data = null;
+            $purchase_unit_id = 0;
+
+            if (($purchase_unit[$key] ?? '') != 'n/a') {
+                $lims_purchase_unit_data = Unit::where('unit_name', $purchase_unit[$key])->first();
+                if ($lims_purchase_unit_data) {
+                    $purchase_unit_id = $lims_purchase_unit_data->id;
+                    if ($lims_purchase_unit_data->operator == '*') {
+                        $quantity = ($qty[$key] ?? 0) * $lims_purchase_unit_data->operation_value;
+                    } else {
+                        $quantity = ($qty[$key] ?? 0) / $lims_purchase_unit_data->operation_value;
+                    }
+                    if ($lims_product_data->is_variant) {
+                        $lims_product_variant_data = ProductVariant::select('id', 'variant_id', 'qty')->FindExactProductWithCode($pro_id, $product_code[$key] ?? '')->first();
+                        if ($lims_product_variant_data) {
+                            $lims_product_warehouse_data = ProductWarehouse::FindProductWithVariant($pro_id, $lims_product_variant_data->variant_id, $data['warehouse_id'])->first();
+                            $lims_product_variant_data->qty -= $quantity;
+                            $lims_product_variant_data->save();
+                            $variant_data = Variant::find($lims_product_variant_data->variant_id);
+                            $variant_id = $variant_data ? $variant_data->id : null;
+                        }
+                    } elseif (!empty($product_batch_id[$key])) {
+                        $lims_product_warehouse_data = ProductWarehouse::where([
+                            ['product_batch_id', $product_batch_id[$key]],
+                            ['warehouse_id', $data['warehouse_id']],
+                        ])->first();
+                        $lims_product_batch_data = ProductBatch::find($product_batch_id[$key]);
+                        if ($lims_product_batch_data) {
+                            $lims_product_batch_data->qty -= $quantity;
+                            $lims_product_batch_data->save();
+                        }
+                    } else {
+                        $lims_product_warehouse_data = ProductWarehouse::FindProductWithoutVariant($pro_id, $data['warehouse_id'])->first();
+                    }
+                    if ($lims_product_warehouse_data) {
+                        $lims_product_data->qty -= $quantity;
+                        $lims_product_warehouse_data->qty -= $quantity;
+                        $lims_product_data->save();
+                        $lims_product_warehouse_data->save();
+                    }
+                }
+            }
+
+            if (!empty($imei_number[$key])) {
+                $imei_numbers = explode(',', $imei_number[$key]);
+                if ($lims_product_warehouse_data && $lims_product_warehouse_data->imei_number) {
+                    $all_imei_numbers = explode(',', $lims_product_warehouse_data->imei_number);
+                    foreach ($imei_numbers as $number) {
+                        $j = array_search(trim($number), array_map('trim', $all_imei_numbers));
+                        if ($j !== false) {
+                            unset($all_imei_numbers[$j]);
+                        }
+                    }
+                    $lims_product_warehouse_data->imei_number = implode(',', array_values($all_imei_numbers));
+                    $lims_product_warehouse_data->save();
+                }
+            }
+
+            PurchaseProductReturn::insert([
+                'return_id' => $lims_return_data->id,
+                'product_id' => $pro_id,
+                'product_batch_id' => $product_batch_id[$key] ?? null,
+                'variant_id' => $variant_id,
+                'imei_number' => $imei_number[$key] ?? '',
+                'qty' => $qty[$key] ?? 0,
+                'purchase_unit_id' => $purchase_unit_id,
+                'net_unit_cost' => $net_unit_cost[$key] ?? 0,
+                'discount' => $discount[$key] ?? 0,
+                'tax_rate' => $tax_rate[$key] ?? 0,
+                'tax' => $tax[$key] ?? 0,
+                'total' => $total[$key] ?? 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $product_purchase_data = ProductPurchase::where([
+                ['product_id', $pro_id],
+                ['purchase_id', $data['purchase_id']],
+            ])->select('id', 'return_qty')->first();
+            if ($product_purchase_data) {
+                $product_purchase_data->return_qty += ($qty[$key] ?? 0);
+                $product_purchase_data->save();
+            }
+        }
+
+        return response()->json([
+            'status' => 200,
+            'message' => __('db.Return created successfully'),
+            'data' => ['id' => $lims_return_data->id, 'reference_no' => $lims_return_data->reference_no],
+        ]);
     }
 
     public function getProduct($id)

@@ -5,6 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+
+/**
+ * @property-read \App\Models\Warehouse $warehouse
+ */
 class Income extends Model
 {
     use HasFactory;
@@ -61,6 +65,14 @@ class Income extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the warehouse that owns the income.
+     */
+    public function warehouse()
+    {
+        return $this->belongsTo(\App\Models\Warehouse::class);
     }
 
     /**

@@ -42,6 +42,188 @@ class SupplierController extends Controller
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
 
+    /**
+     * API: Supplier list for React (supplier_details, total_due).
+     */
+    public function supplierListApi(Request $request)
+    {
+        $q = Supplier::where('is_active', true);
+        $search = $request->input('search');
+        if (!empty($search)) {
+            $q->where(function ($query) use ($search) {
+                $query->where('name', 'LIKE', "%{$search}%")
+                    ->orWhere('company_name', 'LIKE', "%{$search}%")
+                    ->orWhere('email', 'LIKE', "%{$search}%")
+                    ->orWhere('phone_number', 'LIKE', "%{$search}%");
+            });
+        }
+        $suppliers = $q->orderBy('created_at', 'desc')->get();
+        $baseUrl = rtrim(config('app.url'), '/');
+        $data = [];
+        foreach ($suppliers as $supplier) {
+            $opening_balance = $supplier->opening_balance ?? 0;
+            $total_paid = 0;
+            $total_purchases = 0;
+            $purchaseData = Purchase::select('id', 'grand_total')->where('supplier_id', $supplier->id)->whereNull('deleted_at')->get();
+            foreach ($purchaseData as $purchase) {
+                $total_purchases += $purchase->grand_total;
+                $total_paid += Payment::where('purchase_id', $purchase->id)->sum('amount');
+            }
+            $total_returns = ReturnPurchase::where('supplier_id', $supplier->id)->sum('grand_total');
+            $balance_due = $opening_balance + $total_purchases - $total_returns - $total_paid;
+
+            $details = $supplier->name;
+            if ($supplier->company_name) {
+                $details .= "\n" . $supplier->company_name;
+            }
+            if ($supplier->vat_number) {
+                $details .= "\n" . $supplier->vat_number;
+            }
+            $details .= "\n" . ($supplier->email ?? '') . "\n" . ($supplier->phone_number ?? '');
+            $addr = trim(($supplier->address ?? '') . ', ' . ($supplier->city ?? ''));
+            if ($supplier->state) {
+                $addr .= ', ' . $supplier->state;
+            }
+            if ($supplier->postal_code) {
+                $addr .= ', ' . $supplier->postal_code;
+            }
+            if ($supplier->country) {
+                $addr .= ', ' . $supplier->country;
+            }
+            $details .= "\n" . $addr;
+
+            $imageUrl = null;
+            if ($supplier->image) {
+                $imageUrl = $baseUrl . '/images/supplier/' . $supplier->image;
+            }
+            $data[] = [
+                'id' => $supplier->id,
+                'image' => $supplier->image,
+                'image_url' => $imageUrl,
+                'supplier_details' => $details,
+                'total_due' => round($balance_due, 2),
+                'total_due_formatted' => number_format($balance_due, 2, '.', ''),
+            ];
+        }
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Get one supplier for edit (React).
+     */
+    public function getApi($id)
+    {
+        $supplier = Supplier::where('is_active', true)->find($id);
+        if (!$supplier) {
+            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
+        }
+        $data = $supplier->toArray();
+        $data['image_url'] = $supplier->image ? rtrim(config('app.url'), '/') . '/images/supplier/' . $supplier->image : null;
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store supplier (JSON) for React.
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'company_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('suppliers')->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('suppliers')->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'company_name', 'vat_number', 'email', 'phone_number', 'wa_number',
+            'address', 'city', 'state', 'postal_code', 'country', 'opening_balance',
+        ]);
+        $data['is_active'] = true;
+        $data['opening_balance'] = $data['opening_balance'] ?? 0;
+        $supplier = Supplier::create($data);
+        if (isset($data['opening_balance']) && $data['opening_balance'] > 0) {
+            $lims_purchase_data = new Purchase();
+            $lims_purchase_data->reference_no = 'sob-' . date('Ymd') . '-' . date('his');
+            $lims_purchase_data->supplier_id = $supplier->id;
+            $lims_purchase_data->user_id = Auth::id();
+            $lims_purchase_data->warehouse_id = 1;
+            $lims_purchase_data->item = 0;
+            $lims_purchase_data->total_qty = 0;
+            $lims_purchase_data->total_discount = 0;
+            $lims_purchase_data->total_tax = 0;
+            $lims_purchase_data->total_cost = $data['opening_balance'];
+            $lims_purchase_data->grand_total = $data['opening_balance'];
+            $lims_purchase_data->status = 1;
+            $lims_purchase_data->payment_status = 1;
+            $lims_purchase_data->paid_amount = 0;
+            $lims_purchase_data->purchase_type = 'Opening balance';
+            $lims_purchase_data->created_at = '1970-01-01 12:00:00';
+            $lims_purchase_data->save();
+        }
+        return response()->json(['status' => 200, 'message' => __('db.Supplier created successfully'), 'id' => $supplier->id]);
+    }
+
+    /**
+     * API: Update supplier (JSON) for React.
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $supplier = Supplier::where('is_active', true)->find($id);
+        if (!$supplier) {
+            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
+        }
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'company_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('suppliers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('suppliers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+            ],
+            'phone_number' => 'required|string|max:255',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+        ]);
+        $data = $request->only([
+            'name', 'company_name', 'vat_number', 'email', 'phone_number', 'wa_number',
+            'address', 'city', 'state', 'postal_code', 'country', 'opening_balance',
+        ]);
+        $supplier->update($data);
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfully')]);
+    }
+
+    /**
+     * API: Destroy supplier (soft delete) for React.
+     */
+    public function destroyApi($id)
+    {
+        $supplier = Supplier::find($id);
+        if (!$supplier) {
+            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
+        }
+        $supplier->is_active = false;
+        $supplier->save();
+        $this->fileDelete(public_path('images/supplier/'), $supplier->image);
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+    }
+
     public function clearDue(Request $request)
     {
         $lims_due_purchase_data = Purchase::select('id', 'warehouse_id', 'grand_total', 'paid_amount', 'payment_status')

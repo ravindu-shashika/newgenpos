@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Income;
 use App\Models\Account;
 use App\Models\Warehouse;
+use App\Models\IncomeCategory;
 use App\Models\CashRegister;
 use App\Traits\StaffAccess;
 use Spatie\Permission\Models\Role;
@@ -240,5 +241,156 @@ class IncomeController extends Controller
         $lims_income_data = Income::find($id);
         $lims_income_data->delete();
         return redirect('incomes')->with('not_permitted', __('db.Data deleted successfully'));
+    }
+
+    /**
+     * API: Form data for React (income categories, warehouses, accounts).
+     */
+    public function formDataApi()
+    {
+        $income_categories = IncomeCategory::where('is_active', true)->get(['id', 'name', 'code']);
+        if (Auth::user()->role_id > 2) {
+            $warehouses = Warehouse::where('is_active', true)->where('id', Auth::user()->warehouse_id)->get(['id', 'name']);
+        } else {
+            $warehouses = Warehouse::where('is_active', true)->get(['id', 'name']);
+        }
+        $accounts = Account::where('is_active', true)->get(['id', 'name', 'account_no', 'is_default']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'income_categories' => $income_categories,
+                'warehouses' => $warehouses,
+                'accounts' => $accounts,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Income list for React (filter by date range and warehouse).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-01', strtotime('-1 year', strtotime(date('Y-m-d')))));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $warehouse_id = (int) $request->input('warehouse_id', 0);
+
+        $q = Income::with('warehouse', 'incomeCategory')
+            ->whereDate('created_at', '>=', $starting_date)
+            ->whereDate('created_at', '<=', $ending_date);
+        $this->staffAccessCheck($q);
+        if ($warehouse_id > 0) {
+            $q->where('warehouse_id', $warehouse_id);
+        }
+        $incomes = $q->orderBy('created_at', 'desc')->get();
+
+        $data = [];
+        $total_amount = 0;
+        foreach ($incomes as $income) {
+            $total_amount += $income->amount;
+            $data[] = [
+                'id' => $income->id,
+                'date' => $income->created_at->format('Y-m-d'),
+                'reference_no' => $income->reference_no,
+                'warehouse' => $income->warehouse ? $income->warehouse->name : '',
+                'warehouse_id' => $income->warehouse_id,
+                'income_category' => $income->incomeCategory ? $income->incomeCategory->name : '',
+                'income_category_id' => $income->income_category_id,
+                'amount' => (float) $income->amount,
+                'note' => $income->note ?? '',
+            ];
+        }
+        return response()->json([
+            'status' => 200,
+            'data' => $data,
+            'total_amount' => round($total_amount, (int) (config('decimal') ?? 2)),
+        ]);
+    }
+
+    /**
+     * API: Get one income for edit (React).
+     */
+    public function getApi($id)
+    {
+        $income = Income::with('warehouse', 'incomeCategory')->find($id);
+        if (!$income) {
+            return response()->json(['status' => 404, 'message' => 'Income not found'], 404);
+        }
+        $data = [
+            'id' => $income->id,
+            'reference_no' => $income->reference_no,
+            'date' => $income->created_at->format('d-m-Y'),
+            'created_at' => $income->created_at->format('Y-m-d'),
+            'warehouse_id' => $income->warehouse_id,
+            'income_category_id' => $income->income_category_id,
+            'account_id' => $income->account_id,
+            'amount' => (float) $income->amount,
+            'note' => $income->note ?? '',
+        ];
+        return response()->json(['status' => 200, 'data' => $data]);
+    }
+
+    /**
+     * API: Store income (React).
+     */
+    public function storeApi(Request $request)
+    {
+        $request->validate([
+            'income_category_id' => 'required|exists:income_categories,id',
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'amount' => 'required|numeric|min:0',
+        ]);
+        $data = $request->only(['income_category_id', 'warehouse_id', 'account_id', 'amount', 'note']);
+        if ($request->has('created_at') && $request->created_at) {
+            $data['created_at'] = normalize_to_sql_datetime($request->created_at);
+        } else {
+            $data['created_at'] = date('Y-m-d H:i:s');
+        }
+        $data['reference_no'] = 'ir-' . date('Ymd') . '-' . date('his');
+        $data['user_id'] = Auth::id();
+        $cash_register_data = CashRegister::where([
+            ['user_id', $data['user_id']],
+            ['warehouse_id', $data['warehouse_id']],
+            ['status', true],
+        ])->first();
+        if ($cash_register_data) {
+            $data['cash_register_id'] = $cash_register_data->id;
+        }
+        Income::create($data);
+        return response()->json(['status' => 200, 'message' => __('db.Data inserted successfully')]);
+    }
+
+    /**
+     * API: Update income (React).
+     */
+    public function updateApi(Request $request, $id)
+    {
+        $income = Income::find($id);
+        if (!$income) {
+            return response()->json(['status' => 404, 'message' => 'Income not found'], 404);
+        }
+        $request->validate([
+            'income_category_id' => 'required|exists:income_categories,id',
+            'warehouse_id' => 'required|exists:warehouses,id',
+            'amount' => 'required|numeric|min:0',
+        ]);
+        $data = $request->only(['income_category_id', 'warehouse_id', 'account_id', 'amount', 'note']);
+        if ($request->has('created_at') && $request->created_at) {
+            $data['created_at'] = normalize_to_sql_datetime($request->created_at);
+        }
+        $income->update($data);
+        return response()->json(['status' => 200, 'message' => __('db.Data updated successfully')]);
+    }
+
+    /**
+     * API: Delete income (React).
+     */
+    public function destroyApi($id)
+    {
+        $income = Income::find($id);
+        if (!$income) {
+            return response()->json(['status' => 404, 'message' => 'Income not found'], 404);
+        }
+        $income->delete();
+        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
     }
 }

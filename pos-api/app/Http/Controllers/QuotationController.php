@@ -358,6 +358,206 @@ class QuotationController extends Controller
         echo json_encode($json_data);
     }
 
+    /**
+     * API: Form data for quotation (billers, suppliers, customers, warehouses, taxes).
+     */
+    public function formDataApi()
+    {
+        $billers = Biller::where('is_active', true)->get(['id', 'name', 'company_name']);
+        $suppliers = Supplier::where('is_active', true)->get(['id', 'name', 'company_name']);
+        $customers = Customer::where('is_active', true)->where('type', CustomerTypeEnum::REGULAR->value)->get(['id', 'name', 'phone_number']);
+        $warehouses = Warehouse::where('is_active', true)->get(['id', 'name']);
+        $taxes = Tax::where('is_active', true)->get(['id', 'name', 'rate']);
+        return response()->json([
+            'status' => 200,
+            'data' => [
+                'billers' => $billers,
+                'suppliers' => $suppliers,
+                'customers' => $customers,
+                'warehouses' => $warehouses,
+                'taxes' => $taxes,
+            ],
+        ]);
+    }
+
+    /**
+     * API: Quotation list for React (filter by date range, warehouse).
+     */
+    public function listApi(Request $request)
+    {
+        $starting_date = $request->input('starting_date', date('Y-m-d', strtotime('-1 year')));
+        $ending_date = $request->input('ending_date', date('Y-m-d'));
+        $warehouse_id = (int) $request->input('warehouse_id', 0);
+
+        $q = Quotation::with('biller', 'customer', 'supplier', 'warehouse', 'user')
+            ->whereDate('created_at', '>=', $starting_date)
+            ->whereDate('created_at', '<=', $ending_date);
+        if (Auth::user()->role_id > 2 && config('staff_access') == 'own') {
+            $q->where('user_id', Auth::id());
+        } elseif (Auth::user()->role_id > 2 && config('staff_access') == 'warehouse') {
+            $q->where('warehouse_id', Auth::user()->warehouse_id);
+        }
+        if ($warehouse_id > 0) {
+            $q->where('warehouse_id', $warehouse_id);
+        }
+        $quotations = $q->orderBy('created_at', 'desc')->get();
+
+        $list = $quotations->map(function ($quotation) {
+            $status = $quotation->quotation_status == 2 ? 'Sent' : 'Pending';
+            return [
+                'id' => $quotation->id,
+                'date' => $quotation->created_at ? $quotation->created_at->format('Y-m-d') : null,
+                'reference_no' => $quotation->reference_no,
+                'warehouse' => $quotation->warehouse ? $quotation->warehouse->name : null,
+                'biller' => $quotation->biller ? $quotation->biller->name : null,
+                'customer' => $quotation->customer ? $quotation->customer->name : null,
+                'supplier' => $quotation->supplier ? $quotation->supplier->name : null,
+                'status' => $status,
+                'grand_total' => $quotation->grand_total,
+            ];
+        });
+        return response()->json(['status' => 200, 'data' => $list]);
+    }
+
+    /**
+     * API: Single quotation details for React (view modal).
+     */
+    public function detailsApi($id)
+    {
+        $quotation = Quotation::with('biller', 'customer', 'supplier', 'warehouse', 'user')->find($id);
+        if (!$quotation) {
+            return response()->json(['status' => 404, 'message' => 'Quotation not found'], 404);
+        }
+        $product_quotation = ProductQuotation::where('quotation_id', $id)->get();
+        $products = [];
+        foreach ($product_quotation as $pq) {
+            $product = Product::find($pq->product_id);
+            $code = $product ? $product->code : '';
+            if ($pq->variant_id) {
+                $pv = ProductVariant::select('item_code')->FindExactProduct($pq->product_id, $pq->variant_id)->first();
+                if ($pv) $code = $pv->item_code;
+            }
+            $unit_code = '';
+            if ($pq->sale_unit_id) {
+                $unit = Unit::find($pq->sale_unit_id);
+                $unit_code = $unit ? $unit->unit_code : '';
+            }
+            $batch_no = 'N/A';
+            if ($pq->product_batch_id) {
+                $batch = ProductBatch::select('batch_no')->find($pq->product_batch_id);
+                if ($batch) $batch_no = $batch->batch_no;
+            }
+            $products[] = [
+                'product_name' => $product ? $product->name : '',
+                'product_code' => $code,
+                'batch_no' => $batch_no,
+                'qty' => $pq->qty,
+                'unit_code' => $unit_code,
+                'net_unit_price' => $pq->net_unit_price,
+                'discount' => $pq->discount,
+                'tax_rate' => $pq->tax_rate,
+                'tax' => $pq->tax,
+                'total' => $pq->total,
+            ];
+        }
+        $transfer = [
+            'date' => $quotation->created_at ? $quotation->created_at->format('Y-m-d') : null,
+            'reference_no' => $quotation->reference_no,
+            'status' => $quotation->quotation_status == 2 ? 'Sent' : 'Pending',
+            'biller' => $quotation->biller ? $quotation->biller->name : null,
+            'customer' => $quotation->customer ? $quotation->customer->name : null,
+            'supplier' => $quotation->supplier ? $quotation->supplier->name : null,
+            'warehouse' => $quotation->warehouse ? $quotation->warehouse->name : null,
+            'total_qty' => $quotation->total_qty,
+            'total_discount' => $quotation->total_discount,
+            'total_tax' => $quotation->total_tax,
+            'total_price' => $quotation->total_price,
+            'order_tax_rate' => $quotation->order_tax_rate,
+            'order_tax' => $quotation->order_tax,
+            'order_discount' => $quotation->order_discount,
+            'shipping_cost' => $quotation->shipping_cost,
+            'grand_total' => $quotation->grand_total,
+            'note' => $quotation->note,
+            'created_by' => $quotation->user ? $quotation->user->name : null,
+            'created_by_email' => $quotation->user ? $quotation->user->email : null,
+        ];
+        return response()->json(['status' => 200, 'data' => ['quotation' => $transfer, 'products' => $products]]);
+    }
+
+    /**
+     * API: Create quotation from JSON (no document).
+     */
+    public function storeApi(Request $request)
+    {
+        $data = $request->all();
+        $data['user_id'] = Auth::id();
+        $data['reference_no'] = 'qr-' . date("Ymd") . '-' . date("his");
+        $product_id = $data['product_id'] ?? [];
+        if (!is_array($product_id) || count($product_id) === 0) {
+            return response()->json(['status' => 422, 'message' => 'Please add at least one product.'], 422);
+        }
+        $quotationData = array_intersect_key($data, array_flip([
+            'reference_no', 'user_id', 'biller_id', 'supplier_id', 'customer_id', 'warehouse_id',
+            'item', 'total_qty', 'total_discount', 'total_tax', 'total_price', 'order_tax_rate', 'order_tax',
+            'order_discount', 'shipping_cost', 'grand_total', 'quotation_status', 'note',
+        ]));
+        $lims_quotation_data = Quotation::create($quotationData);
+        $product_batch_id = $data['product_batch_id'] ?? [];
+        $product_code = $data['product_code'] ?? [];
+        $qty = $data['qty'] ?? [];
+        $sale_unit = $data['sale_unit'] ?? [];
+        $net_unit_price = $data['net_unit_price'] ?? [];
+        $discount = $data['discount'] ?? [];
+        $tax_rate = $data['tax_rate'] ?? [];
+        $tax = $data['tax'] ?? [];
+        $total = $data['subtotal'] ?? [];
+        foreach ($product_id as $i => $id) {
+            $sale_unit_id = 0;
+            if (isset($sale_unit[$i]) && $sale_unit[$i] && $sale_unit[$i] !== 'n/a') {
+                $lims_sale_unit_data = Unit::where('unit_name', $sale_unit[$i])->first();
+                if ($lims_sale_unit_data) $sale_unit_id = $lims_sale_unit_data->id;
+            }
+            $lims_product_data = Product::find($id);
+            $variant_id = null;
+            if ($lims_product_data && $lims_product_data->is_variant) {
+                $pv = ProductVariant::select('variant_id')->FindExactProductWithCode($id, $product_code[$i] ?? '')->first();
+                if ($pv) $variant_id = $pv->variant_id;
+            }
+            ProductQuotation::create([
+                'quotation_id' => $lims_quotation_data->id,
+                'product_id' => $id,
+                'variant_id' => $variant_id,
+                'product_batch_id' => $product_batch_id[$i] ?? null,
+                'qty' => $qty[$i] ?? 0,
+                'sale_unit_id' => $sale_unit_id,
+                'net_unit_price' => $net_unit_price[$i] ?? 0,
+                'discount' => $discount[$i] ?? 0,
+                'tax_rate' => $tax_rate[$i] ?? 0,
+                'tax' => $tax[$i] ?? 0,
+                'total' => $total[$i] ?? 0,
+            ]);
+        }
+        return response()->json([
+            'status' => 200,
+            'message' => 'Quotation created successfully',
+            'data' => ['id' => $lims_quotation_data->id, 'reference_no' => $lims_quotation_data->reference_no],
+        ]);
+    }
+
+    /**
+     * API: Delete one quotation.
+     */
+    public function destroyApi($id)
+    {
+        $quotation = Quotation::find($id);
+        if (!$quotation) {
+            return response()->json(['status' => 404, 'message' => 'Quotation not found'], 404);
+        }
+        ProductQuotation::where('quotation_id', $id)->delete();
+        $quotation->delete();
+        return response()->json(['status' => 200, 'message' => 'Quotation deleted successfully']);
+    }
+
     public function create()
     {
         $role = Role::find(Auth::user()->role_id);

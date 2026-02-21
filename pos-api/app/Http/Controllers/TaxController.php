@@ -139,4 +139,137 @@ class TaxController extends Controller
         $this->cacheForget('tax_list');
         return redirect('tax')->with('not_permitted', __('db.Data deleted successfully'));
     }
+
+    // API methods for React frontend
+    public function getAllTaxes(Request $request)
+    {
+        try {
+            $taxes = Tax::where('is_active', true)->orderBy('created_at', 'desc')->get();
+            return response()->json(['status' => 200, 'data' => $taxes, 'message' => 'Taxes fetched successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to fetch taxes', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getTax($id)
+    {
+        try {
+            $tax = Tax::where('is_active', true)->findOrFail($id);
+            return response()->json(['status' => 200, 'data' => $tax]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 404, 'message' => 'Tax not found'], 404);
+        }
+    }
+
+    public function saveTax(Request $request)
+    {
+        try {
+            $rules = [
+                'name' => [
+                    'required',
+                    'max:255',
+                    Rule::unique('taxes')->ignore($request->id)->where(function ($query) {
+                        return $query->where('is_active', 1);
+                    }),
+                ],
+                'rate' => 'required|numeric|min:0|max:100',
+            ];
+            $validated = $request->validate($rules);
+
+            if ($request->id) {
+                $tax = Tax::findOrFail($request->id);
+                $tax->name = $request->name;
+                $tax->rate = $request->rate;
+                $tax->save();
+                $message = __('db.Data updated successfully');
+            } else {
+                $tax = Tax::create([
+                    'name' => $request->name,
+                    'rate' => $request->rate,
+                    'is_active' => true,
+                ]);
+                $message = __('db.Data inserted successfully');
+            }
+
+            $this->cacheForget('tax_list');
+            return response()->json(['status' => 200, 'data' => $tax, 'message' => $message]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 400, 'message' => $e->getMessage(), 'errors' => $e->errors()], 400);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to save tax', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function deleteTax($id)
+    {
+        try {
+            $tax = Tax::findOrFail($id);
+            $tax->is_active = false;
+            $tax->save();
+            $this->cacheForget('tax_list');
+            return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to delete tax', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function deleteTaxBySelection(Request $request)
+    {
+        try {
+            $tax_id = $request->input('taxIdArray', []);
+            foreach ($tax_id as $id) {
+                $tax = Tax::find($id);
+                if ($tax) {
+                    $tax->is_active = false;
+                    $tax->save();
+                }
+            }
+            $this->cacheForget('tax_list');
+            return response()->json(['status' => 200, 'message' => 'Tax deleted successfully!']);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to delete', 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function importTaxApi(Request $request)
+    {
+        try {
+            $request->validate(['file' => 'required|file|mimes:csv,txt']);
+            $upload = $request->file('file');
+            $ext = pathinfo($upload->getClientOriginalName(), PATHINFO_EXTENSION);
+            if (strtolower($ext) !== 'csv') {
+                return response()->json(['status' => 400, 'message' => __('db.Please upload a CSV file')], 400);
+            }
+            $filePath = $upload->getRealPath();
+            $file = fopen($filePath, 'r');
+            $header = fgetcsv($file);
+            $escapedHeader = [];
+            foreach ($header as $value) {
+                $lheader = strtolower($value);
+                $escapedItem = preg_replace('/[^a-z]/', '', $lheader);
+                $escapedHeader[] = $escapedItem;
+            }
+            while ($columns = fgetcsv($file)) {
+                if (empty($columns[0])) {
+                    continue;
+                }
+                $data = array_combine($escapedHeader, $columns);
+                if (empty($data['name'])) {
+                    continue;
+                }
+                $tax = Tax::firstOrNew(['name' => $data['name'], 'is_active' => true]);
+                $tax->name = $data['name'];
+                $tax->rate = isset($data['rate']) ? (float) preg_replace('/[^0-9.]/', '', $data['rate']) : 0;
+                $tax->is_active = true;
+                $tax->save();
+            }
+            fclose($file);
+            $this->cacheForget('tax_list');
+            return response()->json(['status' => 200, 'message' => __('db.Tax imported successfully')]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['status' => 400, 'message' => $e->getMessage(), 'errors' => $e->errors()], 400);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 500, 'message' => 'Failed to import', 'error' => $e->getMessage()], 500);
+        }
+    }
 }

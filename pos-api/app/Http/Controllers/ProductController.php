@@ -2601,7 +2601,7 @@ class ProductController extends Controller
                 'brand', 
                 'unit', 
                 'tax',
-                'product_variants.variant'
+                'productVariants.variant'
             ])->findOrFail($id);
 
             // Get variant options and values
@@ -2610,15 +2610,95 @@ class ProductController extends Controller
                 $product->variant_values_array = json_decode($product->variant_value);
             }
 
-            // Get warehouse stock
+            // Get warehouse stock (for diff price per warehouse)
             $product->warehouse_stock = DB::table('product_warehouses')
                 ->where('product_id', $id)
+                ->whereNull('variant_id')
                 ->whereNotNull('price')
                 ->get();
 
+            // Initial stock per warehouse (for edit form: show Initial Stock checked and qty per warehouse)
+            $product->initial_stock_warehouses = DB::table('product_warehouses')
+                ->where('product_id', $id)
+                ->whereNull('variant_id')
+                ->get(['warehouse_id', 'qty'])
+                ->map(function ($row) {
+                    return [
+                        'warehouse_id' => (int) $row->warehouse_id,
+                        'qty' => (float) ($row->qty ?? 0),
+                    ];
+                })
+                ->values()
+                ->all();
+
+            // Build combo_items for edit (when type is combo)
+            if ($product->type === 'combo' && $product->product_list) {
+                $product_ids = explode(',', $product->product_list);
+                $variant_ids = $product->variant_list ? explode(',', $product->variant_list) : array_fill(0, count($product_ids), '');
+                $qty_list = $product->qty_list ? explode(',', $product->qty_list) : array_fill(0, count($product_ids), 1);
+                $price_list = $product->price_list ? explode(',', $product->price_list) : array_fill(0, count($product_ids), 0);
+                $wastage = $product->wastage_percent ? explode(',', $product->wastage_percent) : array_fill(0, count($product_ids), 0);
+                $combo_units = $product->combo_unit_id ? explode(',', $product->combo_unit_id) : array_fill(0, count($product_ids), $product->unit_id);
+                $combo_items = [];
+                foreach ($product_ids as $idx => $pid) {
+                    $p = Product::find($pid);
+                    $vid = $variant_ids[$idx] ?? '';
+                    $name = $p ? $p->name : '';
+                    $code = $p ? $p->code : '';
+                    $cost = $p ? (float) $p->cost : 0;
+                    if ($vid && $p) {
+                        $pv = ProductVariant::where('product_id', $pid)->where('variant_id', $vid)->first();
+                        if ($pv) {
+                            $code = $pv->item_code;
+                        }
+                    }
+                    $combo_items[] = [
+                        'product_id' => (int) $pid,
+                        'variant_id' => $vid ? (int) $vid : '',
+                        'name' => $name,
+                        'code' => $code,
+                        'wastage_percent' => (float) ($wastage[$idx] ?? 0),
+                        'qty' => (float) ($qty_list[$idx] ?? 1),
+                        'unit_cost' => $cost,
+                        'unit_price' => (float) ($price_list[$idx] ?? 0),
+                        'subtotal' => (float) ($qty_list[$idx] ?? 1) * (float) ($price_list[$idx] ?? 0),
+                        'combo_unit_id' => $combo_units[$idx] ?? $product->unit_id,
+                    ];
+                }
+                $product->combo_items = $combo_items;
+            }
+
+            // Build response array so product_variants (with additional_cost/additional_price) is always in JSON
+            $productArray = $product->toArray();
+            $productArray['variant_options_array'] = $product->variant_options_array ?? null;
+            $productArray['variant_values_array'] = $product->variant_values_array ?? null;
+            $productArray['warehouse_stock'] = $product->warehouse_stock ?? [];
+            $productArray['initial_stock_warehouses'] = $product->initial_stock_warehouses ?? [];
+            $productArray['combo_items'] = $product->combo_items ?? null;
+
+            if ($product->relationLoaded('productVariants') && $product->productVariants) {
+                $productArray['product_variants'] = $product->productVariants->map(function ($pv) {
+                    return [
+                        'id' => $pv->id,
+                        'product_id' => $pv->product_id,
+                        'variant_id' => $pv->variant_id,
+                        'item_code' => $pv->item_code,
+                        'additional_cost' => (float) ($pv->additional_cost ?? 0),
+                        'additional_price' => (float) ($pv->additional_price ?? 0),
+                        'qty' => (float) ($pv->qty ?? 0),
+                        'variant' => $pv->variant ? [
+                            'id' => $pv->variant->id,
+                            'name' => $pv->variant->name,
+                        ] : null,
+                    ];
+                })->values()->all();
+            } else {
+                $productArray['product_variants'] = [];
+            }
+
             return response()->json([
                 'success' => true,
-                'product' => $product
+                'product' => $productArray
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -2705,6 +2785,12 @@ class ProductController extends Controller
                     $data['variant_list'] = implode(",", $data['variant_id'] ?? []);
                     $data['qty_list'] = implode(",", $data['product_qty']);
                     $data['price_list'] = implode(",", $data['unit_price']);
+                    if (isset($data['wastage_percent']) && is_array($data['wastage_percent'])) {
+                        $data['wastage_percent'] = implode(",", $data['wastage_percent']);
+                    }
+                    if (isset($data['combo_unit_id']) && is_array($data['combo_unit_id'])) {
+                        $data['combo_unit_id'] = implode(",", $data['combo_unit_id']);
+                    }
                 }
             } elseif ($data['type'] == 'digital' || $data['type'] == 'service') {
                 $data['cost'] = $data['cost'] ?? 0;
@@ -2791,22 +2877,25 @@ class ProductController extends Controller
                 $product = Product::create($data);
             }
 
-            // Handle initial stock
-            if (isset($data['is_initial_stock']) && !isset($data['is_variant']) && !isset($data['is_batch'])) {
-                $initial_stock = 0;
-                if (isset($data['stock_warehouse_id'])) {
-                    foreach ($data['stock_warehouse_id'] as $key => $warehouse_id) {
-                        $stock = $data['stock'][$key] ?? 0;
-                        if ($stock > 0) {
-                            $this->autoPurchase($product, $warehouse_id, $stock);
-                            $initial_stock += $stock;
-                        }
+            // Handle initial stock: set product_warehouses qty to submitted values (update or create), then recalc product total qty
+            if (!empty($data['is_initial_stock']) && empty($data['is_variant']) && empty($data['is_batch'])) {
+                $warehouseIds = $data['stock_warehouse_id'] ?? $data['stock_warehouse_id[]'] ?? [];
+                $stocks = $data['stock'] ?? $data['stock[]'] ?? [];
+                if (is_array($warehouseIds) && count($warehouseIds) > 0) {
+                    foreach ($warehouseIds as $key => $warehouse_id) {
+                        $qty = (float) ($stocks[$key] ?? 0);
+                        ProductWarehouse::updateOrCreate(
+                            [
+                                'product_id' => $product->id,
+                                'warehouse_id' => $warehouse_id,
+                                'variant_id' => null,
+                            ],
+                            ['qty' => $qty]
+                        );
                     }
                 }
-                if ($initial_stock > 0) {
-                    $product->qty += $initial_stock;
-                    $product->save();
-                }
+                $product->qty = ProductWarehouse::where('product_id', $product->id)->whereNull('variant_id')->sum('qty');
+                $product->save();
             }
 
             // Handle product variants
