@@ -2,149 +2,93 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Brand;
-use App\Models\Category;
-use App\Models\Unit;
-use App\Models\Tax;
-use App\Models\ProductVariant;
-use App\Models\ProductWarehouse;
 
 class Product extends Model
 {
-    use HasFactory;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'code',
-        'alt_code',
-        'type',
-        'barcode_symbology',
-        'brand_id',
-        'category_id',
-        'unit_id',
-        'purchase_unit_id',
-        'sale_unit_id',
-        'cost',
-        'price',
-        'profit_margin',
-        'profit_margin_type',
-        'wholesale_price',
-        'qty',
-        'alert_quantity',
-        'daily_sale_objective',
-        'promotion',
-        'promotion_price',
-        'starting_date',
-        'last_date',
-        'tax_id',
-        'tax_method',
-        'image',
-        'file',
-        'is_embeded',
-        'is_variant',
-        'is_batch',
-        'is_diffPrice',
-        'is_imei',
-        'featured',
-        'product_list',
-        'variant_list',
-        'qty_list',
-        'price_list',
-        'product_details',
-        'variant_option',
-        'variant_value',
-        'is_active',
-        'guarantee',
-        'warranty',
-        'guarantee_type',
-        'warranty_type',
-        'wastage_percent',
-        'combo_unit_id',
-        'production_cost',
-        'is_recipe',
+    protected $fillable =[
+        "name", "code", "type", "slug", "barcode_symbology", "brand_id", "category_id", "unit_id", "purchase_unit_id", "sale_unit_id", "cost", "profit_margin", "profit_margin_type", "price", "wholesale_price", "qty", "alert_quantity", "daily_sale_objective", "promotion", "promotion_price", "starting_date", "last_date", "tax_id", "tax_method", "image", "file", "is_embeded", "is_batch", "is_variant", "is_diffPrice", "is_imei", "featured", "product_list", "variant_list", "qty_list", "price_list", "product_details", "short_description", "specification", "related_products", "is_addon", "extras", "menu_type", "variant_option", "variant_value", "is_active", "is_online", "kitchen_id", "in_stock", "track_inventory", "is_sync_disable", "woocommerce_product_id","woocommerce_media_id","tags","meta_title","meta_description", "warranty", "guarantee", "warranty_type", "guarantee_type","wastage_percent","combo_unit_id","production_cost","is_recipe"
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'cost' => 'double',
-            'price' => 'double',
-            'profit_margin' => 'decimal:2',
-            'wholesale_price' => 'double',
-            'qty' => 'double',
-            'alert_quantity' => 'double',
-            'daily_sale_objective' => 'double',
-            'promotion' => 'boolean',
-            'last_date' => 'date',
-            'is_embeded' => 'boolean',
-            'is_variant' => 'boolean',
-            'is_batch' => 'boolean',
-            'is_diffPrice' => 'boolean',
-            'is_imei' => 'boolean',
-            'featured' => 'boolean',
-            'is_active' => 'boolean',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the brand that owns the product.
-     */
-    public function brand()
-    {
-        return $this->belongsTo(Brand::class);
-    }
-
-    /**
-     * Get the category that owns the product.
-     */
     public function category()
     {
-        return $this->belongsTo(Category::class);
+    	return $this->belongsTo('App\Models\Category');
     }
 
-    /**
-     * Get the base unit for the product.
-     */
-    public function unit()
+    public function brand()
     {
-        return $this->belongsTo(Unit::class);
+    	return $this->belongsTo('App\Models\Brand');
     }
 
-    /**
-     * Get the tax associated with the product.
-     */
     public function tax()
     {
-        return $this->belongsTo(Tax::class);
+        return $this->belongsTo('App\Models\Tax');
     }
 
-    /**
-     * Get the product variants.
-     */
-    public function productVariants()
+    public function unit()
     {
-        return $this->hasMany(ProductVariant::class);
+        return $this->belongsTo('App\Models\Unit');
     }
 
-    /**
-     * Get the product warehouses.
-     */
-    public function productWarehouses()
+    public function variant()
     {
-        return $this->hasMany(ProductWarehouse::class);
+        return $this->belongsToMany('App\Models\Variant', 'product_variants')->withPivot('id', 'item_code', 'additional_cost', 'additional_price', 'qty');
     }
+
+    public function scopeActiveStandard($query)
+    {
+        return $query->where([
+            ['is_active', true],
+            ['type', 'standard']
+        ]);
+    }
+
+    public function scopeActiveFeatured($query)
+    {
+        return $query->where([
+            ['is_active', true],
+            ['featured', 1]
+        ]);
+    }
+
+    public function products()
+    {
+        return $this->belongsToMany(Warehouse::class);
+    }
+
+    public function warehouses()
+    {
+        return $this->belongsToMany(Warehouse::class)->withPivot('qty');
+    }
+
+    public function purchases()
+    {
+        return $this->belongsToMany(Purchase::class,'product_purchases')->withPivot('qty','tax','tax_rate','discount','total');
+    }
+
+    public function sales()
+    {
+        return $this->belongsToMany('App\Models\Sale', 'product_sales')->withPivot('qty','product_batch_id', 'return_qty','net_unit_price','tax','discount','tax_rate','total','is_delivered');
+    }
+
+    public function returns()
+    {
+        return $this->belongsToMany('App\Models\ProductReturn', 'product_returns');
+    }
+
+    // product review relation
+    public function reviews()
+    {
+        return $this->hasMany(\Modules\Ecommerce\Entities\ProductReview::class,'product_id');
+    }
+
+    public function approvedReviews()
+    {
+        return $this->hasMany(\Modules\Ecommerce\Entities\ProductReview::class)->where('approved', true);
+    }
+
+    protected $casts = [
+        'profit_margin_type' => 'string',
+    ];
+
 }

@@ -2,75 +2,32 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Transfer extends Model
 {
-    use HasFactory;
+    protected $fillable =[
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'reference_no',
-        'user_id',
-        'status',
-        'from_warehouse_id',
-        'to_warehouse_id',
-        'item',
-        'total_qty',
-        'total_tax',
-        'total_cost',
-        'shipping_cost',
-        'grand_total',
-        'document',
-        'note',
-        'is_sent',
+        "reference_no", "user_id", "status", "from_warehouse_id", "to_warehouse_id", "item", "total_qty", "total_tax", "total_cost", "shipping_cost", "grand_total", "document", "note", "is_sent", "created_at"
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'total_qty' => 'double',
-            'total_tax' => 'double',
-            'total_cost' => 'double',
-            'shipping_cost' => 'double',
-            'grand_total' => 'double',
-            'is_sent' => 'boolean',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the user that owns the transfer.
-     */
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    /**
-     * Get the from warehouse.
-     */
     public function fromWarehouse()
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'from_warehouse_id');
+    	return $this->belongsTo('App\Models\Warehouse', 'from_warehouse_id');
     }
 
-    /**
-     * Get the to warehouse.
-     */
     public function toWarehouse()
     {
-        return $this->belongsTo(\App\Models\Warehouse::class, 'to_warehouse_id');
+    	return $this->belongsTo('App\Models\Warehouse', 'to_warehouse_id');
+    }
+
+    public function user()
+    {
+    	return $this->belongsTo('App\Models\User', 'user_id');
+    }
+
+    public function products()
+    {
+         return $this->hasMany('App\Models\ProductTransfer','transfer_id');
     }
 }

@@ -2,18 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ProductExchange extends Model
 {
-    use HasFactory;
+    protected $table = 'product_exchanges';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'exchange_id',
         'product_id',
@@ -27,22 +21,69 @@ class ProductExchange extends Model
         'type',
     ];
 
+    protected $casts = [
+        'qty' => 'float',
+        'net_unit_price' => 'float',
+        'discount' => 'float',
+        'tax_rate' => 'float',
+        'tax' => 'float',
+        'total' => 'float',
+    ];
+
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * Relationships
      */
-    protected function casts(): array
+    public function exchange()
     {
-        return [
-            'qty' => 'double',
-            'net_unit_price' => 'double',
-            'discount' => 'double',
-            'tax_rate' => 'double',
-            'tax' => 'double',
-            'total' => 'double',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+        return $this->belongsTo(SaleExchange::class, 'exchange_id');
+    }
+
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function saleUnit()
+    {
+        return $this->belongsTo(Unit::class, 'sale_unit_id');
+    }
+
+    /**
+     * Scopes
+     */
+    public function scopeNewProducts($query)
+    {
+        return $query->where('type', 'new');
+    }
+
+    public function scopeReturnedProducts($query)
+    {
+        return $query->where('type', 'returned');
+    }
+
+    public function scopeByProduct($query, $productId)
+    {
+        return $query->where('product_id', $productId);
+    }
+
+    /**
+     * Accessors
+     */
+    public function getIsNewAttribute()
+    {
+        return $this->type === 'new';
+    }
+
+    public function getIsReturnedAttribute()
+    {
+        return $this->type === 'returned';
+    }
+
+    /**
+     * Calculate subtotal before tax
+     */
+    public function getSubtotalAttribute()
+    {
+        return $this->qty * $this->net_unit_price - $this->discount;
     }
 }

@@ -2,66 +2,29 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ProductPurchase extends Model
 {
-    use HasFactory;
+    protected $table = 'product_purchases';
+    protected $fillable =[
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'purchase_id',
-        'product_id',
-        'product_batch_id',
-        'variant_id',
-        'imei_number',
-        'qty',
-        'recieved',
-        'return_qty',
-        'purchase_unit_id',
-        'net_unit_cost',
-        'net_unit_margin',
-        'net_unit_margin_type',
-        'net_unit_price',
-        'discount',
-        'tax_rate',
-        'tax',
-        'total',
+        "purchase_id", "product_id", "product_batch_id", "variant_id", "imei_number", "qty", "recieved", "return_qty", "purchase_unit_id", "net_unit_cost", "net_unit_price", "net_unit_margin", "net_unit_margin_type", "discount", "tax_rate", "tax", "total"
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * Get the purchase that this product purchase belongs to
      */
-    protected function casts(): array
+    public function purchase()
     {
-        return [
-            'qty' => 'double',
-            'recieved' => 'double',
-            'return_qty' => 'double',
-            'net_unit_cost' => 'double',
-            'net_unit_margin' => 'decimal:2',
-            'net_unit_price' => 'decimal:2',
-            'discount' => 'double',
-            'tax_rate' => 'double',
-            'tax' => 'double',
-            'total' => 'double',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+        return $this->belongsTo(Purchase::class, 'purchase_id');
     }
 
     /**
-     * Get the product batch that owns the product purchase.
+     * Get the product for this purchase
      */
-    public function productBatch()
+    public function product()
     {
-        return $this->belongsTo(ProductBatch::class);
+        return $this->belongsTo(Product::class, 'product_id');
     }
 }

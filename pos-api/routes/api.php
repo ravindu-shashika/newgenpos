@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\BillerController;
 use App\Http\Controllers\BrandController;
+use App\Http\Controllers\CashRegisterController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ChallanController;
 use App\Http\Controllers\CouponController;
@@ -16,13 +17,20 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerGroupController;
 use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\DesignationController;
 use App\Http\Controllers\DiscountController;
 use App\Http\Controllers\DiscountPlanController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\ExchangeController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GiftCardController;
+use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\HRMController;
+use App\Http\Controllers\IncomeCategoryController;
 use App\Http\Controllers\IncomeController;
+use App\Http\Controllers\InstallmentPlanController;
 use App\Http\Controllers\MenuController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\RoleController;
@@ -37,6 +45,12 @@ use App\Http\Controllers\SettingController;
 
 
 use App\Http\Controllers\LabelsController;
+use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\LeaveTypeController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OvertimeController;
+use App\Http\Controllers\PackingSlipController;
+use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PrinterController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\QuotationController;
@@ -44,10 +58,13 @@ use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\ReturnPurchaseController;
 use App\Http\Controllers\SaleAgentController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SmsTemplateController;
+use App\Http\Controllers\SteadFastController;
 use App\Http\Controllers\StockCountController;
 use App\Http\Controllers\SupplierController;
 use App\Http\Controllers\TransferController;
+use App\Http\Controllers\WhatsappController;
 use App\Models\Currency;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -88,113 +105,124 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::post('/save-warehouse', [WarehouseController::class, 'saveWarehouse']);
     Route::get('/delete-warehouse/{id}', [WarehouseController::class, 'deleteWarehouse']);
 
-    // taxes
-    Route::get('/taxes', [TaxController::class, 'getAllTaxes']);
-    Route::get('/taxes/{id}', [TaxController::class, 'getTax']);
-    Route::post('/save-tax', [TaxController::class, 'saveTax']);
-    Route::get('/delete-tax/{id}', [TaxController::class, 'deleteTax']);
-    Route::post('/taxes/delete-by-selection', [TaxController::class, 'deleteTaxBySelection']);
-    Route::post('/taxes/import', [TaxController::class, 'importTaxApi']);
+    Route::controller(HomeController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::get('/dashboard', 'dashboard');
 
-    // customer groups
-    Route::get('/customer-groups', [CustomerGroupController::class, 'getAllCustomerGroups']);
-    Route::post('/save-customer-group', [CustomerGroupController::class, 'saveCustomerGroup']);
-    Route::get('/delete-customer-group/{id}', [CustomerGroupController::class, 'deleteCustomerGroup']);
+        Route::get('new-release', 'newVersionReleasePage')->name('new-release');
+        Route::post('version-upgrade', 'versionUpgrade')->name('version-upgrade');
 
-    //units
-    Route::get('/units', [UnitController::class, 'getAllUnits']);
-    Route::get('/units/base', [UnitController::class, 'getBaseUnits']);
-    Route::post('/save-unit', [UnitController::class, 'saveUnit']);
-    Route::get('/delete-unit/{id}', [UnitController::class, 'deleteUnit']);
+        Route::get('/yearly-best-selling-price', 'yearlyBestSellingPrice');
+        Route::get('/yearly-best-selling-qty', 'yearlyBestSellingQty');
+        Route::get('/monthly-best-selling-qty', 'monthlyBestSellingQty');
+        Route::get('/recent-sale', 'recentSale');
+        Route::get('/recent-purchase', 'recentPurchase');
+        Route::get('/recent-quotation', 'recentQuotation');
+        Route::get('/recent-payment', 'recentPayment');
+        Route::get('switch-theme/{theme}', 'switchTheme')->name('switchTheme');
+        Route::get('/dashboard-filter/{start_date}/{end_date}/{warehouse_id}', 'dashboardFilter');
+        Route::get('addon-list', 'addonList');
+        Route::get('my-transactions/{year}/{month}', 'myTransaction');
+    });
 
-    // printers
-    Route::get('/printers', [PrinterController::class, 'index']);
-    Route::get('/printers/{id}/edit', [PrinterController::class, 'edit']);
-    Route::post('/printers', [PrinterController::class, 'store']);
-    Route::put('/printers/{id}', [PrinterController::class, 'update']);
-    Route::delete('/printers/{id}', [PrinterController::class, 'destroy']);
+    // Need to check again
+    Route::resource('products',ProductController::class)->except([ 'show']);
+    Route::controller(ProductController::class)->group(function () {
+        Route::post('products/product-data', 'productData');
+        Route::get('products/gencode', 'generateCode')->name('product.gencode');
+        Route::get('products/search', 'search');
+        Route::get('products/saleunit/{id}', 'saleUnit')->name ('product-saleunit');
+        Route::get('products/getdata/{id}/{variant_id}', 'getData')->name('products.getdata');
+        Route::get('products/product_warehouse/{id}', 'productWarehouseData')->name('product.warehouse');
+        Route::get('products/print_barcode','printBarcode')->name('product.printBarcode');
+        Route::get('products/lims_product_search', 'limsProductSearch')->name('product.search');
+        Route::post('products/deletebyselection', 'deleteBySelection')->name('products.deletebyselection');
+        Route::post('products/update', 'updateProduct');
+        Route::get('products/variant-data/{id}','variantData');
+        Route::get('products/history', 'history')->name('products.history');
+        Route::post('products/sale-history-data', 'saleHistoryData');
+        Route::post('products/purchase-history-data', 'purchaseHistoryData');
+        Route::post('products/sale-return-history-data', 'saleReturnHistoryData');
+        Route::post('products/purchase-return-history-data', 'purchaseReturnHistoryData');
+        Route::post('products/adjustment-history-data', 'adjustmentHistoryData');
+        Route::post('products/transfer-history-data', 'transferHistoryData');
 
-    //invoice-settings
-    Route::get('/invoice-settings', [InvoiceSettingController::class, 'getAllInvoiceSettings']);
-    Route::post('/save-invoice-setting', [InvoiceSettingController::class, 'saveInvoiceSetting']);
-    Route::get('/delete-invoice-setting/{id}', [InvoiceSettingController::class, 'deleteInvoiceSetting']);
-    Route::get('/set-default-invoice-setting/{id}', [InvoiceSettingController::class, 'setDefaultInvoiceSetting']);
+        Route::post('importproduct', 'importProduct')->name('product.import');
+        Route::post('exportproduct', 'exportProduct')->name('product.export');
+        Route::get('products/all-product-in-stock', 'allProductInStock')->name('product.allProductInStock');
+        Route::get('products/show-all-product-online', 'showAllProductOnline')->name('product.showAllProductOnline');
+        Route::get('check-batch-availability/{product_id}/{batch_no}/{warehouse_id}', 'checkBatchAvailability');
+        Route::get('product-price/{id}', 'getProductPrice');
+     });
 
-    // Create SMS (settings)
-    Route::get('/create-sms-data', [SettingController::class, 'createSmsDataApi']);
-    Route::post('/send-sms', [SettingController::class, 'sendSmsApi']);
+    Route::resource('role',RoleController::class);
+    Route::controller(RoleController::class)->group(function () {
+        Route::get('role/permission/{id}', 'permission')->name('role.permission');
+        Route::post('role/set_permission', 'setPermission')->name('role.setPermission');
+    });
 
-    // SMS templates
-    Route::get('/sms-templates', [SmsTemplateController::class, 'index']);
-    Route::post('/sms-templates', [SmsTemplateController::class, 'store']);
-    Route::put('/sms-templates/{id}', [SmsTemplateController::class, 'update']);
-    Route::delete('/sms-templates/{id}', [SmsTemplateController::class, 'destroy']);
+    //Sms Template
+    Route::resource('smstemplates',SmsTemplateController::class);
+    Route::resource('unit', UnitController::class);
+    Route::controller(UnitController::class)->group(function () {
+        Route::post('importunit', 'importUnit')->name('unit.import');
+        Route::post('unit/deletebyselection', 'deleteBySelection');
+        Route::get('unit/lims_unit_search', 'limsUnitSearch')->name('unit.search');
+     });
 
-    //settings (Vue API)
-    Route::get('/settings/general', [SettingController::class, 'getGeneralSetting']);
-    Route::post('/settings/general', [SettingController::class, 'saveGeneralSetting']);
-    Route::get('/settings/mail', [SettingController::class, 'getMailSetting']);
-    Route::post('/settings/mail', [SettingController::class, 'saveMailSetting']);
-    Route::get('/settings/reward-point', [SettingController::class, 'getRewardPointSetting']);
-    Route::post('/settings/reward-point', [SettingController::class, 'saveRewardPointSetting']);
-    Route::get('/settings/pos', [SettingController::class, 'getPosSetting']);
-    Route::post('/settings/pos', [SettingController::class, 'savePosSetting']);
-    Route::get('/settings/app', [SettingController::class, 'getAppSetting']);
-    Route::get('/settings/app-token-delete/{id}', [SettingController::class, 'deleteAppToken']);
+    Route::controller(CategoryController::class)->group(function () {
+        Route::post('category/import', 'import')->name('category.import');
+        Route::post('category/deletebyselection', 'deleteBySelection');
+        Route::post('category/category-data', 'categoryData');
+    });
+    Route::resource('category', CategoryController::class);
 
-    //products
-    Route::get('/products', [ProductController::class, 'getAllProducts']);
-    Route::get('/products/form-data', [ProductController::class, 'getProductFormData']);
-    Route::get('/product/{id}', [ProductController::class, 'getProduct']);
-    Route::post('/save-product', [ProductController::class, 'saveProduct']);
-    Route::get('/delete-product/{id}', [ProductController::class, 'deleteProduct']);
-    Route::post('/products/import', [ProductController::class, 'importProduct']);
-    Route::post('/products/all-in-stock', [ProductController::class, 'allProductInStock']);
-    Route::post('/products/show-online', [ProductController::class, 'showAllProductOnline']);
-    Route::get('/products/{id}/warehouse-data', [ProductController::class, 'productWarehouseData']);
-    Route::get('/products/search', [ProductController::class, 'searchProducts']);
-    Route::get('/products/barcode/init', [ProductController::class, 'barcodeInit']);
-    Route::get('/products/barcode/lookup', [ProductController::class, 'barcodeLookup']);
-    Route::post('/products/barcode/preview', [LabelsController::class, 'printLabelApi']);
 
-    // Barcode sticker settings
-    Route::get('/barcodes', [BarcodeController::class, 'index']);
-    Route::get('/barcodes/{id}', [BarcodeController::class, 'show']);
-    Route::post('/barcodes', [BarcodeController::class, 'store']);
-    Route::put('/barcodes/{id}', [BarcodeController::class, 'update']);
-    Route::delete('/barcodes/{id}', [BarcodeController::class, 'destroy']);
-    Route::post('/products/history/sales', [ProductController::class, 'saleHistoryData']);
-    Route::post('/products/history/purchases', [ProductController::class, 'purchaseHistoryData']);
-    Route::post('/products/history/sale-returns', [ProductController::class, 'saleReturnHistoryData']);
-    Route::post('/products/history/purchase-returns', [ProductController::class, 'purchaseReturnHistoryData']);
-    Route::post('/products/history/adjustments', [ProductController::class, 'adjustmentHistoryData']);
-    Route::post('/products/history/transfers', [ProductController::class, 'transferHistoryData']);
-    Route::post('/products/gallery', [ProductController::class, 'uploadGalleryImages']);
-    Route::get('/generate-code', [ProductController::class, 'generateCode']);
+    Route::controller(BrandController::class)->group(function () {
+        Route::post('importbrand', 'importBrand')->name('brand.import');
+        Route::post('brand/deletebyselection', 'deleteBySelection');
+        Route::get('brand/lims_brand_search', 'limsBrandSearch')->name('brand.search');
+    });
+    Route::resource('brand', BrandController::class);
 
-    // Adjustments
-    Route::get('/adjustments', [AdjustmentController::class, 'index']);
-    Route::get('/adjustments/list', [AdjustmentController::class, 'listApi']);
-    Route::get('/adjustments/form-data', [AdjustmentController::class, 'formData']);
-    Route::get('/adjustments/warehouses/{warehouse}', [AdjustmentController::class, 'warehouseProducts']);
-    Route::get('/adjustments/product-lookup', [AdjustmentController::class, 'productLookup']);
-    Route::post('/adjustments/store', [AdjustmentController::class, 'storeApi']);
-    Route::get('/adjustments/{adjustment}', [AdjustmentController::class, 'show']);
-    Route::post('/adjustments', [AdjustmentController::class, 'store']);
-    Route::put('/adjustments/{adjustment}', [AdjustmentController::class, 'update']);
-    Route::post('/adjustments/{adjustment}', [AdjustmentController::class, 'update']);
-    Route::delete('/adjustments/{adjustment}', [AdjustmentController::class, 'destroy']);
-    Route::post('/adjustments/bulk-delete', [AdjustmentController::class, 'bulkDestroy']);
 
-    // Stock Counts
-    Route::get('/stock-counts', [StockCountController::class, 'index']);
-    Route::get('/stock-counts/options', [StockCountController::class, 'options']);
-    Route::post('/stock-counts', [StockCountController::class, 'store']);
-    Route::get('/stock-counts/{stockCount}', [StockCountController::class, 'show']);
-    Route::post('/stock-counts/{stockCount}/finalize', [StockCountController::class, 'finalize']);
-    Route::get('/stock-counts/{stockCount}/difference', [StockCountController::class, 'difference']);
-    Route::get('/stock-counts/{stockCount}/adjustment-data', [StockCountController::class, 'adjustmentData']);
-    Route::delete('/stock-counts/{stockCount}', [StockCountController::class, 'destroy']);
+    Route::controller(SupplierController::class)->prefix('supplier')->group(function () {
+        Route::post('importsupplier', 'importSupplier')->name('supplier.import');
+        Route::post('supplier/deletebyselection', 'deleteBySelection');
+        Route::post('clear-due', 'clearDue')->name('supplier.clearDue');
+        Route::get('all', 'suppliersAll')->name('supplier.all');
+        Route::get('ledger/{id}', 'ledger')->name('suppliers.ledger');
+        Route::get('supplier-due/{id}', 'supplierDue')->name('supplier.due');
+        Route::get('{supplier_id}', 'supplierPayments')->name('suppliers.payments');
+    });
+    Route::resource('supplier', SupplierController::class);
+
+
+    Route::controller(WarehouseController::class)->group(function () {
+        Route::post('importwarehouse', 'importWarehouse')->name('warehouse.import');
+        Route::post('warehouse/deletebyselection', 'deleteBySelection');
+        Route::get('warehouse/lims_warehouse_search', 'limsWarehouseSearch')->name('warehouse.search');
+        Route::get('warehouse/all', 'warehouseAll')->name('warehouse.all');
+    });
+    Route::resource('warehouse', WarehouseController::class);
+
+    Route::resource('printers', PrinterController::class);
+
+    Route::controller(TaxController::class)->group(function () {
+        Route::post('importtax', 'importTax')->name('tax.import');
+        Route::post('tax/deletebyselection', 'deleteBySelection');
+        Route::get('tax/lims_tax_search', 'limsTaxSearch')->name('tax.search');
+    });
+    Route::resource('tax', TaxController::class);
+
+
+    Route::controller(CustomerGroupController::class)->group(function () {
+        Route::post('importcustomer_group', 'importCustomerGroup')->name('customer_group.import');
+        Route::post('customer_group/deletebyselection', 'deleteBySelection');
+        Route::get('customer_group/lims_customer_group_search', 'limsCustomerGroupSearch')->name('customer_group.search');
+        Route::get('customer_group/all', 'customerGroupAll')->name('customer_group.all');
+    });
+    Route::resource('customer_group', CustomerGroupController::class);
 
     //permission
     Route::get('/roles', [RoleController::class, 'getRoles']);
@@ -211,215 +239,47 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::get('/permissions', [RolePermissionController::class, 'getPermissions']);
     Route::post('/permissions', [RolePermissionController::class, 'createPermission']);
 
-    // Discount Plans
-    Route::get('/discount-plans', [DiscountPlanController::class, 'index']);
-    Route::get('/discount-plans/form-data', [DiscountPlanController::class, 'getFormData']);
-    Route::post('/discount-plans', [DiscountPlanController::class, 'store']);
-    Route::get('/discount-plans/{id}', [DiscountPlanController::class, 'show']);
-    Route::post('/discount-plans/{id}', [DiscountPlanController::class, 'update']);
 
-    // Discounts
-    Route::get('/discounts', [DiscountController::class, 'index']);
-    Route::get('/discounts/form-data', [DiscountController::class, 'getFormData']);
-    Route::get('/discounts/product-search/{code}', [DiscountController::class, 'productSearch']);
-    Route::post('/discounts', [DiscountController::class, 'store']);
-    Route::get('/discounts/{id}', [DiscountController::class, 'show']);
-    Route::post('/discounts/{id}', [DiscountController::class, 'update']);
+    Route::resource('discount-plans', DiscountPlanController::class);
+    Route::resource('discounts', DiscountController::class);
+    Route::get('discounts/product-search/{code}', [DiscountController::class,'productSearch']);
 
-    // Attendance (HRM)
-    Route::get('/attendances', [AttendanceController::class, 'index']);
-    Route::get('/attendances/form-data', [AttendanceController::class, 'formData']);
-    Route::post('/attendances', [AttendanceController::class, 'store']);
-    Route::delete('/attendances/{date}/{employee_id}', [AttendanceController::class, 'destroy']);
-    Route::post('/attendances/delete-by-selection', [AttendanceController::class, 'deleteBySelection']);
-    Route::post('/attendances/import-csv', [AttendanceController::class, 'importCsv']);
 
-    // Departments (HRM)
-    Route::get('/departments', [DepartmentController::class, 'index']);
-    Route::post('/departments', [DepartmentController::class, 'store']);
-    Route::post('/departments/update', [DepartmentController::class, 'update']);
-    Route::delete('/departments/{id}', [DepartmentController::class, 'destroy']);
+    Route::controller(CustomerController::class)->group(function () {
+        Route::post('importcustomer', 'importCustomer')->name('customer.import');
+        Route::post('customer/deletebyselection', 'deleteBySelection');
+        Route::get('customer/lims_customer_search', 'limsCustomerSearch')->name('customer.search');
+        Route::post('customers/clear-due', 'clearDue')->name('customer.clearDue');
+        Route::post('customers/customer-data', 'customerData');
+        Route::get('customers/all', 'customersAll')->name('customer.all');
 
-    // Currencies
-    Route::get('/currencies', [CurrencyController::class, 'index']);
-    Route::post('/currencies', [CurrencyController::class, 'store']);
-    Route::post('/currencies/update', [CurrencyController::class, 'update']);
-    Route::delete('/currencies/{id}', [CurrencyController::class, 'destroy']);
+        // customer deposit route
+        Route::get('customer/getDeposit/{id}', 'getDeposit');
+        Route::post('customer/add_deposit', 'addDeposit')->name('customer.addDeposit');
+        Route::post('customer/update_deposit', 'updateDeposit')->name('customer.updateDeposit');
+        Route::post('customer/deleteDeposit', 'deleteDeposit')->name('customer.deleteDeposit');
 
-    // Expense Categories
-    Route::get('/expense-categories', [ExpenseCategoryController::class, 'index']);
-    Route::post('/expense-categories', [ExpenseCategoryController::class, 'store']);
-    Route::post('/expense-categories/update', [ExpenseCategoryController::class, 'update']);
-    Route::delete('/expense-categories/{id}', [ExpenseCategoryController::class, 'destroy']);
-    Route::get('/expense-categories/generate-code', [ExpenseCategoryController::class, 'generateCode']);
-
-    // Customers
-    Route::get('/customers', [CustomerController::class, 'index']);
-    Route::get('/customers/list', [CustomerController::class, 'customerListApi']);
-    Route::get('/customers/form-data', [CustomerController::class, 'formData']);
-    Route::get('/customers/{id}', [CustomerController::class, 'getApi']);
-    Route::post('/customers', [CustomerController::class, 'store']);
-    Route::post('/customers/store', [CustomerController::class, 'storeApi']);
-    Route::post('/customers/update', [CustomerController::class, 'update']);
-    Route::put('/customers/{id}', [CustomerController::class, 'updateApi']);
-    Route::delete('/customers/{id}', [CustomerController::class, 'destroyApi']);
-
-    // Employees
-    Route::get('/employees', [EmployeeController::class, 'index']);
-    Route::get('/employees/form-data', [EmployeeController::class, 'formData']);
-    Route::get('/employees/{id}', [EmployeeController::class, 'show']);
-    Route::post('/employees', [EmployeeController::class, 'store']);
-    Route::post('/employees/update', [EmployeeController::class, 'update']);
-    Route::delete('/employees/{id}', [EmployeeController::class, 'destroy']);
-
-    // Accounts
-    Route::get('/accounts', [AccountsController::class, 'accountListApi']);
-    Route::get('/accounts/options', [AccountsController::class, 'options']);
-    Route::post('/accounts', [AccountsController::class, 'storeApi']);
-    Route::post('/accounts/{id}', [AccountsController::class, 'updateApi']);
-    Route::delete('/accounts/{id}', [AccountsController::class, 'destroyApi']);
-    Route::post('/accounts/{id}/make-default', [AccountsController::class, 'makeDefaultApi']);
-    Route::get('/accounts/balance-sheet', [AccountsController::class, 'balanceSheetApi']);
-    Route::get('/accounts/statement', [AccountsController::class, 'statementApi']);
-
-    // Money transfers
-    Route::get('/money-transfers', [MoneyTransferController::class, 'indexApi']);
-    Route::get('/money-transfers/accounts', [MoneyTransferController::class, 'accountsApi']);
-    Route::post('/money-transfers', [MoneyTransferController::class, 'storeApi']);
-    Route::put('/money-transfers/{id}', [MoneyTransferController::class, 'updateApi']);
-    Route::delete('/money-transfers/{id}', [MoneyTransferController::class, 'destroyApi']);
-
-    Route::get('suppliers/list', [SupplierController::class, 'supplierListApi']);
-    Route::get('suppliers/edit/{id}', [SupplierController::class, 'getApi']);
-    Route::post('suppliers/store', [SupplierController::class, 'storeApi']);
-    Route::put('suppliers/{id}', [SupplierController::class, 'updateApi']);
-    Route::delete('suppliers/{id}', [SupplierController::class, 'destroyApi']);
-    Route::controller(SupplierController::class)->group(function () {
-        Route::post('importsupplier', 'importSupplier')->name('supplier.import');
-        Route::post('supplier/deletebyselection', 'deleteBySelection');
-        Route::post('suppliers/clear-due', 'clearDue')->name('supplier.clearDue');
-        Route::get('suppliers/all', 'suppliersAll')->name('supplier.all');
-        Route::get('suppliers/ledger/{id}', 'ledger')->name('suppliers.ledger');
-        Route::get('supplier-due/{id}', 'supplierDue')->name('supplier.due');
-        Route::get('suppliers/{supplier_id}', 'supplierPayments')->name('suppliers.payments');
+        //customer points route
+        Route::post('customer/deletePoints', 'deletePoints')->name('customer.deletePoints');
+        Route::post('customer/add-point', 'addPoint')->name('customer.addPoint');
+        Route::get('customer/getPoints/{id}', 'getPoints');
+        Route::post('customer/update_point', 'updatePoint')->name('customer.updatePoint');
+        Route::get('customers/{customer_id}', 'customerPayments')->name('customers.payments');
+        Route::get('customers/ledger/{id}', 'ledger')->name('customers.ledger');
     });
-    Route::resource('supplier', SupplierController::class);
 
-    Route::get('users/list', [UserController::class, 'userListApi']);
-    Route::get('users/form-data', [UserController::class, 'userFormDataApi']);
-    Route::get('users/edit/{id}', [UserController::class, 'getUserApi']);
-    Route::post('users/store', [UserController::class, 'storeUserApi']);
-    Route::put('users/{id}', [UserController::class, 'updateUserApi']);
-    Route::delete('users/{id}', [UserController::class, 'destroyUserApi']);
-    Route::controller(UserController::class)->group(function () {
-        Route::get('user/profile/{id}', 'profile')->name('user.profile');
-        Route::put('user/update_profile/{id}', 'profileUpdate')->name('user.profileUpdate');
-        Route::put('user/changepass/{id}', 'changePassword')->name('user.password');
-        Route::get('user/genpass', 'generatePassword');
-        Route::post('user/deletebyselection', 'deleteBySelection');
-        Route::get('user/notification', 'notificationUsers')->name('user.notification');
-        Route::get('user/all', 'allUsers')->name('user.all');
-        Route::post('user/toggle-status', [UserController::class, 'toggleStatus'])->name('user.toggleStatus');
-    });
-    Route::resource('user', UserController::class);
-    // Sale agents (React API)
-    Route::get('/sale-agents/list', [SaleAgentController::class, 'listApi']);
-    Route::get('/sale-agents/form-data', [SaleAgentController::class, 'formDataApi']);
-    Route::get('/sale-agents/get/{id}', [SaleAgentController::class, 'getApi']);
-    Route::post('/sale-agents/store', [SaleAgentController::class, 'storeApi']);
-    Route::put('/sale-agents/update/{id}', [SaleAgentController::class, 'updateApi']);
-    Route::delete('/sale-agents/delete/{id}', [SaleAgentController::class, 'destroyApi']);
-    Route::resource('sale-agents', SaleAgentController::class)->except('show');
+    Route::resource('customer', CustomerController::class)->where(['customer' => '[0-9]+']);
 
-        Route::controller(BillerController::class)->group(function () {
+
+    Route::controller(BillerController::class)->group(function () {
         Route::post('importbiller', 'importBiller')->name('biller.import');
         Route::post('biller/deletebyselection', 'deleteBySelection');
         Route::get('biller/lims_biller_search', 'limsBillerSearch')->name('biller.search');
     });
-    Route::get('billers/list', [BillerController::class, 'listApi']);
-    Route::get('billers/edit/{id}', [BillerController::class, 'getApi']);
-    Route::post('billers/store', [BillerController::class, 'storeApi']);
-    Route::put('billers/{id}', [BillerController::class, 'updateApi']);
-    Route::delete('billers/{id}', [BillerController::class, 'destroyApi']);
     Route::resource('biller', BillerController::class);
 
-    Route::controller(IncomeController::class)->group(function () {
-        Route::post('incomes/income-data', 'incomeData')->name('incomes.data');
-        Route::post('incomes/deletebyselection', 'deleteBySelection');
-    });
-    Route::get('incomes/list', [IncomeController::class, 'listApi']);
-    Route::get('incomes/form-data', [IncomeController::class, 'formDataApi']);
-    Route::get('incomes/edit/{id}', [IncomeController::class, 'getApi']);
-    Route::post('incomes/store', [IncomeController::class, 'storeApi']);
-    Route::put('incomes/{id}', [IncomeController::class, 'updateApi']);
-    Route::delete('incomes/{id}', [IncomeController::class, 'destroyApi']);
-    Route::resource('incomes', IncomeController::class);
 
-    Route::controller(ExpenseCategoryController::class)->group(function () {
-        Route::get('expense_categories/gencode', 'generateCode');
-        Route::post('expense_categories/import', 'import')->name('expense_category.import');
-        Route::post('expense_categories/deletebyselection', 'deleteBySelection');
-        Route::get('expense_categories/all', 'expenseCategoriesAll')->name('expense_category.all');;
-    });
-    Route::resource('expense_categories', ExpenseCategoryController::class);
-
-    Route::controller(ExpenseController::class)->group(function () {
-        Route::post('expenses/expense-data', 'expenseData')->name('expenses.data');
-        Route::post('expenses/deletebyselection', 'deleteBySelection');
-    });
-    Route::get('expenses/list', [ExpenseController::class, 'listApi']);
-    Route::get('expenses/form-data', [ExpenseController::class, 'formDataApi']);
-    Route::get('expenses/edit/{id}', [ExpenseController::class, 'getApi']);
-    Route::post('expenses/store', [ExpenseController::class, 'storeApi']);
-    Route::put('expenses/{id}', [ExpenseController::class, 'updateApi']);
-    Route::delete('expenses/{id}', [ExpenseController::class, 'destroyApi']);
-    Route::resource('expenses', ExpenseController::class);
-
-    
-    Route::controller(TransferController::class)->group(function () {
-        Route::prefix('transfers')->group(function () {
-            Route::get('list', 'listApi');
-            Route::get('form-data', 'formDataApi');
-            Route::get('details/{id}', 'detailsApi');
-            Route::post('store', 'storeApi');
-            Route::post('transfer-data', 'transferData')->name('transfers.data');
-            Route::get('product_transfer/{id}', 'productTransferData');
-            Route::get('transfer_by_csv', 'transferByCsv')->middleware('permission:transfers-import');
-            Route::get('getproduct/{id}', 'getProduct')->name('transfers.getproduct');
-            Route::put('change-status/{id}', 'changeStatus')->name('transfers.changeStatus');
-            Route::get('lims_product_search', 'limsProductSearch')->name('product_transfer.search');
-            Route::post('deletebyselection', 'deleteBySelection');
-            Route::delete('delete/{id}', 'destroyApi');
-        });
-        Route::post('importtransfer', 'importTransfer')->name('transfer.import');
-    });
-    Route::resource('transfers', TransferController::class);
-
-    Route::controller(QuotationController::class)->group(function () {
-        Route::prefix('quotations')->group(function () {
-            Route::get('list', 'listApi');
-            Route::get('form-data', 'formDataApi');
-            Route::get('details/{id}', 'detailsApi');
-            Route::post('store', 'storeApi');
-            Route::delete('delete/{id}', 'destroyApi');
-            Route::post('quotation-data', 'quotationData')->name('quotations.data');
-            Route::get('product_quotation/{id}','productQuotationData');
-            Route::get('lims_product_search', 'limsProductSearch')->name('product_quotation.search');
-            Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('quotation.getcustomergroup');
-            Route::get('getproduct/{id}', 'getProduct')->name('quotation.getproduct');
-            Route::get('{id}/create_sale', 'createSale')->name('quotation.create_sale');
-            Route::get('{id}/create_purchase', 'createPurchase')->name('quotation.create_purchase');
-            Route::post('sendmail', 'sendMail')->name('quotation.sendmail');
-            Route::post('deletebyselection', 'deleteBySelection');
-        });
-     });
-    Route::resource('quotations', QuotationController::class);
-    
     Route::controller(SaleController::class)->group(function () {
-        Route::get('sales/list', 'listApi');
-        Route::get('sales/form-data', 'formDataApi');
-        Route::get('sales/pos-form-data', 'posFormDataApi');
-        Route::get('sales/details/{id}', 'detailsApi');
         Route::post('sales/sale-data', 'saleData');
         Route::post('sales/sendmail', 'sendMail')->name('sale.sendmail');
         Route::get('sales/sale_by_csv', 'saleByCsv')->middleware('permission:sales-import');
@@ -466,73 +326,18 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
     Route::resource('sales', SaleController::class)->except('show');
 
-    Route::controller(ReturnController::class)->group(function () {
-        Route::prefix('return-sale')->group(function () {
-            Route::get('list', 'listApi');
-            Route::get('form-data', 'formDataApi');
-            Route::get('details/{id}', 'detailsApi');
-            Route::post('return-data', 'returnData');
-            Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('return-sale.getcustomergroup');
-            Route::post('sendmail', 'sendMail')->name('return-sale.sendmail');
-            Route::get('getproduct/{id}', 'getProduct')->name('return-sale.getproduct');
-            Route::get('lims_product_search', 'limsProductSearch')->name('product_return-sale.search');
-            Route::get('product_return/{id}', 'productReturnData');
-            Route::post('deletebyselection', 'deleteBySelection');
-         });
-    });
-    Route::resource('return-sale', ReturnController::class);
+    Route::get('/installmentplan/{id}', [InstallmentPlanController::class, 'show'])->name('installmentplan.show');
 
-    Route::controller(CouponController::class)->group(function () {
-        Route::get('coupons/list', 'listApi');
-        Route::post('coupons/store', 'storeApi');
-        Route::put('coupons/update/{id}', 'updateApi');
-        Route::delete('coupons/delete/{id}', 'destroyApi');
-        Route::get('coupons/gencode', 'generateCode');
-        Route::post('coupons/deletebyselection', 'deleteBySelection');
-    });
-    Route::resource('coupons', CouponController::class);
-    Route::controller(GiftCardController::class)->group(function () {
-        Route::get('gift_cards/list', 'listApi');
-        Route::post('gift_cards/store', 'storeApi');
-        Route::get('gift_cards/edit/{id}', 'editApi');
-        Route::put('gift_cards/update/{id}', 'updateApi');
-        Route::delete('gift_cards/delete/{id}', 'destroyApi');
-        Route::post('gift_cards/recharge-api/{id}', 'rechargeApi');
-        Route::get('gift_cards/gencode', 'generateCode');
-        Route::post('gift_cards/deletebyselection', 'deleteBySelection');
-    });
-    Route::resource('gift_cards', GiftCardController::class);
-
-    Route::controller(CourierController::class)->group(function () {
-        Route::get('couriers/list', 'listApi');
-        Route::get('couriers/edit/{id}', 'editApi');
-        Route::post('couriers/store', 'storeApi');
-        Route::put('couriers/update/{id}', 'updateApi');
-        Route::delete('couriers/delete/{id}', 'destroyApi');
-    });
-    Route::resource('couriers', CourierController::class);
-
-    Route::controller(DeliveryController::class)->group(function () {
-        Route::prefix('delivery')->group(function () {
-            Route::get('list', 'listApi');
-            Route::get('edit-api/{id}', 'editApi');
-            Route::get('details/{id}', 'detailsApi');
-            Route::put('update-api/{id}', 'updateApi');
-            Route::delete('delete-api/{id}', 'destroyApi');
-            Route::get('/', 'index')->name('delivery.index');
-            Route::get('delivery_list_data', 'deliveryListData');
-            Route::get('product_delivery/{id}', 'productDeliveryData');
-            Route::get('create/{id}', 'create');
-            Route::post('store', 'store')->name('delivery.store');
-            Route::post('sendmail', 'sendMail')->name('delivery.sendMail');
-            Route::get('{id}/edit', 'edit');
-            Route::post('update', 'update')->name('delivery.update');
-            Route::post('deletebyselection', 'deleteBySelection');
-            Route::post('delete/{id}', 'delete')->name('delivery.delete');
+    Route::controller(PackingSlipController::class)->group(function () {
+        Route::prefix('packing-slips')->group(function () {
+            Route::get('/', 'index')->name('packingSlip.index');
+            Route::post('packing-slip-data', 'packingSlipData');
+            Route::post('store', 'store')->name('packingSlip.store');
+            Route::post('delete/{id}', 'delete')->name('packingSlip.delete');
+            Route::get('invoice/{id}', 'genInvoice')->name('packingSlip.genInvoice');
         });
     });
 
-     
     Route::controller(ChallanController::class)->group(function () {
         Route::prefix('challans')->group(function () {
             Route::get('/', 'index')->name('challan.index');
@@ -546,41 +351,116 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         });
     });
 
-    // React Purchase Create/Edit API – explicit paths so they never conflict with resource('purchases')
-    Route::get('purchase-create/form-data', [PurchaseController::class, 'formDataApi']);
-    Route::get('purchase-create/product-codes', [PurchaseController::class, 'productCodesApi']);
-    Route::get('purchase-create/lims_product_search', [PurchaseController::class, 'limsProductSearchApi']);
-    Route::post('purchase-create/store', [PurchaseController::class, 'storeApi']);
-    Route::get('purchase-create/edit-data/{id}', [PurchaseController::class, 'getEditDataApi']);
-    Route::put('purchase-create/update/{id}', [PurchaseController::class, 'updateApi']);
+    Route::controller(DeliveryController::class)->group(function () {
+        Route::prefix('delivery')->group(function () {
+            Route::get('/', 'index')->name('delivery.index');
+            Route::get('delivery_list_data','deliveryListData');
+            Route::get('product_delivery/{id}','productDeliveryData');
+            Route::get('create/{id}', 'create');
+            Route::post('store', 'store')->name('delivery.store');
+            Route::post('sendmail', 'sendMail')->name('delivery.sendMail');
+            Route::get('{id}/edit', 'edit');
+            Route::post('update', 'update')->name('delivery.update');
+            Route::post('deletebyselection', 'deleteBySelection');
+            Route::post('delete/{id}', 'delete')->name('delivery.delete');
+        });
+     });
+
+    Route::controller(SteadFastController::class)->group(function() {
+        Route::get('/delivery/steadfast/{sale_id}', 'getSaleForSteadFast');
+        Route::post('/steadfast/create-order', 'store')->name('steadfast.create-order');
+        Route::get('/steadfast/{sale_id}', 'show')->name('steadfast.track');
+    });
+
+
+    Route::controller(QuotationController::class)->group(function () {
+        Route::prefix('quotations')->group(function () {
+            Route::post('quotation-data', 'quotationData')->name('quotations.data');
+            Route::get('product_quotation/{id}','productQuotationData');
+            Route::get('lims_product_search', 'limsProductSearch')->name('product_quotation.search');
+            Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('quotation.getcustomergroup');
+            Route::get('getproduct/{id}', 'getProduct')->name('quotation.getproduct');
+            Route::get('{id}/create_sale', 'createSale')->name('quotation.create_sale');
+            Route::get('{id}/create_purchase', 'createPurchase')->name('quotation.create_purchase');
+            Route::post('sendmail', 'sendMail')->name('quotation.sendmail');
+            Route::post('deletebyselection', 'deleteBySelection');
+        });
+     });
+    Route::resource('quotations', QuotationController::class);
+
+
 
     Route::controller(PurchaseController::class)->group(function () {
-        Route::prefix('purchases')->group(function () {
-            Route::post('purchase-data', 'purchaseData')->name('purchases.data');
-            Route::get('product_purchase/{id}', 'productPurchaseData');
-            Route::post('add_payment', 'addPayment')->name('purchase.add-payment');
-            Route::get('getpayment/{id}', 'getPayment')->name('purchase.get-payment');
-            Route::post('updatepayment', 'updatePayment')->name('purchase.update-payment');
-            Route::post('deletepayment', 'deletePayment')->name('purchase.delete-payment');
-            Route::get('purchase_by_csv', 'purchaseByCsv')->middleware('permission:purchases-import');
-            Route::get('deleted_data', 'showDeletedPurchases')
-                ->middleware('hasPermanentDeletePermission');
-            Route::get('duplicate/{id}', 'duplicate')->name('purchase.duplicate');
-            Route::post('deletebyselection', 'deleteBySelection');
-            Route::delete('force-delete-selected', 'forceDeleteSelected')
-                ->name('purchases.forceDeleteSelected')
-                ->middleware('hasPermanentDeletePermission');
-            Route::get('supplier/{supplier_id}', 'supplierPurchase')->name('purchase.supplier');
-        });
-        Route::post('importpurchase', 'importPurchase')->name('purchase.import');
+    Route::post('purchases/purchase-data', 'purchaseData')->name('purchases.data');
+    Route::get('purchases/product_purchase/{id}', 'productPurchaseData');
+    Route::get('purchases/lims_product_search', 'limsProductSearch')->name('product_purchase.search');
+    Route::post('purchases/add_payment', 'addPayment')->name('purchase.add-payment');
+    Route::get('purchases/getpayment/{id}', 'getPayment')->name('purchase.get-payment');
+    Route::post('purchases/updatepayment', 'updatePayment')->name('purchase.update-payment');
+    Route::post('purchases/deletepayment', 'deletePayment')->name('purchase.delete-payment');
+    Route::get('purchases/purchase_by_csv', 'purchaseByCsv')->name('purchases.purchase_by_csv');
+    Route::get('purchases/deleted_data', 'showDeletedPurchases')->name('purchases.deletedData');
+    Route::get('purchases/duplicate/{id}', 'duplicate')->name('purchase.duplicate');
+    Route::post('purchases/deletebyselection', 'deleteBySelection');
+    Route::delete('purchases/force-delete-selected', 'forceDeleteSelected')->name('purchases.forceDeleteSelected');
+    Route::get('purchases/supplier/{supplier_id}', 'supplierPurchase')->name('purchase.supplier');
+    Route::post('importpurchase', 'importPurchase')->name('purchase.import');
     });
     Route::resource('purchases', PurchaseController::class);
 
     
-    Route::controller(ReturnPurchaseController::class)->group(function () {
-        Route::prefix('return-purchase')->group(function () {
-            Route::get('create-data', 'createDataApi');
-            Route::post('store', 'storeApi');
+
+
+
+    Route::controller(TransferController::class)->group(function () {
+            Route::post('transfers/transfer-data', 'transferData')->name('transfers.data');
+            Route::get('transfers/product_transfer/{id}', 'productTransferData');
+            Route::get('transfers/transfer_by_csv', 'transferByCsv')->middleware('permission:transfers-import');
+            Route::get('transfers/getproduct/{id}', 'getProduct')->name('transfers.getproduct');
+            Route::put('transfers/change-status/{id}', 'changeStatus')->name('transfers.changeStatus');
+            Route::get('transfers/lims_product_search', 'limsProductSearch')->name('product_transfer.search');
+            Route::post('transfers/deletebyselection', 'deleteBySelection');
+            Route::post('transfers/importtransfer', 'importTransfer')->name('transfer.import');
+    });
+    Route::resource('transfers', TransferController::class);
+
+
+
+    Route::controller(AdjustmentController::class)->prefix('qty_adjustment')->group(function () {
+        Route::get('getproduct/{id}', 'getProduct')->name('adjustment.getproduct');
+        Route::get('lims_product_search', 'limsProductSearch')->name('product_adjustment.search');
+        Route::post('deletebyselection', 'deleteBySelection');
+    });
+    Route::resource('qty_adjustment', AdjustmentController::class);
+
+
+    Route::controller(ReturnController::class)->prefix('return-sale')->group(function () {
+            Route::post('return-data', 'returnData');
+            Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('return-sale.getcustomergroup');
+            Route::post('sendmail', 'sendMail')->name('return-sale.sendmail');
+            Route::get('getproduct/{id}', 'getProduct')->name('return-sale.getproduct');
+            Route::get('lims_product_search', 'limsProductSearch')->name('product_return-sale.search');
+            Route::get('product_return/{id}', 'productReturnData');
+            Route::post('deletebyselection', 'deleteBySelection');
+
+    });
+    Route::resource('return-sale', ReturnController::class);
+
+
+    Route::controller(ExchangeController::class)->prefix('exchange')->group(function () {
+        Route::post('exchange-data', 'exchangeData')->name('exchange.data');
+        Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('exchange.getcustomergroup');
+        Route::post('sendmail', 'sendMail')->name('exchange.sendmail');
+        Route::get('getproduct/{id}', 'getProduct')->name('exchange.getproduct');
+        Route::get('lims_product_search', 'limsProductSearch')->name('exchange.lims_product_search');
+        // FIXED: Changed from exchangeData to productExchange
+        Route::get('product_exchange/{id}', 'productExchange')->name('exchange.product_exchange');
+        Route::post('deletebyselection', 'deleteBySelection')->name('exchange.deletebyselection');
+    });
+    Route::resource('exchange', ExchangeController::class);
+    Route::get('/sale-exchange/search', [ExchangeController::class, 'searchByReference'])->name('sale.exchange.search');
+
+    Route::controller(ReturnPurchaseController::class)->prefix('return-purchase')->group(function () {
             Route::post('return-data', 'returnData');
             Route::get('getcustomergroup/{id}', 'getCustomerGroup')->name('return-purchase.getcustomergroup');
             Route::post('sendmail', 'sendMail')->name('return-purchase.sendmail');
@@ -588,7 +468,203 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
             Route::get('lims_product_search', 'limsProductSearch')->name('product_return-purchase.search');
             Route::get('product_return/{id}', 'productReturnData');
             Route::post('deletebyselection', 'deleteBySelection');
-         });
     });
     Route::resource('return-purchase', ReturnPurchaseController::class);
+
+
+    Route::controller(UserController::class)->group(function () {
+        Route::get('user/profile/{id}', 'profile')->name('user.profile');
+        Route::put('user/update_profile/{id}', 'profileUpdate')->name('user.profileUpdate');
+        Route::put('user/changepass/{id}', 'changePassword')->name('user.password');
+        Route::get('user/genpass', 'generatePassword');
+        Route::post('user/deletebyselection', 'deleteBySelection');
+        Route::get('user/notification', 'notificationUsers')->name('user.notification');
+        Route::get('user/all', 'allUsers')->name('user.all');
+        Route::post('user/toggle-status', [UserController::class, 'toggleStatus'])->name('user.toggleStatus');
+
+    });
+    Route::resource('user', UserController::class);
+
+
+    Route::controller(SettingController::class)->prefix('setting')->group(function () {
+            Route::get('activity-log', 'activityLog')->name('setting.activityLog');
+            Route::get('general_setting', 'generalSetting')->name('setting.general');
+            Route::post('general_setting_store', 'generalSettingStore')->name('setting.generalStore');
+            Route::get('app_setting', 'appSetting')->name('setting.app');
+            Route::delete('app_setting/{id}', 'appSettingDelete')->name('setting.tokenDelete');
+            Route::get('reward-point-setting', 'rewardPointSetting')->name('setting.rewardPoint');
+            Route::post('reward-point-setting_store', 'rewardPointSettingStore')->name('setting.rewardPointStore');
+            Route::get('general_setting/change-theme/{theme}', 'changeTheme');
+            Route::get('mail_setting', 'mailSetting')->name('setting.mail');
+            Route::get('sms_setting', 'smsSetting')->name('setting.sms');
+            Route::get('createsms', 'createSms')->name('setting.createSms');
+            Route::post('sendsms', 'sendSMS')->name('setting.sendSms');
+            Route::get('payment-gateways/list', 'gateway')->name('setting.gateway');
+            Route::post('payment-gateways/update','gatewayUpdate')->name('setting.gateway.update');
+            Route::get('hrm_setting', 'hrmSetting')->name('setting.hrm');
+            Route::post('hrm_setting_store', 'hrmSettingStore')->name('setting.hrmStore');
+            Route::post('mail_setting_store', 'mailSettingStore')->name('setting.mailStore');
+            Route::post('sms_setting_store', 'smsSettingStore')->name('setting.smsStore');
+            Route::get('pos_setting', 'posSetting')->name('setting.pos');
+            Route::post('pos_setting_store', 'posSettingStore')->name('setting.posStore');
+            Route::get('empty-database', 'emptyDatabase')->name('setting.emptyDatabase');
+            Route::get('backup', 'backup')->name('setting.backup');
+    });
+
+    Route::prefix('setting')->name('settings.')->group(function () {
+        Route::resource('invoice', InvoiceSettingController::class);
+    });
+
+    Route::get('/barcodes/set_default/{id}', [BarcodeController::class, 'setDefault']);
+    Route::controller(BarcodeController::class)->group(function () {
+        Route::post('barcodes/barcode-data', 'barcodeData')->name('barcodes.data');
+    });
+    Route::resource('barcodes', BarcodeController::class);
+
+
+    Route::get('/labels/show', [LabelsController::class, 'show'])->name('print.labels');
+    Route::get('/labels/add-product-row', [LabelsController::class, 'addProductRow']);
+    Route::get('/labels/print', [LabelsController::class, 'printLabel'])->name('print.label');
+
+    Route::controller(ExpenseCategoryController::class)->group(function () {
+        Route::get('expense_categories/gencode', 'generateCode');
+        Route::post('expense_categories/import', 'import')->name('expense_category.import');
+        Route::post('expense_categories/deletebyselection', 'deleteBySelection');
+        Route::get('expense_categories/all', 'expenseCategoriesAll')->name('expense_category.all');;
+    });
+    Route::resource('expense_categories', ExpenseCategoryController::class);
+
+
+    Route::controller(ExpenseController::class)->group(function () {
+        Route::post('expenses/expense-data', 'expenseData')->name('expenses.data');
+        Route::post('expenses/deletebyselection', 'deleteBySelection');
+    });
+    Route::resource('expenses', ExpenseController::class);
+
+    // IncomeCategory & Income Start
+    Route::controller(IncomeCategoryController::class)->prefix('income_categories')->group(function () {
+        Route::get('gencode', 'generateCode');
+        Route::post('import', 'import')->name('income_category.import');
+        Route::post('deletebyselection', 'deleteBySelection');
+        Route::get('all', 'incomeCategoriesAll')->name('income_category.all');;
+    });
+    Route::resource('income_categories', IncomeCategoryController::class);
+
+
+    Route::controller(IncomeController::class)->prefix('incomes')->group(function () {
+        Route::post('income-data', 'incomeData')->name('incomes.data');
+        Route::post('deletebyselection', 'deleteBySelection');
+    });
+    Route::resource('incomes', IncomeController::class);
+    // IncomeCategory & Income End
+
+
+    Route::controller(GiftCardController::class)->prefix('gift_cards')->group(function () {
+        Route::get('gencode', 'generateCode');
+        Route::post('recharge/{id}', 'recharge')->name('gift_cards.recharge');
+        Route::post('deletebyselection', 'deleteBySelection');
+    });
+    Route::resource('gift_cards', GiftCardController::class);
+
+    Route::resource('couriers', CourierController::class);
+
+    Route::controller(CouponController::class)->prefix('coupons')->group(function () {
+        Route::get('gencode', 'generateCode');
+        Route::post('deletebyselection', 'deleteBySelection');
+    });
+    Route::resource('coupons', CouponController::class);
+
+
+    //accounting routes
+    Route::controller(AccountsController::class)->group(function () {
+        Route::get('make-default/{id}', 'makeDefault');
+        Route::get('balancesheet', 'balanceSheet')->name('accounts.balancesheet');
+        Route::post('account-statement', 'accountStatement')->name('accounts.statement');
+        Route::get('accounts/all', 'accountsAll')->name('account.all');
+    });
+    Route::resource('accounts', AccountsController::class);
+
+
+    Route::resource('money-transfers', MoneyTransferController::class);
+
+
+    //HRM routes
+    Route::post('departments/deletebyselection', [DepartmentController::class,'deleteBySelection']);
+    Route::resource('departments', DepartmentController::class);
+    Route::resource('designations', DesignationController::class);
+    Route::resource('shift', ShiftController::class);
+    Route::resource('overtime', OvertimeController::class);
+    Route::resource('leave-type', LeaveTypeController::class);
+    Route::resource('leave', LeaveController::class);
+    Route::get('hrm-panel',[HRMController::class,'index'])->name('hrm-panel');
+    Route::resource('sale-agents', SaleAgentController::class)->except('show');
+    Route::get('/payroll/monthly-data', [PayrollController::class, 'monthlyData'])->name('payroll.monthlyData');
+    Route::get('payroll/get-employees-by-warehouse', [PayrollController::class, 'getEmployeesByWarehouse'])->name('payroll.getEmployeesByWarehouse');
+    Route::post('payroll/store-multiple', [PayrollController::class, 'storeMultiple'])->name('payroll.storeMultiple');
+    Route::post('payroll/generate', [PayrollController::class, 'generateCards'])->name('payroll.generateCards');
+
+
+    Route::post('employees/deletebyselection', [EmployeeController::class, 'deleteBySelection']);
+    Route::resource('employees', EmployeeController::class);
+
+
+    Route::post('payroll/deletebyselection', [PayrollController::class, 'deleteBySelection']);
+    Route::resource('payroll', PayrollController::class);
+
+
+    Route::post('attendance/delete/{date}/{employee_id}', [AttendanceController::class, 'delete'])->name('attendances.delete');
+    Route::post('attendance/deletebyselection', [AttendanceController::class, 'deleteBySelection']);
+    Route::post('attendance/importDeviceCsv', [AttendanceController::class, 'importDeviceCsv'])->name('attendances.importDeviceCsv');
+    Route::resource('attendance', AttendanceController::class);
+
+    Route::controller(StockCountController::class)->prefix('stock-count')->group(function () {
+        Route::post('finalize', 'finalize')->name('stock-count.finalize');
+        Route::get('stockdif/{id}', 'stockDif');
+        Route::get('{id}/qty_adjustment', 'qtyAdjustment')->name('stock-count.adjustment');
+    });
+    Route::resource('stock-count', StockCountController::class);
+
+
+    Route::controller(HolidayController::class)->group(function () {
+        Route::post('holidays/deletebyselection', 'deleteBySelection');
+        Route::get('approve-holiday/{id}', 'approveHoliday')->name('approveHoliday');
+        Route::get('holidays/my-holiday/{year}/{month}', 'myHoliday')->name('myHoliday');
+    });
+    Route::resource('holidays', HolidayController::class);
+
+
+    Route::controller(CashRegisterController::class)->group(function () {
+        Route::prefix('cash-register')->group(function () {
+            Route::get('/', 'index')->name('cashRegister.index');
+            Route::get('check-availability/{warehouse_id}', 'checkAvailability')->name('cashRegister.checkAvailability');
+            Route::post('store', 'store')->name('cashRegister.store');
+            Route::get('getDetails/{id}', 'getDetails');
+            Route::post('close', 'close')->name('cashRegister.close');
+        });
+    });
+
+
+    Route::controller(NotificationController::class)->group(function () {
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', 'index')->name('notifications.index');
+            Route::post('store', 'store')->name('notifications.store');
+            Route::get('mark-as-read', 'markAsRead');
+        });
+    });
+
+
+    Route::resource('currency', CurrencyController::class);
+
+
+    Route::prefix('whatsapp')->group(function () {
+        Route::get('/settings', [WhatsappController::class, 'settings'])->name('whatsapp.settings');
+        Route::post('/settings', [WhatsappController::class, 'updateSettings'])->name('whatsapp.settings.update');
+        Route::get('/templates', [WhatsappController::class, 'templates'])->name('whatsapp.templates');
+        Route::delete('/template/delete/{name}', [WhatsappController::class, 'deleteTemplate'])->name('whatsapp.template.delete');
+        Route::get('/send', [WhatsappController::class, 'sendPage'])->name('whatsapp.send.page');
+        Route::post('/send', [WhatsappController::class, 'sendMessage'])->name('whatsapp.send');
+    });
+
 });
+
+

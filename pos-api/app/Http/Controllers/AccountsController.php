@@ -14,7 +14,7 @@ use App\Models\Payroll;
 use App\Models\MoneyTransfer;
 use App\Models\Purchase;
 use App\Models\Sale;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
@@ -26,8 +26,8 @@ class AccountsController extends Controller
     public function index()
     {
         $role = Role::find(Auth::user()->role_id);
-        if (!$role->hasPermissionTo('account-index')) {
-            return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
+        if (!$role->hasPermissionTo('accounts.view')) {
+            return response()->json(['status' => 403, 'message' =>'Sorry! You are not allowed to access this module']);
         }
 
         $lims_account_all = Account::where('is_active', true)->get();
@@ -102,7 +102,8 @@ class AccountsController extends Controller
             $account->balance = $credit - $debit;
         }
 
-        return view('backend.account.index', compact('lims_account_all'));
+        return response()->json(['status' => 200, 'data' => $lims_account_all]);
+
     }
 
     /**
@@ -236,9 +237,7 @@ class AccountsController extends Controller
      */
     public function destroyApi($id)
     {
-        if (!env('USER_VERIFIED', true)) {
-            return response()->json(['status' => 403, 'message' => __('db.This feature is disable for demo!')], 403);
-        }
+       
         $account = Account::find($id);
         if (!$account) {
             return response()->json(['status' => 404, 'message' => 'Account not found'], 404);
@@ -253,26 +252,36 @@ class AccountsController extends Controller
 
     public function store(Request $request)
     {
-        $this->validate($request, [
-            'account_no' => [
-                'max:255',
-                Rule::unique('accounts')->where(function ($query) {
-                    return $query->where('is_active', 1);
-                }),
-            ],
-        ]);
+        try {
+            $request->validate([
+                'account_no' => [
+                    'nullable',
+                    'max:255',
+                    Rule::unique('accounts')->where(fn ($q) => $q->where('is_active', 1)),
+                ],
+                'name' => 'required|string|max:255',
+                'initial_balance' => 'nullable|numeric',
+                'note' => 'nullable|string|max:500',
+            ]);
 
-        $lims_account_data = Account::where('is_active', true)->first();
-        $data = $request->all();
-        if ($data['initial_balance'])
-            $data['total_balance'] = $data['initial_balance'];
-        else
-            $data['total_balance'] = 0;
-        if (!$lims_account_data)
-            $data['is_default'] = 1;
-        $data['is_active'] = true;
-        Account::create($data);
-        return redirect('accounts')->with('message', __('db.Account created successfully'));
+            $lims_account_data = Account::where('is_active', true)->first();
+            $data = $request->only('account_no', 'name', 'initial_balance', 'note');
+            $data['total_balance'] = $request->input('initial_balance') ?: 0;
+            if (!$lims_account_data) $data['is_default'] = true;
+            $data['is_active'] = true;
+            Account::create($data);
+            
+            // Return JSON for API requests
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 200, 'message' => __('db.Account created successfully')]);
+            }
+            return redirect('accounts')->with('message', __('db.Account created successfully'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 422, 'errors' => $e->errors()], 422);
+            }
+            return back()->withErrors($e->errors());
+        }
     }
 
     public function makeDefault($id)
@@ -290,23 +299,40 @@ class AccountsController extends Controller
 
     public function update(Request $request, $id)
     {
-        $this->validate($request, [
-            'account_no' => [
-                'max:255',
-                Rule::unique('accounts')->ignore($request->account_id)->where(function ($query) {
-                    return $query->where('is_active', 1);
-                }),
-            ],
-        ]);
+        try {
+            $account = Account::where('is_active', true)->find($id);
+            if (!$account) {
+                if ($request->expectsJson()) {
+                    return response()->json(['status' => 404, 'message' => 'Account not found'], 404);
+                }
+                return redirect('accounts')->with('error', 'Account not found');
+            }
 
-        $data = $request->all();
-        $lims_account_data = Account::find($data['account_id']);
-        if ($data['initial_balance'])
-            $data['total_balance'] = $data['initial_balance'];
-        else
-            $data['total_balance'] = 0;
-        $lims_account_data->update($data);
-        return redirect('accounts')->with('message', __('db.Account updated successfully'));
+            $request->validate([
+                'account_no' => [
+                    'nullable',
+                    'max:255',
+                    Rule::unique('accounts')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
+                ],
+                'name' => 'required|string|max:255',
+                'initial_balance' => 'nullable|numeric',
+                'note' => 'nullable|string|max:500',
+            ]);
+
+            $data = $request->only('account_no', 'name', 'initial_balance', 'note');
+            $data['total_balance'] = $request->input('initial_balance') ?: 0;
+            $account->update($data);
+            
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 200, 'message' => __('db.Account updated successfully')]);
+            }
+            return redirect('accounts')->with('message', __('db.Account updated successfully'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['status' => 422, 'errors' => $e->errors()], 422);
+            }
+            return back()->withErrors($e->errors());
+        }
     }
 
     public function balanceSheet()
@@ -689,15 +715,38 @@ class AccountsController extends Controller
 
     public function destroy($id)
     {
-        if (!env('USER_VERIFIED'))
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        $lims_account_data = Account::find($id);
-        if (!$lims_account_data->is_default) {
-            $lims_account_data->is_active = false;
-            $lims_account_data->save();
-            return redirect('accounts')->with('not_permitted', __('db.Account deleted successfully!'));
-        } else
-            return redirect('accounts')->with('not_permitted', __('db.Please make another account default first!'));
+        if (!env('USER_VERIFIED', true)) {
+            $message = __('db.This feature is disable for demo!');
+            if (request()->expectsJson()) {
+                return response()->json(['status' => 403, 'message' => $message], 403);
+            }
+            return redirect()->back()->with('not_permitted', $message);
+        }
+        
+        $account = Account::find($id);
+        if (!$account) {
+            if (request()->expectsJson()) {
+                return response()->json(['status' => 404, 'message' => 'Account not found'], 404);
+            }
+            return redirect('accounts')->with('error', 'Account not found');
+        }
+        
+        if ($account->is_default) {
+            $message = __('db.Please make another account default first!');
+            if (request()->expectsJson()) {
+                return response()->json(['status' => 400, 'message' => $message], 400);
+            }
+            return redirect('accounts')->with('not_permitted', $message);
+        }
+        
+        $account->is_active = false;
+        $account->save();
+        
+        $message = __('db.Account deleted successfully!');
+        if (request()->expectsJson()) {
+            return response()->json(['status' => 200, 'message' => $message], 200);
+        }
+        return redirect('accounts')->with('message', $message);
     }
 
     public function accountsAll()

@@ -2,107 +2,59 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Printer extends Model
 {
-    use HasFactory;
-
     /**
-     * The attributes that are mass assignable.
+     * The attributes that aren't mass assignable.
      *
-     * @var list<string>
+     * @var array
      */
-    protected $fillable = [
-        'name',
-        'warehouse_id',
-        'connection_type',
-        'capability_profile',
-        'char_per_line',
-        'ip_address',
-        'port',
-        'path',
-        'created_by',
-    ];
+    protected $guarded = ['id'];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the warehouse this printer is assigned to.
-     */
     public function warehouse()
     {
-        return $this->belongsTo(Warehouse::class);
+        return $this->belongsTo(Warehouse::class, 'warehouse_id');
     }
 
-    /**
-     * Get the user who created the printer.
-     */
-    public function creator()
+    public static function capability_profiles()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        $profiles = [
+            'default' => __('db.Default'),
+            'simple' => __('db.Simple'),
+            'SP2000' => __('db.Star SP2000 Series'),
+            'TEP-200M' => __('db.EPOS TEP200M Series'),
+            'TM-U220' => __('db.Epson TM-U220'),
+            'RP326' => __('db.Rongta RP326'),
+            'P822D' => __('db.PBM P822D'),
+        ];
+
+        return $profiles;
     }
 
-    /**
-     * Connection type options for receipt printers.
-     *
-     * @return array<string, string>
-     */
-    public static function connection_types(): array
+    public function getCapabilityProfileStrAttribute()
     {
-        return [
+        $profiles = Printer::capability_profiles();
+        return $profiles[$this->capability_profile] ?? $this->capability_profile;
+    }
+
+    public static function connection_types()
+    {
+        $types = [
             'network' => __('db.Network'),
             'windows' => __('db.Windows'),
             'linux' => __('db.Linux'),
         ];
+
+        return $types;
     }
 
-    /**
-     * Capability profile options (printer command set).
-     *
-     * @return array<string, string>
-     */
-    public static function capability_profiles(): array
+    public function getConnectionTypeStrAttribute()
     {
-        return [
-            'default' => __('db.Default'),
-            'simple' => __('db.Simple Capability Profile'),
-            'SP2000' => 'Star TSP2000',
-            'TSP143' => 'Star TSP143',
-            'TSP650' => 'Star TSP650',
-            'TM-T88II' => 'Epson TM-T88II',
-            'TM-T88III' => 'Epson TM-T88III',
-            'TM-T88IV' => 'Epson TM-T88IV',
-        ];
-    }
-
-    /**
-     * Human-readable connection type label.
-     */
-    public function getConnectionTypeStrAttribute(): string
-    {
-        $types = self::connection_types();
+        $types = Printer::connection_types();
         return $types[$this->connection_type] ?? $this->connection_type;
     }
 
-    /**
-     * Human-readable capability profile label.
-     */
-    public function getCapabilityProfileStrAttribute(): string
-    {
-        $profiles = self::capability_profiles();
-        return $profiles[$this->capability_profile] ?? $this->capability_profile;
-    }
 }
+

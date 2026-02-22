@@ -7,21 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class InvoiceSetting extends Model
 {
-    /**
-     * Get the active (status=1) invoice setting used for invoice generation.
-     */
-    public static function active_setting(): ?self
-    {
-        return static::where('status', 1)->first();
-    }
-
     use HasFactory;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    protected $table = 'invoice_settings';
     protected $fillable = [
         'template_name',
         'invoice_name',
@@ -31,58 +18,52 @@ class InvoiceSetting extends Model
         'number_of_digit',
         'numbering_type',
         'start_number',
-        'last_invoice_number',
+        'status',
         'header_text',
         'header_title',
         'footer_text',
         'footer_title',
+        'show_barcode',
+        'show_qr_code',
+        'is_default',
+        'show_customer_details',
+        'show_shipping_details',
+        'show_payment_info',
+        'show_discount',
+        'show_tax_info',
+        'show_description',
+        'show_billing_info',
+        'show_column',
         'preview_invoice',
-        'size',
-        'primary_color',
-        'secondary_color',
-        'text_color',
+        'show_in_words',
         'company_logo',
         'logo_height',
         'logo_width',
-        'is_default',
-        'status',
+        'primary_color',
+        'primary_color',
+        'text_color',
+        'secondary_color',
+        'size',
         'invoice_date_format',
-        'show_column',
-        'extra',
         'created_by',
         'updated_by',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'is_default' => 'boolean',
-            'status' => 'boolean',
-            'show_column' => 'array',
-            'extra' => 'array',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+    protected static function boot(){
+        parent::boot();
+        static::creating(function ($query){
+            $query->created_by = auth()->user()->id;
+        });
+        static::updating(function ($query){
+            $query->updated_by = auth()->user()->id;
+        });
     }
 
-    /**
-     * Get the user who created the invoice setting.
-     */
-    public function creator()
-    {
-        return $this->belongsTo(User::class, 'created_by');
-    }
-
-    /**
-     * Get the user who last updated the invoice setting.
-     */
-    public function updater()
-    {
-        return $this->belongsTo(User::class, 'updated_by');
+    public static function active_setting(){
+        $settings = static::where('status', 1)->first();
+        if($settings == null){
+            $settings = self::where('is_default',1)->first();
+        }
+        return $settings;
     }
 }

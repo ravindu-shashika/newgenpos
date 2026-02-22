@@ -9,27 +9,24 @@ class Designation extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'is_active',
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * A designation can have many employees.
      */
-    protected function casts(): array
+    public function employees()
     {
-        return [
-            'is_active' => 'boolean',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+        return $this->hasMany(Employee::class, 'designation_id');
+    }
+
+    /**
+     * Scope for only active designations.
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
     }
 }

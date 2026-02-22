@@ -2,126 +2,82 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sale extends Model
 {
-    use HasFactory, SoftDeletes;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'reference_no',
-        'user_id',
-        'cash_register_id',
-        'table_id',
-        'queue',
-        'customer_id',
-        'warehouse_id',
-        'biller_id',
-        'item',
-        'total_qty',
-        'total_discount',
-        'total_tax',
-        'total_price',
-        'grand_total',
-        'currency_id',
-        'exchange_rate',
-        'order_tax_rate',
-        'order_tax',
-        'order_discount_type',
-        'order_discount_value',
-        'order_discount',
-        'coupon_id',
-        'coupon_discount',
-        'shipping_cost',
-        'sale_status',
-        'payment_status',
-        'document',
-        'paid_amount',
-        'sale_note',
-        'staff_note',
-        'deleted_by',
-        'sale_type',
+    use SoftDeletes;
+    
+    protected $fillable =[
+        "reference_no", "user_id", "cash_register_id", "table_id", "queue", "customer_id", "warehouse_id", "biller_id", "item", "total_qty", "total_discount", "total_tax", "total_price", "order_tax_rate", "order_tax", "order_discount_type", "order_discount_value", "order_discount", "coupon_id", "coupon_discount", "shipping_cost", "grand_total", "currency_id", "exchange_rate", "sale_status", "payment_status", "billing_name", "billing_phone", "billing_email", "billing_address", "billing_city", "billing_state", "billing_country", "billing_zip", "shipping_name", "shipping_phone", "shipping_email", "shipping_address", "shipping_city", "shipping_state","shipping_country","shipping_zip", "sale_type", "service_id", "waiter_id", "paid_amount", "document", "sale_note", "staff_note", "created_at", "woocommerce_order_id", "deleted_by",
     ];
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'total_qty' => 'double',
-            'total_discount' => 'double',
-            'total_tax' => 'double',
-            'total_price' => 'double',
-            'grand_total' => 'double',
-            'exchange_rate' => 'double',
-            'order_tax_rate' => 'double',
-            'order_tax' => 'double',
-            'order_discount_value' => 'double',
-            'order_discount' => 'double',
-            'coupon_discount' => 'double',
-            'shipping_cost' => 'double',
-            'paid_amount' => 'double',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-            'deleted_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the user that owns the sale.
-     */
+    
     public function user()
     {
-        return $this->belongsTo(User::class);
+    	return $this->belongsTo('App\Models\User');
     }
 
-    /**
-     * Get the customer that owns the sale.
-     */
-    public function customer()
+    public function products()
     {
-        return $this->belongsTo(Customer::class);
+        return $this->belongsToMany('App\Models\Product', 'product_sales');
     }
 
-    /**
-     * Get the biller that owns the sale.
-     */
     public function biller()
     {
-        return $this->belongsTo(Biller::class);
+        return $this->belongsTo('App\Models\Biller');
     }
 
-    /**
-     * Get the cash register that owns the sale.
-     */
-    public function cashRegister()
+    public function customer()
     {
-        return $this->belongsTo(CashRegister::class);
+        return $this->belongsTo('App\Models\Customer');
     }
 
-    /**
-     * Get the coupon that owns the sale.
-     */
-    public function coupon()
+    public function warehouse()
     {
-        return $this->belongsTo(Coupon::class);
+        return $this->belongsTo('App\Models\Warehouse');
     }
 
-    /**
-     * Get the user who deleted the sale.
-     */
-    public function deletedBy()
+    public function table()
     {
-        return $this->belongsTo(User::class, 'deleted_by');
+        return $this->belongsTo('App\Models\Table');
+    }
+
+    public function currency()
+    {
+        return $this->belongsTo('App\Models\Currency');
+    }
+
+    public function saleWarrantyGuarantees(): HasMany
+    {
+        return $this->hasMany(SaleWarrantyGuarantee::class);
+    }
+
+    public function delivery()
+    {
+        return $this->hasOne(Delivery::class);
+    }
+
+    public function return()
+    {
+        return $this->hasOne(Returns::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+    
+    public function deleter()
+    {
+        return $this->belongsTo(User::class, 'deleted_by')->withDefault([
+            'name' => 'System/Unknown'
+        ]);
+    }
+
+    public function installmentPlan()
+    {
+        return $this->morphOne(InstallmentPlan::class, 'reference');
     }
 }

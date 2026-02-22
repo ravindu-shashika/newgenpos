@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth, cookie } from '../services';
 import './Styles.css';
-import { Approvals, BranchSelector, Reports } from '../views';
+// import { Approvals, BranchSelector, Reports } from '../views';
 import { DateAndTime } from '.';
 import SafeFontAwesomeIcon from './SafeFontAwesomeIcon';
 import { faSignOutAlt, faUserAlt, faBars } from '@fortawesome/free-solid-svg-icons';
@@ -47,10 +47,10 @@ const NavBar = ({ selectedComponentName, collapseSideBar, sideBarCollapsed }) =>
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav ml-auto align-items-center flex-wrap">
             <li className="nav-item">
-              <Reports />
+              {/* <Reports /> */}
             </li>
             <li className="nav-item">
-              <Approvals />
+              {/* <Approvals /> */}
             </li>
             <li className="nav-item nav-item-date">
               <span className="nav-link py-2">
@@ -58,7 +58,7 @@ const NavBar = ({ selectedComponentName, collapseSideBar, sideBarCollapsed }) =>
               </span>
             </li>
             <li className="nav-item nav-item-branch">
-              <BranchSelector />
+              {/* <BranchSelector /> */}
             </li>
             <li className="nav-item nav-item-user">
               <span className="nav-link py-2">

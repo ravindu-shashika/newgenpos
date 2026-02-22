@@ -24,204 +24,25 @@ use Spatie\Permission\Models\Permission;
 
 class SupplierController extends Controller
 {
-    use \App\Traits\MailInfo;
-
+ 
     public function index()
     {
         $role = Role::find(Auth::user()->role_id);
-        if($role->hasPermissionTo('suppliers-index')){
-            $permissions = Role::findByName($role->name)->permissions;
-            foreach ($permissions as $permission)
-                $all_permission[] = $permission->name;
-            if(empty($all_permission))
-                $all_permission[] = 'dummy text';
+        if($role->hasPermissionTo('suppliers.view')){
+            // $permissions = Role::findByName($role->name)->permissions;
+            // foreach ($permissions as $permission)
+            //     $all_permission[] = $permission->name;
+            // if(empty($all_permission))
+            //     $all_permission[] = 'dummy text';
             $lims_supplier_all = Supplier::where('is_active', true)->get();
-            return view('backend.supplier.index',compact('lims_supplier_all', 'all_permission'));
+            // return view('backend.supplier.index',compact('lims_supplier_all', 'all_permission'));
+            return response()->json([
+                'status' => 200,
+                'suppliers' => $lims_supplier_all
+            ]);
         }
         else
-            return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
-    }
-
-    /**
-     * API: Supplier list for React (supplier_details, total_due).
-     */
-    public function supplierListApi(Request $request)
-    {
-        $q = Supplier::where('is_active', true);
-        $search = $request->input('search');
-        if (!empty($search)) {
-            $q->where(function ($query) use ($search) {
-                $query->where('name', 'LIKE', "%{$search}%")
-                    ->orWhere('company_name', 'LIKE', "%{$search}%")
-                    ->orWhere('email', 'LIKE', "%{$search}%")
-                    ->orWhere('phone_number', 'LIKE', "%{$search}%");
-            });
-        }
-        $suppliers = $q->orderBy('created_at', 'desc')->get();
-        $baseUrl = rtrim(config('app.url'), '/');
-        $data = [];
-        foreach ($suppliers as $supplier) {
-            $opening_balance = $supplier->opening_balance ?? 0;
-            $total_paid = 0;
-            $total_purchases = 0;
-            $purchaseData = Purchase::select('id', 'grand_total')->where('supplier_id', $supplier->id)->whereNull('deleted_at')->get();
-            foreach ($purchaseData as $purchase) {
-                $total_purchases += $purchase->grand_total;
-                $total_paid += Payment::where('purchase_id', $purchase->id)->sum('amount');
-            }
-            $total_returns = ReturnPurchase::where('supplier_id', $supplier->id)->sum('grand_total');
-            $balance_due = $opening_balance + $total_purchases - $total_returns - $total_paid;
-
-            $details = $supplier->name;
-            if ($supplier->company_name) {
-                $details .= "\n" . $supplier->company_name;
-            }
-            if ($supplier->vat_number) {
-                $details .= "\n" . $supplier->vat_number;
-            }
-            $details .= "\n" . ($supplier->email ?? '') . "\n" . ($supplier->phone_number ?? '');
-            $addr = trim(($supplier->address ?? '') . ', ' . ($supplier->city ?? ''));
-            if ($supplier->state) {
-                $addr .= ', ' . $supplier->state;
-            }
-            if ($supplier->postal_code) {
-                $addr .= ', ' . $supplier->postal_code;
-            }
-            if ($supplier->country) {
-                $addr .= ', ' . $supplier->country;
-            }
-            $details .= "\n" . $addr;
-
-            $imageUrl = null;
-            if ($supplier->image) {
-                $imageUrl = $baseUrl . '/images/supplier/' . $supplier->image;
-            }
-            $data[] = [
-                'id' => $supplier->id,
-                'image' => $supplier->image,
-                'image_url' => $imageUrl,
-                'supplier_details' => $details,
-                'total_due' => round($balance_due, 2),
-                'total_due_formatted' => number_format($balance_due, 2, '.', ''),
-            ];
-        }
-        return response()->json(['status' => 200, 'data' => $data]);
-    }
-
-    /**
-     * API: Get one supplier for edit (React).
-     */
-    public function getApi($id)
-    {
-        $supplier = Supplier::where('is_active', true)->find($id);
-        if (!$supplier) {
-            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
-        }
-        $data = $supplier->toArray();
-        $data['image_url'] = $supplier->image ? rtrim(config('app.url'), '/') . '/images/supplier/' . $supplier->image : null;
-        return response()->json(['status' => 200, 'data' => $data]);
-    }
-
-    /**
-     * API: Store supplier (JSON) for React.
-     */
-    public function storeApi(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'company_name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('suppliers')->where(fn ($q) => $q->where('is_active', 1)),
-            ],
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                Rule::unique('suppliers')->where(fn ($q) => $q->where('is_active', 1)),
-            ],
-            'phone_number' => 'required|string|max:255',
-            'address' => 'required|string|max:255',
-            'city' => 'required|string|max:255',
-        ]);
-        $data = $request->only([
-            'name', 'company_name', 'vat_number', 'email', 'phone_number', 'wa_number',
-            'address', 'city', 'state', 'postal_code', 'country', 'opening_balance',
-        ]);
-        $data['is_active'] = true;
-        $data['opening_balance'] = $data['opening_balance'] ?? 0;
-        $supplier = Supplier::create($data);
-        if (isset($data['opening_balance']) && $data['opening_balance'] > 0) {
-            $lims_purchase_data = new Purchase();
-            $lims_purchase_data->reference_no = 'sob-' . date('Ymd') . '-' . date('his');
-            $lims_purchase_data->supplier_id = $supplier->id;
-            $lims_purchase_data->user_id = Auth::id();
-            $lims_purchase_data->warehouse_id = 1;
-            $lims_purchase_data->item = 0;
-            $lims_purchase_data->total_qty = 0;
-            $lims_purchase_data->total_discount = 0;
-            $lims_purchase_data->total_tax = 0;
-            $lims_purchase_data->total_cost = $data['opening_balance'];
-            $lims_purchase_data->grand_total = $data['opening_balance'];
-            $lims_purchase_data->status = 1;
-            $lims_purchase_data->payment_status = 1;
-            $lims_purchase_data->paid_amount = 0;
-            $lims_purchase_data->purchase_type = 'Opening balance';
-            $lims_purchase_data->created_at = '1970-01-01 12:00:00';
-            $lims_purchase_data->save();
-        }
-        return response()->json(['status' => 200, 'message' => __('db.Supplier created successfully'), 'id' => $supplier->id]);
-    }
-
-    /**
-     * API: Update supplier (JSON) for React.
-     */
-    public function updateApi(Request $request, $id)
-    {
-        $supplier = Supplier::where('is_active', true)->find($id);
-        if (!$supplier) {
-            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
-        }
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'company_name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('suppliers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
-            ],
-            'email' => [
-                'required',
-                'email',
-                'max:255',
-                Rule::unique('suppliers')->ignore($id)->where(fn ($q) => $q->where('is_active', 1)),
-            ],
-            'phone_number' => 'required|string|max:255',
-            'address' => 'required|string|max:255',
-            'city' => 'required|string|max:255',
-        ]);
-        $data = $request->only([
-            'name', 'company_name', 'vat_number', 'email', 'phone_number', 'wa_number',
-            'address', 'city', 'state', 'postal_code', 'country', 'opening_balance',
-        ]);
-        $supplier->update($data);
-        return response()->json(['status' => 200, 'message' => __('db.Data updated successfully')]);
-    }
-
-    /**
-     * API: Destroy supplier (soft delete) for React.
-     */
-    public function destroyApi($id)
-    {
-        $supplier = Supplier::find($id);
-        if (!$supplier) {
-            return response()->json(['status' => 404, 'message' => 'Supplier not found'], 404);
-        }
-        $supplier->is_active = false;
-        $supplier->save();
-        $this->fileDelete(public_path('images/supplier/'), $supplier->image);
-        return response()->json(['status' => 200, 'message' => __('db.Data deleted successfully')]);
+            return response()->json(['message' => 'Sorry! You are not allowed to access this module'], 403);
     }
 
     public function clearDue(Request $request)
@@ -266,7 +87,8 @@ class SupplierController extends Controller
             $purchase_data->save();
             $total_paid_amount -= $paid_amount;
         }
-        return redirect()->back()->with('message', __('db.Due cleared successfully'));
+        // return redirect()->back()->with('message', __('db.Due cleared successfully'));
+        return response()->json(['message' => __('Due cleared successfully')]);
     }
 
     public function create()
@@ -274,7 +96,9 @@ class SupplierController extends Controller
         $role = Role::find(Auth::user()->role_id);
         if($role->hasPermissionTo('suppliers-add')){
             $lims_customer_group_all = CustomerGroup::where('is_active',true)->get();
-            return view('backend.supplier.create', compact('lims_customer_group_all'));
+            // return view('backend.supplier.create', compact('lims_customer_group_all'));
+            return response()->json($lims_customer_group_all);
+
         }
         else
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
@@ -282,7 +106,7 @@ class SupplierController extends Controller
 
     public function store(Request $request)
     {
-        $this->validate($request, [
+        $request->validate([
             'company_name' => [
                 'max:255',
                     Rule::unique('suppliers')->where(function ($query) {
@@ -300,7 +124,7 @@ class SupplierController extends Controller
 
         //validation for customer if create both user and supplier
         if(isset($request->both)) {
-            $this->validate($request, [
+            $request->validate([
                 'phone_number' => [
                     'max:255',
                     Rule::unique('customers')->where(function ($query) {
@@ -348,20 +172,21 @@ class SupplierController extends Controller
             Customer::create($lims_supplier_data);
             $message .= ' and Customer';
         }
-        $mail_setting = MailSetting::latest()->first();
-        if($lims_supplier_data['email'] && $mail_setting) {
-            $this->setMailInfo($mail_setting);
-            try {
-                Mail::to($lims_supplier_data['email'])->send(new SupplierCreate($lims_supplier_data));
-                if(isset($request->both))
-                    Mail::to($lims_supplier_data['email'])->send(new CustomerCreate($lims_supplier_data));
-                $message .= ' created successfully!';
-            }
-            catch(\Exception $e) {
-                $message .= ' created successfully. Please setup your <a href="setting/mail_setting">mail setting</a> to send mail.';
-            }
-        }
-        return redirect('supplier')->with('message', $message);
+        // $mail_setting = MailSetting::latest()->first();
+        // if($lims_supplier_data['email'] && $mail_setting) {
+        //     $this->setMailInfo($mail_setting);
+        //     try {
+        //         Mail::to($lims_supplier_data['email'])->send(new SupplierCreate($lims_supplier_data));
+        //         if(isset($request->both))
+        //             Mail::to($lims_supplier_data['email'])->send(new CustomerCreate($lims_supplier_data));
+        //         $message .= ' created successfully!';
+        //     }
+        //     catch(\Exception $e) {
+        //         $message .= ' created successfully. Please setup your <a href="setting/mail_setting">mail setting</a> to send mail.';
+        //     }
+        // }
+        // return redirect('supplier')->with('message', $message);
+        return response()->json(['message' => $message . ' created successfully!']);
     }
 
     public function show($id)
@@ -384,10 +209,18 @@ class SupplierController extends Controller
             - $total_returns
             - $total_paid;
 
-        return view('backend.supplier.view', [
-            'lims_supplier_data' => $supplier,
+        // return view('backend.supplier.view', [
+        //     'lims_supplier_data' => $supplier,
+        //     'opening_balance' => $opening_balance,
+        //     'total_purchase' => $total_purchases,
+        //     'total_paid' => $total_paid,
+        //     'total_returns' => $total_returns,
+        //     'balance_due' => $balance_due,
+        // ]);
+        return response()->json([
+            'supplier' => $supplier,
             'opening_balance' => $opening_balance,
-            'total_purchase' => $total_purchases,
+            'total_purchases' => $total_purchases,
             'total_paid' => $total_paid,
             'total_returns' => $total_returns,
             'balance_due' => $balance_due,
@@ -455,15 +288,16 @@ class SupplierController extends Controller
         $role = Role::find(Auth::user()->role_id);
         if($role->hasPermissionTo('suppliers-edit')){
             $lims_supplier_data = Supplier::where('id',$id)->first();
-            return view('backend.supplier.edit',compact('lims_supplier_data'));
-        }
+            // return view('backend.supplier.edit',compact('lims_supplier_data'));
+            return response()->json($lims_supplier_data);
+            }
         else
-            return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
+            return response()->json(['message' => __('db.Sorry! You are not allowed to access this module')], 403);
     }
 
     public function update(Request $request, $id)
     {
-        $this->validate($request, [
+        $request->validate([
             'company_name' => [
                 'max:255',
                     Rule::unique('suppliers')->ignore($id)->where(function ($query) {
@@ -495,7 +329,8 @@ class SupplierController extends Controller
         }
 
         $lims_supplier_data->update($input);
-        return redirect('supplier')->with('message', __('db.Data updated successfully'));
+        return response()->json(['message' => __('db.Data updated successfully')]);
+        // return redirect('supplier')->with('message', __('db.Data updated successfully'));
     }
 
     public function deleteBySelection(Request $request)
@@ -517,7 +352,8 @@ class SupplierController extends Controller
         $lims_supplier_data->save();
         $this->fileDelete(public_path('images/supplier/'), $lims_supplier_data->image);
 
-        return redirect('supplier')->with('not_permitted', __('db.Data deleted successfully'));
+        return response()->json(['message' => __('db.Data deleted successfully')]);
+        // redirect('supplier')->with('not_permitted', __('db.Data deleted successfully'));
     }
 
     public function importSupplier(Request $request)
@@ -525,7 +361,8 @@ class SupplierController extends Controller
         $upload=$request->file('file');
         $ext = pathinfo($upload->getClientOriginalName(), PATHINFO_EXTENSION);
         if($ext != 'csv')
-            return redirect()->back()->with('not_permitted', __('db.Please upload a CSV file'));
+            return response()->json(['message' => __('db.Please upload a CSV file')], 400);
+            // return redirect()->back()->with('not_permitted', __('db.Please upload a CSV file'));
         $filename =  $upload->getClientOriginalName();
         $filePath=$upload->getRealPath();
         //open and read
@@ -563,19 +400,20 @@ class SupplierController extends Controller
            $supplier->save();
            $message = 'Supplier Imported Successfully';
 
-           $mail_setting = MailSetting::latest()->first();
+        //    $mail_setting = MailSetting::latest()->first();
 
 
-           if($data['email'] && $mail_setting) {
-                try {
-                    Mail::to($data['email'])->send(new SupplierCreate($data));
-                }
-                catch(\Excetion $e){
-                    $message = 'Supplier imported successfully. Please setup your <a href="setting/mail_setting">mail setting</a> to send mail.';
-                }
-            }
+        //    if($data['email'] && $mail_setting) {
+        //         try {
+        //             Mail::to($data['email'])->send(new SupplierCreate($data));
+        //         }
+        //         catch(\Excetion $e){
+        //             $message = 'Supplier imported successfully. Please setup your <a href="setting/mail_setting">mail setting</a> to send mail.';
+        //         }
+        //     }
         }
-        return redirect('supplier')->with('message', $message);
+        return response()->json(['message' => $message]);
+        // return redirect('supplier')->with('message', $message);
     }
 
     public function suppliersAll()

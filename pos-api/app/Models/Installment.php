@@ -9,38 +9,15 @@ class Installment extends Model
 {
     use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
+     protected $fillable = [
         'installment_plan_id',
         'status',
         'payment_date',
         'amount',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    public function plan()
     {
-        return [
-            'payment_date' => 'datetime',
-            'amount' => 'decimal:2',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the installment plan that owns the installment.
-     */
-    public function installmentPlan()
-    {
-        return $this->belongsTo(InstallmentPlan::class);
+        return $this->belongsTo(InstallmentPlan::class, 'installment_plan_id');
     }
 }

@@ -14,7 +14,7 @@ const defaultHeaders = {
  * API base URL. In Vite, set VITE_APP_DEFAULT_PATH in .env (e.g. http://127.0.0.1:8000).
  * Only env vars prefixed with VITE_ are exposed to the client.
  */
-const basePath = import.meta.env.VITE_APP_DEFAULT_PATH || import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const basePath = 'http://127.0.0.1:8000';
 const defaultPath = `${basePath}/api`;
 const imagePath = `${basePath}/storage/images/`;
 const defApiPath = basePath;

@@ -2,31 +2,29 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
-/**
- * Alias for ProductWarehouse - used by legacy Blade controller logic.
- * Table: product_warehouses
- */
-class ProductWarehouse extends ProductWarehouse
+class Product_Warehouse extends Model
 {
-    /**
-     * Scope: Find product-warehouse record for standard (non-variant) product.
-     */
-    public function scopeFindProductWithoutVariant(Builder $query, $productId, $warehouseId)
+	protected $table = 'product_warehouse';
+    protected $fillable =[
+        "product_id", "product_batch_id", "variant_id", "imei_number", "warehouse_id", "qty", "price"
+    ];
+
+    public function scopeFindProductWithVariant($query, $product_id, $variant_id, $warehouse_id)
     {
-        return $query->where('product_id', $productId)
-            ->where('warehouse_id', $warehouseId)
-            ->whereNull('variant_id');
+    	return $query->where([
+            ['product_id', $product_id],
+            ['variant_id', $variant_id],
+            ['warehouse_id', $warehouse_id]
+        ]);
     }
 
-    /**
-     * Scope: Find product-warehouse record for variant product.
-     */
-    public function scopeFindProductWithVariant(Builder $query, $productId, $variantId, $warehouseId)
+    public function scopeFindProductWithoutVariant($query, $product_id, $warehouse_id)
     {
-        return $query->where('product_id', $productId)
-            ->where('variant_id', $variantId)
-            ->where('warehouse_id', $warehouseId);
+    	return $query->where([
+            ['product_id', $product_id],
+            ['warehouse_id', $warehouse_id]
+        ]);
     }
 }

@@ -8,43 +8,29 @@ use Illuminate\Database\Eloquent\Model;
 class Overtime extends Model
 {
     use HasFactory;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    protected $table = "overtimes";
     protected $fillable = [
         'employee_id',
         'date',
         'hours',
         'rate',
         'amount',
-        'status',
+        'status'
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'date' => 'date',
-            'hours' => 'decimal:2',
-            'rate' => 'decimal:2',
-            'amount' => 'decimal:2',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get the employee that owns the overtime.
-     */
+    // Relation to Employee
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    // Calculate amount automatically when setting hours or rate
+    public static function boot()
+    {
+        parent::boot();
+
+        static::saving(function($overtime) {
+            $overtime->amount = $overtime->hours * $overtime->rate;
+        });
     }
 }

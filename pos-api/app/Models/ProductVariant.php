@@ -2,46 +2,25 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ProductVariant extends Model
 {
-    use HasFactory;
+    protected $fillable = ['product_id', 'variant_id', 'position', 'item_code', 'additional_cost', 'additional_price', 'qty'];
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'product_id',
-        'variant_id',
-        'position',
-        'item_code',
-        'additional_cost',
-        'additional_price',
-        'qty',
-    ];
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    public function scopeFindExactProduct($query, $product_id, $variant_id)
     {
-        return [
-            'additional_cost' => 'double',
-            'additional_price' => 'double',
-            'qty' => 'double',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+    	return $query->where([
+            ['product_id', $product_id],
+            ['variant_id', $variant_id]
+        ]);
     }
 
-    public function variant()
+    public function scopeFindExactProductWithCode($query, $product_id, $item_code)
     {
-        return $this->belongsTo(Variant::class);
+    	return $query->where([
+            ['product_id', $product_id],
+            ['item_code', $item_code],
+        ]);
     }
 }

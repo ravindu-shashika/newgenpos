@@ -2,18 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class SaleExchange extends Model
 {
-    use HasFactory;
+    protected $table = 'sale_exchanges';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'sale_id',
         'reference_no',
@@ -25,7 +19,7 @@ class SaleExchange extends Model
         'total_qty',
         'total_discount',
         'total_tax',
-        'amount',
+        'amount',              // Fixed: was 'total_price' but migration has 'amount'
         'payment_type',
         'order_tax_rate',
         'order_tax',
@@ -35,47 +29,94 @@ class SaleExchange extends Model
         'staff_note',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'total_qty' => 'double',
-            'total_discount' => 'double',
-            'total_tax' => 'double',
-            'amount' => 'double',
-            'order_tax_rate' => 'double',
-            'order_tax' => 'double',
-            'grand_total' => 'double',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
-    }
+    protected $casts = [
+        'total_qty' => 'float',
+        'total_discount' => 'float',
+        'total_tax' => 'float',
+        'amount' => 'float',
+        'order_tax_rate' => 'float',
+        'order_tax' => 'float',
+        'grand_total' => 'float',
+    ];
 
     /**
-     * Get the customer that owns the sale exchange.
+     * Relationships
      */
+    public function sale()
+    {
+        return $this->belongsTo(Sale::class);
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class);
     }
 
-    /**
-     * Get the user that owns the sale exchange.
-     */
+    public function warehouse()
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+
+    public function biller()
+    {
+        return $this->belongsTo(Biller::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get the biller that owns the sale exchange.
-     */
-    public function biller()
+    public function products()
     {
-        return $this->belongsTo(Biller::class);
+        return $this->hasMany(ProductExchange::class, 'exchange_id');
+    }
+
+    /**
+     * Get new products in this exchange
+     */
+    public function newProducts()
+    {
+        return $this->hasMany(ProductExchange::class, 'exchange_id')
+            ->where('type', 'new');
+    }
+
+    /**
+     * Get returned products in this exchange
+     */
+    public function returnedProducts()
+    {
+        return $this->hasMany(ProductExchange::class, 'exchange_id')
+            ->where('type', 'returned');
+    }
+
+    /**
+     * Scopes
+     */
+    public function scopeWithRelations($query)
+    {
+        return $query->with([
+            'sale',
+            'customer',
+            'warehouse',
+            'biller',
+            'user',
+            'products.product'
+        ]);
+    }
+
+    public function scopeByWarehouse($query, $warehouseId)
+    {
+        return $query->where('warehouse_id', $warehouseId);
+    }
+
+    public function scopeByCustomer($query, $customerId)
+    {
+        return $query->where('customer_id', $customerId);
+    }
+
+    public function scopeByDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('created_at', [$startDate, $endDate]);
     }
 }

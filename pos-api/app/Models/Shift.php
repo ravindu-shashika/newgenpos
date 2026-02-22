@@ -8,12 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Shift extends Model
 {
     use HasFactory;
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    protected $table = 'shifts';
     protected $fillable = [
         'name',
         'start_time',
@@ -25,17 +20,10 @@ class Shift extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * A shift can have many employees.
      */
-    protected function casts(): array
+    public function employees()
     {
-        return [
-            'total_hours' => 'decimal:2',
-            'is_active' => 'boolean',
-            'created_at' => 'datetime',
-            'updated_at' => 'datetime',
-        ];
+        return $this->hasMany(Employee::class, 'shift_id');
     }
 }
