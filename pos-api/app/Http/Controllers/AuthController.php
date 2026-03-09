@@ -10,45 +10,52 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
-        $request->validate([
-            'username' => 'required|string',
-            'password' => 'required|string',
-        ]);
+        try {
+            $request->validate([
+                'username' => 'required|string',
+                'password' => 'required|string',
+            ]);
 
-        // Find the user by username
-        $user = User::where('username', $request->username)->with('role')->first();
+            // Attempt login with credentials
+            $credentials = $request->only('username', 'password');
 
-        if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
+            if (Auth::attempt($credentials)) {
+                $user = Auth::user();
+                $user->load('role');
+
+                // Generate token on successful authentication
+                $token = $user->createToken('authToken')->plainTextToken;
+
+                return response()->json([
+                    'status' => 200,
+                    'token' => $token,
+                    'user' => $user,
+                ], 200);
+            }
+
+            // Generic error for security
+            return response()->json([
+                'status' => 401,
+                'message' => 'Invalid username or password',
+            ], 200);
+
+        } catch (\Exception $e) {
+            // Log the actual error for the developer
+            \Log::error('Login error: ' . $e->getMessage());
+            
+            return response()->json([
+                'status' => 500,
+                'message' => 'An internal error occurred. Please try again later.',
+                'error' => [$e->getMessage()] // Flattened array for the client's map()
+            ], 200);
         }
-        $machineIp = getHostByName(getHostName());
-        // Attempt login with credentials
-        $credentials = $request->only('username', 'password');
-      
-        if (Auth::attempt($credentials)) {
-  
-            // Generate token on successful authentication
-            $token = $user->createToken('authToken')->plainTextToken;
-
-            $response = [
-                'token' => $token,
-                'user' => $user,
-                'status' => 200,
-            ];
-            return response()->json($response, 200);
-        }
-
-        return response()->json([
-            'message' => 'Invalid credentials',
-            'status' => 401,
-        ], 401);
     }
 
 
     public function logout(Request $request)
     {
-      
-        Auth::guard('web')->logout();       
+
+        Auth::guard('web')->logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

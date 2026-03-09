@@ -1,15 +1,29 @@
 import {
   Dashboard,
   AccountStatement,
-  BalanceSheet,
   AccountList,
-
+  BalanceSheet,
+  MoneyTransfer,
+  CustomerList,
+  SupplierList,
+  UserList,
+  BillerList,
+  IncomeList,
+  ExpenseList,
+  WarehouseList,
+  DiscountList,
+  DiscountPlanList,
+  IncomeCategoryList,
+  ExpenseCategoryList,
+  PrinterList,
+  InvoiceSettings,
+  CategoryList,
 } from '../views';
 
 import { Users, Roles } from '../auth';
 
 import { api, cookie } from '../services';
-import AdjustmentList from '../views/adjustment/adjustment_list';
+
 
 const componentsList = [
   {
@@ -23,20 +37,91 @@ const componentsList = [
     value: AccountStatement,
   },
   {
+    name: 'AccountList',
+    route: '/account-list',
+    value: AccountList,
+  },
+  {
     name: 'BalanceSheet',
     route: '/balance-sheet',
     value: BalanceSheet,
   },
-  { 
-    name:'AccountList',
-    route: '/account-list',
-    value: AccountList, // Reusing AccountStatement for demonstration; replace with actual component if available
+  {
+    name: 'MoneyTransfer',
+    route: '/money-transfer',
+    value: MoneyTransfer,
   },
   {
-    name: 'Adjustment List',
-    route: '/adjustment-list',
-    value: AdjustmentList, // Placeholder, replace with actual component when implemented
-  }
+    name: 'CustomerList',
+    route: '/customer',
+    value: CustomerList,
+  },
+
+  {
+    name: 'SupplierList',
+    route: '/supplier',
+    value: SupplierList,
+  },
+  {
+    name: 'UserList',
+    route: '/user',
+    value: UserList,
+  },
+  {
+    name: 'BillerList',
+    route: '/biller-list',
+    value: BillerList,
+  },
+  {
+    name: 'IncomeList',
+    route: '/income-list',
+    value: IncomeList,
+  },
+  {
+    name: 'ExpenseList',
+    route: '/expense-list',
+    value: ExpenseList,
+  },
+  {
+    name: 'WarehouseList',
+    route: '/warehouse',
+    value: WarehouseList,
+  },
+  {
+    name: 'DiscountPlanList',
+    route: '/discount-plan',
+    value: DiscountPlanList,
+  },
+  {
+    name: 'DiscountList',
+    route: '/discount',
+    value: DiscountList,
+  },
+  {
+    name: 'IncomeCategoryList',
+    route: '/income-category',
+    value: IncomeCategoryList,
+  },
+  {
+    name: 'ExpenseCategoryList',
+    route: '/expense-category',
+    value: ExpenseCategoryList,
+  },
+  {
+    name: 'PrinterList',
+    route: '/receipt-printers',
+    value: PrinterList,
+  },
+  {
+    name: 'InvoiceSettings',
+    route: '/invoice-settings',
+    value: InvoiceSettings,
+  },
+  {
+    name: 'CategoryList',
+    route: '/category',
+    value: CategoryList,
+  },
 ];
 
 let routesList = [];

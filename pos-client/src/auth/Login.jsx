@@ -32,11 +32,19 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const response = await auth.doUserLogin(credentials);
-    if (response.message) {
-      msg.error(response.message);
-    } else {
+
+    if (response.status == 200 && response.data.status == 200) {
+      msg.success(response.data.message || 'Login successful');
       await auth.handleLoginSuccess(response);
       window.location.reload();
+    } else if (response.status == 200 && (response.data.status == 409 || response.data.status == 401)) {
+      msg.warning(response.data.message);
+    } else if (response.status == 200 && response.data.status == 500) {
+      response.data.error?.map((err) => {
+        msg.error(err);
+      });
+    } else {
+      msg.error('Something Went Wrong...');
     }
   };
 

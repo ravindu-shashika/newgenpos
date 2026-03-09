@@ -13,14 +13,23 @@ const options = {
 
 class AuthService {
   async doUserLogin(credentials) {
-    console.log(credentials); 
-    try {
-      const response = await api.post('login').values(credentials);
-      return response.data;
-    } catch (error) {
-      console.error(error);
-      return false;
+    const response = await api.post('login').values(credentials);
+
+    // api.post().values() returns the error object if it fails, it doesn't throw
+    if (response instanceof Error || response.response) {
+      console.error('Login error:', response);
+      // Ensure we return something with a .data and .status property for consistency
+      return {
+        status: 200, // Explicitly 200 because the client pattern checks for 200
+        data: {
+          status: response.response?.status || 500,
+          message: response.response?.data?.message || 'Invalid username or password',
+          error: response.response?.data?.error || []
+        }
+      };
     }
+
+    return response;
   }
 
   async handleLoginSuccess(response) {
