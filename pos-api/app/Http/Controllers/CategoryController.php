@@ -25,110 +25,118 @@ class CategoryController extends Controller
 
     public function index()
     {
-        $role = Role::find(Auth::user()->role_id);
-        if($role->hasPermissionTo('category')) {
-            return view('backend.category.create');
+        $user =Auth::user();
+        if($user->can('categories-view')) {
+
+            $categories = Category::all();
+            return response()->json([
+                'status' => 200,
+                'data' => $categories,
+            ]);
         }
         else
-            return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
+            return response()->json([
+                'status' => 403,
+                'message' => 'You are not allowed to access this module',
+            ]);
     }
 
-    public function categoryData(Request $request)
-    {
-        $columns = array(
-            0 =>'id',
-            2 =>'name',
-            3=> 'parent_id',
-            4=> 'is_active',
-        );
+    // public function categoryData(Request $request)
+    // {
+    //     $columns = array(
+    //         0 =>'id',
+    //         2 =>'name',
+    //         3=> 'parent_id',
+    //         4=> 'is_active',
+    //     );
 
-        $totalData = DB::table('categories')->where('is_active', true)->count();
-        $totalFiltered = $totalData;
+    //     $totalData = DB::table('categories')->where('is_active', true)->count();
+    //     $totalFiltered = $totalData;
 
-        if($request->input('length') != -1)
-            $limit = $request->input('length');
-        else
-            $limit = $totalData;
-        $start = $request->input('start');
-        $order = $columns[$request->input('order.0.column')];
-        $dir = $request->input('order.0.dir');
-        if(empty($request->input('search.value')))
-            $categories = Category::offset($start)
-                        ->where('is_active', true)
-                        ->limit($limit)
-                        ->orderBy($order,$dir)
-                        ->get();
-        else
-        {
-            $search = $request->input('search.value');
-            $categories =  Category::where([
-                            ['name', 'LIKE', "%{$search}%"],
-                            ['is_active', true]
-                        ])->offset($start)
-                        ->limit($limit)
-                        ->orderBy($order,$dir)->get();
+    //     if($request->input('length') != -1)
+    //         $limit = $request->input('length');
+    //     else
+    //         $limit = $totalData;
+    //     $start = $request->input('start');
+    //     $order = $columns[$request->input('order.0.column')];
+    //     $dir = $request->input('order.0.dir');
+    //     if(empty($request->input('search.value')))
+    //         $categories = Category::offset($start)
+    //                     ->where('is_active', true)
+    //                     ->limit($limit)
+    //                     ->orderBy($order,$dir)
+    //                     ->get();
+    //     else
+    //     {
+    //         $search = $request->input('search.value');
+    //         $categories =  Category::where([
+    //                         ['name', 'LIKE', "%{$search}%"],
+    //                         ['is_active', true]
+    //                     ])->offset($start)
+    //                     ->limit($limit)
+    //                     ->orderBy($order,$dir)->get();
 
-            $totalFiltered = Category::where([
-                            ['name','LIKE',"%{$search}%"],
-                            ['is_active', true]
-                        ])->count();
-        }
-        $data = array();
-        if(!empty($categories))
-        {
-            foreach ($categories as $key=>$category)
-            {
-                $nestedData['id'] = $category->id;
-                $nestedData['key'] = $key;
+    //         $totalFiltered = Category::where([
+    //                         ['name','LIKE',"%{$search}%"],
+    //                         ['is_active', true]
+    //                     ])->count();
+    //     }
+    //     $data = array();
+    //     if(!empty($categories))
+    //     {
+    //         foreach ($categories as $key=>$category)
+    //         {
+    //             $nestedData['id'] = $category->id;
+    //             $nestedData['key'] = $key;
 
-                if($category->image)
-                    $nestedData['name'] = '<img src="'.url('images/category', $category->image).'" height="80" width="80">'.$category->name;
-                else
-                    $nestedData['name'] = '<img src="'.url('images/zummXD2dvAtI.png').'" height="80" width="80">'.$category->name;
+    //             if($category->image)
+    //                 $nestedData['name'] = '<img src="'.url('images/category', $category->image).'" height="80" width="80">'.$category->name;
+    //             else
+    //                 $nestedData['name'] = '<img src="'.url('images/zummXD2dvAtI.png').'" height="80" width="80">'.$category->name;
 
-                if($category->parent_id)
-                    $nestedData['parent_id'] = Category::find($category->parent_id)->name;
-                else
-                    $nestedData['parent_id'] = "N/A";
+    //             if($category->parent_id)
+    //                 $nestedData['parent_id'] = Category::find($category->parent_id)->name;
+    //             else
+    //                 $nestedData['parent_id'] = "N/A";
 
-                $nestedData['number_of_product'] = $category->product()->where('is_active', true)->count();
-                $nestedData['stock_qty'] = $category->product()->where('is_active', true)->sum('qty');
-                $total_price = $category->product()->where('is_active', true)->sum(DB::raw('price * qty'));
-                $total_cost = $category->product()->where('is_active', true)->sum(DB::raw('cost * qty'));
+    //             $nestedData['number_of_product'] = $category->product()->where('is_active', true)->count();
+    //             $nestedData['stock_qty'] = $category->product()->where('is_active', true)->sum('qty');
+    //             $total_price = $category->product()->where('is_active', true)->sum(DB::raw('price * qty'));
+    //             $total_cost = $category->product()->where('is_active', true)->sum(DB::raw('cost * qty'));
 
-                if(config('currency_position') == 'prefix')
-                    $nestedData['stock_worth'] = config('currency').' '.$total_price.' / '.config('currency').' '.$total_cost;
-                else
-                    $nestedData['stock_worth'] = $total_price.' '.config('currency').' / '.$total_cost.' '.config('currency');
+    //             if(config('currency_position') == 'prefix')
+    //                 $nestedData['stock_worth'] = config('currency').' '.$total_price.' / '.config('currency').' '.$total_cost;
+    //             else
+    //                 $nestedData['stock_worth'] = $total_price.' '.config('currency').' / '.$total_cost.' '.config('currency');
 
-                $nestedData['options'] = '<div class="btn-group">
-                            <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'.__("db.action").'
-                              <span class="caret"></span>
-                              <span class="sr-only">Toggle Dropdown</span>
-                            </button>
-                            <ul class="dropdown-menu edit-options dropdown-menu-right dropdown-default" user="menu">
-                                <li>
-                                    <button type="button" data-id="'.$category->id.'" class="open-EditCategoryDialog btn btn-link" data-toggle="modal" data-target="#editModal" ><i class="dripicons-document-edit"></i> '.__("db.edit").'</button>
-                                </li>
-                                <li class="divider"></li>'.
-                                \Form::open(["route" => ["category.destroy", $category->id], "method" => "DELETE"] ).'
-                                <li>
-                                  <button type="submit" class="btn btn-link" onclick="return confirmDelete()"><i class="dripicons-trash"></i> '.__("db.delete").'</button>
-                                </li>'.\Form::close().'
-                            </ul>
-                        </div>';
-                $data[] = $nestedData;
-            }
-        }
-        $json_data = array(
-                    "draw"            => intval($request->input('draw')),
-                    "recordsTotal"    => intval($totalData),
-                    "recordsFiltered" => intval($totalFiltered),
-                    "data"            => $data
-                    );
+    //             $nestedData['options'] = '<div class="btn-group">
+    //                         <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'.__("db.action").'
+    //                           <span class="caret"></span>
+    //                           <span class="sr-only">Toggle Dropdown</span>
+    //                         </button>
+    //                         <ul class="dropdown-menu edit-options dropdown-menu-right dropdown-default" user="menu">
+    //                             <li>
+    //                                 <button type="button" data-id="'.$category->id.'" class="open-EditCategoryDialog btn btn-link" data-toggle="modal" data-target="#editModal" ><i class="dripicons-document-edit"></i> '.__("db.edit").'</button>
+    //                             </li>
+    //                             <li class="divider"></li>'.
+    //                             \Form::open(["route" => ["category.destroy", $category->id], "method" => "DELETE"] ).'
+    //                             <li>
+    //                               <button type="submit" class="btn btn-link" onclick="return confirmDelete()"><i class="dripicons-trash"></i> '.__("db.delete").'</button>
+    //                             </li>'.\Form::close().'
+    //                         </ul>
+    //                     </div>';
+    //             $data[] = $nestedData;
+    //         }
+    //     }
+    //     $json_data = array(
+    //                 "draw"            => intval($request->input('draw')),
+    //                 "recordsTotal"    => intval($totalData),
+    //                 "recordsFiltered" => intval($totalFiltered),
+    //                 "data"            => $data
+    //                 );
 
-        echo json_encode($json_data);
-    }
+    //     echo json_encode($json_data);
+    // }
 
     public function store(StoreCategoryRequest $request)
     {

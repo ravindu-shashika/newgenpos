@@ -54,9 +54,11 @@ const CategoryList = () => {
     const fetchCategories = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await api.get('categories');
+            // Mirror the server-side data source used in the original Blade view (category/category-data)
+            const res = await api.post('category/category-data');
             if (res.status === 200) {
-                setCategories(res.data);
+                const data = Array.isArray(res.data) ? res.data : res.data.data || [];
+                setCategories(data);
             }
         } catch (error) {
             msg.error("Failed to fetch categories");
@@ -246,36 +248,23 @@ const CategoryList = () => {
         {
             Header: 'Category',
             accessor: 'name',
-            Cell: ({ row, value }) => (
-                <div className="d-flex align-items-center">
-                    {row.original.image_url ? (
-                        <img
-                            src={row.original.image_url}
-                            alt={value}
-                            style={{ width: '40px', height: '40px', objectFit: 'cover' }}
-                            className="mr-2 rounded"
-                        />
-                    ) : (
-                        <div className="mr-2 rounded bg-light d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
-                            <SafeFontAwesomeIcon icon={faImage} className="text-muted" />
-                        </div>
-                    )}
-                    <span className="font-weight-bold ml-2">{value}</span>
-                </div>
+            Cell: ({ value }) => (
+                <span className="font-weight-bold ml-2">{value}</span>
             )
         },
         {
             Header: 'Parent Category',
-            accessor: 'parent_name',
+            // Match the server field name used in the Blade DataTable config
+            accessor: 'parent_id',
         },
         {
             Header: 'Number of Product',
-            accessor: 'number_of_products',
+            accessor: 'number_of_product',
             Cell: ({ value }) => value || 0
         },
         {
             Header: 'Stock Quantity',
-            accessor: 'stock_quantity',
+            accessor: 'stock_qty',
             Cell: ({ value }) => value || 0
         },
         {
@@ -353,16 +342,16 @@ const CategoryList = () => {
                     <h3 className="font-weight-bold text-dark mb-0">Category</h3>
                 </div>
                 <div className="d-flex gap-2">
-                    {can('categories-add') && (
+                    
                         <Button variant="info" className="shadow-sm d-flex align-items-center" onClick={handleAddNew}>
                             <SafeFontAwesomeIcon icon={faPlus} className="mr-2" /> Add Category
                         </Button>
-                    )}
-                    {can('categories-import') && (
+                    
+                    
                         <Button variant="primary" className="shadow-sm d-flex align-items-center ms-2" onClick={() => setShowImportModal(true)}>
                             <SafeFontAwesomeIcon icon={faCopy} className="mr-2" /> Import Category
                         </Button>
-                    )}
+                    
                 </div>
             </div>
 
@@ -519,11 +508,26 @@ const CategoryList = () => {
                             </h5>
                         </Col>
 
-                        {/* Module specific fields - usually conditional on general settings */}
-                        <Col md={12} className="mt-4">
-                            <h6 className="font-weight-bold border-bottom pb-2 text-primary small uppercase letter-spacing-1">For Website & SEO</h6>
+                        {/* For Website - restaurant / ecommerce blocks */}
+                        <Col md={12} className="mt-3">
+                            <h6 className="font-weight-bold small mb-2">For Website</h6>
+                            <hr />
                         </Col>
 
+                        {/* Restaurant style listing on website */}
+                        <Col md={12} className="mb-3 form-group">
+                            <Form.Check
+                                type="checkbox"
+                                id="featured_website"
+                                name="featured"
+                                label=" List on website"
+                                checked={formData.featured}
+                                onChange={handleInputChange}
+                                className="small font-weight-bold"
+                            />
+                        </Col>
+
+                        {/* Ecommerce specific icon + dropdown listing */}
                         <Col md={6} className="mb-3 form-group">
                             <Form.Label className="font-weight-bold small">Icon</Form.Label>
                             <Form.Control
@@ -538,13 +542,19 @@ const CategoryList = () => {
                         <Col md={6} className="mb-3 d-flex align-items-center mt-3">
                             <Form.Check
                                 type="checkbox"
-                                id="featured"
+                                id="featured_dropdown"
                                 name="featured"
-                                label=" List on website/category dropdown"
+                                label=" List on category dropdown"
                                 checked={formData.featured}
                                 onChange={handleInputChange}
                                 className="small font-weight-bold"
                             />
+                        </Col>
+
+                        {/* For SEO block */}
+                        <Col md={12} className="mt-3">
+                            <h6 className="font-weight-bold small mb-2">For SEO</h6>
+                            <hr />
                         </Col>
 
                         <Col md={12} className="mb-3 form-group">
@@ -553,7 +563,7 @@ const CategoryList = () => {
                                 name="page_title"
                                 value={formData.page_title}
                                 onChange={handleInputChange}
-                                placeholder="Enter meta title"
+                                placeholder="Meta Title"
                                 className="shadow-none"
                             />
                         </Col>
@@ -566,7 +576,7 @@ const CategoryList = () => {
                                 name="short_description"
                                 value={formData.short_description}
                                 onChange={handleInputChange}
-                                placeholder="Enter meta description"
+                                placeholder="Meta Description"
                                 className="shadow-none"
                             />
                         </Col>
