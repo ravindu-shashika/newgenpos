@@ -8,8 +8,9 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 import { api } from '../../services';
+// import { AccountList } from '..';
 
-const AccountIndex = () => {
+const AccountList = () => {
   const [sorting, setSorting] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -34,7 +35,7 @@ const AccountIndex = () => {
     note: ''
   });
 
-   useEffect(() => {
+  useEffect(() => {
     fetchAccounts();
   }, []);
 
@@ -63,7 +64,7 @@ const AccountIndex = () => {
     }
   };
 
- 
+
   // Table data
   const data = useMemo(() => {
     return accountList.map((account) => ({
@@ -273,7 +274,7 @@ const AccountIndex = () => {
     try {
       setLoading(true);
       const response = await api.put(`accounts/${editingAccount.id}`).values(formData);
-      
+
       if (response.data?.status === 200) {
         alert(response.data.message || 'Account updated successfully');
         setShowEditModal(false);
@@ -296,7 +297,7 @@ const AccountIndex = () => {
     try {
       setLoading(true);
       const response = await api.post('accounts').values(addFormData);
-      
+
       if (response.data?.status === 200) {
         alert(response.data.message || 'Account created successfully');
         setShowAddModal(false);
@@ -357,7 +358,7 @@ const AccountIndex = () => {
           <i className="fa fa-spinner fa-spin"></i> Loading...
         </div>
       )}
-      
+
       <section>
         <div className="container-fluid mb-3">
           <button
@@ -647,4 +648,4 @@ const AccountIndex = () => {
   );
 };
 
-export default AccountIndex;
+export default AccountList;

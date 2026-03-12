@@ -1,7 +1,7 @@
 import {
   Dashboard,
   AccountStatement,
-  BalanceSheet,
+  // BalanceSheet,
   AccountList,
 
 } from '../views';
@@ -22,13 +22,13 @@ const componentsList = [
     route: '/account-statement',
     value: AccountStatement,
   },
+  // {
+  //   name: 'BalanceSheet',
+  //   route: '/balance-sheet',
+  //   value: BalanceSheet,
+  // },
   {
-    name: 'BalanceSheet',
-    route: '/balance-sheet',
-    value: BalanceSheet,
-  },
-  { 
-    name:'AccountList',
+    name: 'AccountList',
     route: '/account-list',
     value: AccountList, // Reusing AccountStatement for demonstration; replace with actual component if available
   },
