@@ -3,14 +3,12 @@ name: Frontend CI/CD
 on:
   push:
     branches: [main, master]
-    paths:
-      - 'pos-client/**'
-      - '.github/workflows/frontend-ci-cd.yml'
   pull_request:
     branches: [main, master]
     paths:
       - 'pos-client/**'
       - '.github/workflows/frontend-ci-cd.yml'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -36,13 +34,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Origin only, e.g. https://pos.newgenideas.com (not pos.newgenideas.com, not .../api)
+          # Laravel on cPanel: https://pos.newgenideas.com/api
           VITE_APP_DEFAULT_PATH: ${{ secrets.VITE_APP_DEFAULT_PATH }}
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
       - uses: actions/checkout@v5
@@ -62,11 +60,11 @@ jobs:
         run: npm run build
         working-directory: pos-client
         env:
-          # Origin only, e.g. https://pos.newgenideas.com (not pos.newgenideas.com, not .../api)
+          # Laravel on cPanel: https://pos.newgenideas.com/api
           VITE_APP_DEFAULT_PATH: ${{ secrets.VITE_APP_DEFAULT_PATH }}
 
       - name: Deploy frontend to cPanel
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
@@ -75,7 +73,7 @@ jobs:
           port: 21
           local-dir: ./pos-client/dist/
           server-dir: /
-          security: strict
+          security: loose
           timeout: 120000
           exclude: |
             **/.git*

@@ -7,31 +7,60 @@ import { permissionsBypassed } from '../config/permissions';
 
 const COOKIE_OPTS = { path: '/' };
 
-function resolveServerBase() {
-  if (import.meta.env.VITE_APP_DEFAULT_PATH) {
-    return String(import.meta.env.VITE_APP_DEFAULT_PATH).replace(/\/$/, '');
+const env = import.meta.env;
+const DEFAULT_PATH =
+  env.VITE_APP_DEFAULT_PATH ||
+  env.REACT_APP_DEFAULT_PATH ||
+  (typeof process !== 'undefined' ? process.env.REACT_APP_DEFAULT_PATH : '') ||
+  'http://192.168.1.3:8000';
+
+function normalizeUrl(raw) {
+  let base = String(raw).trim().replace(/\/$/, '');
+
+  if (!/^https?:\/\//i.test(base) && !base.startsWith('/')) {
+    const protocol =
+      typeof window !== 'undefined' && window.location?.protocol === 'http:'
+        ? 'http'
+        : 'https';
+    base = `${protocol}://${base}`;
   }
-  if (import.meta.env.VITE_API_URL) {
-    return String(import.meta.env.VITE_API_URL).replace(/\/$/, '');
-  }
-  if (import.meta.env.DEV) {
-    return 'http://127.0.0.1:8000';
-  }
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-  return 'http://127.0.0.1:8000';
+
+  return base.replace(/\/$/, '');
 }
 
-const serverBase = resolveServerBase();
-export const defaultPath = `${serverBase}/api`;
-export const posApiPath = `${serverBase}/pos`;
-const imagePath = `${serverBase}/storage/images/`;
-const defApiPath = serverBase;
+/** Laravel app root (cPanel: https://pos.newgenideas.com/api). */
+function resolveAppRoot() {
+  const base = normalizeUrl(DEFAULT_PATH);
+  if (/\/api\/api$/i.test(base)) {
+    return base.replace(/\/api$/i, '');
+  }
+  if (/\/api$/i.test(base)) {
+    return base;
+  }
+  return base;
+}
 
-/** Laravel `public/` asset base (images, logo, downloads, …). */
+/**
+ * API route base for routes/api.php.
+ * cPanel …/api + Laravel /api prefix → …/api/api/login
+ */
+function resolveDefaultPath() {
+  const base = normalizeUrl(DEFAULT_PATH);
+  if (/\/api\/api$/i.test(base)) {
+    return base;
+  }
+  const appRoot = resolveAppRoot();
+  return `${appRoot}/api`;
+}
+
+const appRoot = resolveAppRoot();
+export const defaultPath = resolveDefaultPath();
+export const posApiPath = `${appRoot}/pos`;
+const imagePath = `${appRoot}/storage/images/`;
+const defApiPath = appRoot;
+
 export function getServerBase() {
-  return serverBase;
+  return appRoot;
 }
 
 export function brandImageUrl(filename) {
@@ -39,27 +68,27 @@ export function brandImageUrl(filename) {
   const value = String(filename).trim();
   if (!value) return null;
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
-  return `${serverBase}/images/brand/${value}`;
+  return `${appRoot}/images/brand/${value}`;
 }
 
-function buildHeaders(extra = {}, { multipart = false } = {}) {
-  const token = getToken();
+const getHeaders = (extra = {}, { multipart = false } = {}) => {
+  const token = getToken() || CookieService.get('access_token');
   const csrfToken = CookieService.get('XSRF-TOKEN');
 
   const headers = {
     Accept: 'application/json',
+    'Content-Type': 'application/json',
     ...extra,
   };
 
   if (multipart) {
     delete headers['Content-Type'];
-  } else if (!headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json';
   }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
+
   if (csrfToken) {
     headers['X-XSRF-TOKEN'] = csrfToken;
   }
@@ -70,7 +99,7 @@ function buildHeaders(extra = {}, { multipart = false } = {}) {
   if (cluster) headers.cluster = cluster;
 
   return headers;
-}
+};
 
 export function signOut() {
   authStore.clearAuth();
@@ -116,14 +145,13 @@ function resolveUrl(url, base = defaultPath) {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  const path = url.replace(/^\//, '');
-  return `${base}/${path}`;
+  return `${base}/${url.replace(/^\//, '')}`;
 }
 
 async function axiosRequest(method, url, data, config = {}, base = defaultPath) {
   const isMultipart = data instanceof FormData;
   const headers = {
-    ...buildHeaders(config.headers || {}, { multipart: isMultipart }),
+    ...getHeaders(config.headers || {}, { multipart: isMultipart }),
     ...(config.headers || {}),
   };
   if (isMultipart) {
@@ -164,6 +192,10 @@ const api = {
     return axiosRequest('post', url, data, config);
   },
 
+  async postNew(url, data) {
+    return axiosRequest('post', url, data);
+  },
+
   put(url, data, config) {
     if (data === undefined) {
       return {
@@ -171,6 +203,18 @@ const api = {
       };
     }
     return axiosRequest('put', url, data, config);
+  },
+
+  patch(url, id) {
+    return {
+      values: async (data) => axiosRequest('patch', `${url}/${id}`, data),
+    };
+  },
+
+  update(url) {
+    return {
+      values: async (data) => axiosRequest('post', url, data),
+    };
   },
 
   async delete(url, config = {}) {
@@ -188,12 +232,6 @@ const api = {
   postFormData(url) {
     return {
       values: async (formData) => axiosRequest('post', url, formData),
-    };
-  },
-
-  update(url) {
-    return {
-      values: async (payload) => axiosRequest('post', url, payload),
     };
   },
 
@@ -218,7 +256,6 @@ const api = {
   },
 };
 
-/** Web POS + shared catalog routes at `/pos` (not `/api/pos`). */
 export const posApi = {
   get(url, config = {}) {
     return axiosRequest('get', url, undefined, config, posApiPath);
