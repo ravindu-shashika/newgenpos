@@ -1,0 +1,494 @@
+================================================================================
+  SalePro POS — Legacy Routes & React SPA Migration Reference
+  Generated for: possystem menu/route insert & migration planning
+  Sources:
+    - old_codes/routes/web.php          (~760 authenticated routes)
+    - old_codes/views/backend/layout/sidebar.blade.php
+    - pos-api/routes/spa_web_routes.php (API mirror under /api/*)
+    - pos-client/src/services/routeRegistry.js (React HashRouter paths)
+    - pos-api/database/seeders/MenuSeeder.php
+  Date: 2026-06-04
+================================================================================
+
+HOW TO USE THIS FILE
+--------------------
+1. MENUS TABLE     → Run Section A SQL to seed sidebar navigation (menus table).
+2. ROUTE MAPPING   → Section B maps legacy Laravel URL → React #/path → API path.
+3. POS ROUTES      → Section C lists point-of-sale specific endpoints.
+4. GAPS            → Section D lists routes not yet in React UI.
+
+React app uses HashRouter: browser URL looks like  http://host/#/products
+API calls use Sanctum token:  GET/POST http://host/api/{path}
+
+SPA STATUS LEGEND
+-----------------
+  MIGRATED   = React page exists in routeRegistry.js (real component)
+  PARTIAL    = List or API only; create/edit missing or stub
+  API_ONLY   = Backend ready; no dedicated React page
+  NOT_MIG    = No React page; may show PlaceholderPage or 404
+  PLACEHOLDER= Route registered but stub UI only
+
+
+================================================================================
+SECTION A — menus TABLE INSERT (sidebar navigation for POS system)
+================================================================================
+Table columns: main_menu_icon, main_menu, sub_menu_icon, sub_menu, sub_menu_route,
+               controller, main_menu_order, sub_menu_order, child_menu_order, is_active
+
+-- Clear existing (optional)
+-- TRUNCATE TABLE menus;
+
+INSERT INTO menus (main_menu_icon, main_menu, sub_menu_icon, sub_menu, sub_menu_route, controller, main_menu_order, sub_menu_order, child_menu_order, is_active, created_at, updated_at) VALUES
+
+-- Dashboard (order 1)
+('dripicons-meter', 'Dashboard', 'dripicons-meter', 'Dashboard', '/dashboard', 'dashboard', 1, 1, 1, 1, NOW(), NOW()),
+
+-- Product (order 2)
+('dripicons-list', 'Product', 'dripicons-list', 'Category', '/category', 'categories', 2, 1, 1, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Brand', '/brand', 'brand', 2, 1, 2, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Unit', '/unit', 'unit', 2, 1, 3, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Product List', '/products', 'products', 2, 1, 4, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Add Product', '/products/create', 'products', 2, 1, 5, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Print Barcode', '/products/print_barcode', 'products', 2, 1, 6, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Adjustment List', '/qty_adjustment', 'qty_adjustment', 2, 1, 7, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Add Adjustment', '/qty_adjustment/create', 'qty_adjustment', 2, 1, 8, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Stock Count', '/stock-count', 'stock_count', 2, 1, 9, 1, NOW(), NOW()),
+('dripicons-list', 'Product', 'dripicons-list', 'Damage List', '/damage-stock', 'damage-stock', 2, 1, 10, 1, NOW(), NOW()),
+
+-- Purchase (order 3)
+('dripicons-card', 'Purchase', 'dripicons-card', 'Purchase List', '/purchases', 'purchases', 3, 1, 1, 1, NOW(), NOW()),
+('dripicons-card', 'Purchase', 'dripicons-card', 'Add Purchase', '/purchases/create', 'purchases', 3, 1, 2, 1, NOW(), NOW()),
+('dripicons-card', 'Purchase', 'dripicons-card', 'Import Purchase By CSV', '/purchases/purchase_by_csv', 'purchases', 3, 1, 3, 1, NOW(), NOW()),
+('dripicons-card', 'Purchase', 'dripicons-card', 'Purchase Return', '/return-purchase', 'return-purchase', 3, 1, 4, 1, NOW(), NOW()),
+
+-- Sale (order 4) — includes POS
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Sale List', '/sales', 'sales', 4, 1, 1, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'POS', '/pos', 'pos', 4, 1, 2, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Add Sale', '/sales/create', 'sales', 4, 1, 3, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Import Sale By CSV', '/sales/sale_by_csv', 'sales', 4, 1, 4, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Packing Slip List', '/packing-slips', 'packing_slip', 4, 1, 5, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Challan List', '/challans', 'challan', 4, 1, 6, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Delivery List', '/delivery', 'delivery', 4, 1, 7, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Gift Card List', '/gift_cards', 'gift_card', 4, 1, 8, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Coupon List', '/coupons', 'coupon', 4, 1, 9, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Courier List', '/couriers', 'courier', 4, 1, 10, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Sale Return', '/return-sale', 'return-sale', 4, 1, 11, 1, NOW(), NOW()),
+('dripicons-cart', 'Sale', 'dripicons-cart', 'Sale Exchange', '/exchange', 'exchange', 4, 1, 12, 1, NOW(), NOW()),
+
+-- Quotation (order 5)
+('dripicons-document', 'Quotation', 'dripicons-document', 'Quotation List', '/quotations', 'quotations', 5, 1, 1, 1, NOW(), NOW()),
+('dripicons-document', 'Quotation', 'dripicons-document', 'Add Quotation', '/quotations/create', 'quotations', 5, 1, 2, 1, NOW(), NOW()),
+
+-- Transfer (order 6)
+('dripicons-export', 'Transfer', 'dripicons-export', 'Transfer List', '/transfers', 'transfers', 6, 1, 1, 1, NOW(), NOW()),
+('dripicons-export', 'Transfer', 'dripicons-export', 'Add Transfer', '/transfers/create', 'transfers', 6, 1, 2, 1, NOW(), NOW()),
+('dripicons-export', 'Transfer', 'dripicons-export', 'Import Transfer By CSV', '/transfers/transfer_by_csv', 'transfers', 6, 1, 3, 1, NOW(), NOW()),
+
+-- Expense (order 7)
+('dripicons-wallet', 'Expense', 'dripicons-wallet', 'Expense Category', '/expense_categories', 'expense_categories', 7, 1, 1, 1, NOW(), NOW()),
+('dripicons-wallet', 'Expense', 'dripicons-wallet', 'Expense List', '/expenses', 'expenses', 7, 1, 2, 1, NOW(), NOW()),
+('dripicons-wallet', 'Expense', 'dripicons-wallet', 'Add Expense', '/expenses', 'expenses', 7, 1, 3, 1, NOW(), NOW()),
+
+-- Income (order 8)
+('dripicons-rocket', 'Income', 'dripicons-rocket', 'Income Category', '/income_categories', 'income_categories', 8, 1, 1, 1, NOW(), NOW()),
+('dripicons-rocket', 'Income', 'dripicons-rocket', 'Income List', '/incomes', 'incomes', 8, 1, 2, 1, NOW(), NOW()),
+('dripicons-rocket', 'Income', 'dripicons-rocket', 'Add Income', '/incomes', 'incomes', 8, 1, 3, 1, NOW(), NOW()),
+
+-- Booking (order 9)
+('dripicons-calendar', 'Booking', 'dripicons-calendar', 'Booking', '/bookings/calendar', 'booking', 9, 1, 1, 1, NOW(), NOW()),
+
+-- People (order 10)
+('dripicons-user', 'People', 'dripicons-user', 'Customer List', '/customer', 'customers', 10, 1, 1, 1, NOW(), NOW()),
+('dripicons-user', 'People', 'dripicons-user', 'Supplier List', '/supplier', 'suppliers', 10, 1, 2, 1, NOW(), NOW()),
+('dripicons-user', 'People', 'dripicons-user', 'User List', '/user', 'users', 10, 1, 3, 1, NOW(), NOW()),
+('dripicons-user', 'People', 'dripicons-user', 'Sale Agents', '/sale-agents', 'sale-agents', 10, 1, 4, 1, NOW(), NOW()),
+('dripicons-user', 'People', 'dripicons-user', 'Biller List', '/biller', 'billers', 10, 1, 5, 1, NOW(), NOW()),
+
+-- Accounting (order 11)
+('dripicons-briefcase', 'Accounting', 'dripicons-briefcase', 'Account List', '/accounts', 'accounts', 11, 1, 1, 1, NOW(), NOW()),
+('dripicons-briefcase', 'Accounting', 'dripicons-briefcase', 'Add Account', '/accounts', 'accounts', 11, 1, 2, 1, NOW(), NOW()),
+('dripicons-briefcase', 'Accounting', 'dripicons-briefcase', 'Money Transfer', '/money-transfers', 'money-transfers', 11, 1, 3, 1, NOW(), NOW()),
+('dripicons-briefcase', 'Accounting', 'dripicons-briefcase', 'Balance Sheet', '/balancesheet', 'balance-sheets', 11, 1, 4, 1, NOW(), NOW()),
+('dripicons-briefcase', 'Accounting', 'dripicons-briefcase', 'Account Statement', '/account-statement', 'account-statements', 11, 1, 5, 1, NOW(), NOW()),
+
+-- HRM (order 12)
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Department', '/departments', 'departments', 12, 1, 1, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Designation', '/designations', 'designations', 12, 1, 2, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Shift', '/shift', 'shift', 12, 1, 3, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Employee', '/employees', 'employees', 12, 1, 4, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Attendance', '/attendance', 'attendance', 12, 1, 5, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Holiday', '/holidays', 'holidays', 12, 1, 6, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Overtime', '/overtime', 'overtime', 12, 1, 7, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Leave Type', '/leave-type', 'leave-types', 12, 1, 8, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Leaves', '/leave', 'leave', 12, 1, 9, 1, NOW(), NOW()),
+('dripicons-user-group', 'HRM', 'dripicons-user-group', 'Payroll', '/payroll', 'payroll', 12, 1, 10, 1, NOW(), NOW()),
+
+-- WhatsApp (order 13)
+('dripicons-message', 'WhatsApp', 'dripicons-message', 'WhatsApp Settings', '/whatsapp/settings', 'whatsapp', 13, 1, 1, 1, NOW(), NOW()),
+('dripicons-message', 'WhatsApp', 'dripicons-message', 'Message Templates', '/whatsapp/templates', 'whatsapp', 13, 1, 2, 1, NOW(), NOW()),
+('dripicons-message', 'WhatsApp', 'dripicons-message', 'Send Message', '/whatsapp/send', 'whatsapp', 13, 1, 3, 1, NOW(), NOW()),
+
+-- Reports (order 14) — replace {Y} and {M} with current year/month
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Activity Log', '/setting/activity-log', 'reports', 14, 1, 1, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Profit / Loss', '/report/profit-loss', 'reports', 14, 1, 2, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Best Seller', '/report/best_seller', 'reports', 14, 1, 3, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Product Report', '/report/product_report', 'reports', 14, 1, 4, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Stock Report', '/report/stock', 'reports', 14, 1, 5, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Daily Sale', '/report/daily_sale/{Y}/{M}', 'reports', 14, 1, 6, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Monthly Sale', '/report/monthly_sale/{Y}', 'reports', 14, 1, 7, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Daily Purchase', '/report/daily_purchase/{Y}/{M}', 'reports', 14, 1, 8, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Monthly Purchase', '/report/monthly_purchase/{Y}', 'reports', 14, 1, 9, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Sale Report', '/report/sale_report', 'reports', 14, 1, 10, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Challan Report', '/report/challan-report', 'reports', 14, 1, 11, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Sale Report Chart', '/report/sale-report-chart', 'reports', 14, 1, 12, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Payment Report', '/report/payment_report_by_date', 'reports', 14, 1, 13, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Purchase Report', '/report/purchase', 'reports', 14, 1, 14, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Customer Report', '/report/customer_report', 'reports', 14, 1, 15, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Customer Group Report', '/report/customer-group', 'reports', 14, 1, 16, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Customer Due Report', '/report/customer-due-report', 'reports', 14, 1, 17, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Supplier Report', '/report/supplier', 'reports', 14, 1, 18, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Supplier Due Report', '/report/supplier-due-report', 'reports', 14, 1, 19, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Warehouse Report', '/report/warehouse_report', 'reports', 14, 1, 20, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Warehouse Stock Chart', '/report/warehouse_stock', 'reports', 14, 1, 21, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Product Expiry Report', '/report/product-expiry', 'reports', 14, 1, 22, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Product Quantity Alert', '/report/product_quantity_alert', 'reports', 14, 1, 23, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Daily Sale Objective Report', '/report/daily-sale-objective', 'reports', 14, 1, 24, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'User Report', '/report/user_report', 'reports', 14, 1, 25, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Biller Report', '/report/biller_report', 'reports', 14, 1, 26, 1, NOW(), NOW()),
+('dripicons-document-remove', 'Reports', 'dripicons-document-remove', 'Cash Register', '/cash-register', 'cash_register', 14, 1, 27, 1, NOW(), NOW()),
+
+-- Settings (order 15)
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Receipt Printers', '/printers', 'printers', 15, 1, 1, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Invoice Settings', '/setting/invoice', 'invoice_setting', 15, 1, 2, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Role Permission', '/role', 'role', 15, 1, 3, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'SMS Template', '/smstemplates', 'smstemplates', 15, 1, 4, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Custom Field List', '/custom-fields', 'custom-fields', 15, 1, 5, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Discount Plan', '/discount-plans', 'discount-plans', 15, 1, 6, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Discount', '/discounts', 'discounts', 15, 1, 7, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'All Notification', '/notifications', 'notifications', 15, 1, 8, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Send Notification', '/notifications', 'notifications', 15, 1, 9, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Warehouse', '/warehouse', 'warehouse', 15, 1, 10, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Tables', '/tables', 'tables', 15, 1, 11, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Customer Group', '/customer_group', 'customer_group', 15, 1, 12, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Currency', '/currency', 'currency', 15, 1, 13, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Tax', '/tax', 'tax', 15, 1, 14, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'User Profile', '/user-profile', 'user-profile', 15, 1, 15, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Create SMS', '/setting/createsms', 'setting', 15, 1, 16, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Backup Database', '/backup', 'setting', 15, 1, 17, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'General Setting', '/setting/general_setting', 'general-settings', 15, 1, 18, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Mail Setting', '/setting/mail_setting', 'setting', 15, 1, 19, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Reward Point Setting', '/setting/reward-point-setting', 'reward-point-settings', 15, 1, 20, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'SMS Setting', '/setting/sms_setting', 'sms-settings', 15, 1, 21, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Payment Gateways', '/setting/payment-gateways/list', 'setting', 15, 1, 22, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'POS Settings', '/setting/pos_setting', 'pos-settings', 15, 1, 23, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'HRM Setting', '/setting/hrm_setting', 'hrm-settings', 15, 1, 24, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Barcode Settings', '/barcodes', 'barcode-settings', 15, 1, 25, 1, NOW(), NOW()),
+('dripicons-gear', 'Settings', 'dripicons-gear', 'Languages', '/languages', 'languages', 15, 1, 26, 1, NOW(), NOW());
+
+
+================================================================================
+SECTION B — SIDEBAR ROUTE MAP (Legacy Laravel → React SPA → API)
+================================================================================
+Format: LABEL | OLD_LARAVEL_PATH | LARAVEL_ROUTE_NAME | REACT_#/PATH | API_/api/PATH | SPA_STATUS
+
+--- DASHBOARD ---
+Dashboard              | /dashboard                          | —                    | #/dashboard              | GET /api/dashboard                    | MIGRATED
+Home                   | /home                               | —                    | #/home                   | GET /api/dashboard                    | MIGRATED
+
+--- PRODUCT ---
+Category               | /category                           | category.index       | #/category               | GET /api/category                     | MIGRATED
+Brand                  | /brand                              | brand.index          | #/brand                  | GET /api/brand                        | MIGRATED
+Unit                   | /unit                               | unit.index           | #/unit                   | GET /api/unit                         | MIGRATED
+Product List           | /products                           | products.index       | #/products               | POST /api/products/product-data       | MIGRATED
+Add Product            | /products/create                    | products.create      | #/products/create        | GET /api/products/initial-data        | MIGRATED
+Edit Product           | /products/{id}/edit                 | products.edit        | #/products/:id/edit      | GET /api/products/{id}/edit           | MIGRATED
+Print Barcode          | /products/print_barcode             | product.printBarcode | #/products/print_barcode | GET /api/products/print_barcode     | MIGRATED
+Adjustment List        | /qty_adjustment                     | qty_adjustment.index | #/qty_adjustment         | GET /api/qty_adjustment               | MIGRATED
+Add Adjustment         | /qty_adjustment/create              | qty_adjustment.create| #/qty_adjustment/create  | GET /api/qty_adjustment/create        | MIGRATED
+Stock Count            | /stock-count                        | stock-count.index    | #/stock-count            | GET /api/stock-count                  | MIGRATED
+Damage List            | /damage-stock                       | damage-stock.index   | #/damage-stock           | GET /api/damage-stock                 | MIGRATED
+
+--- PURCHASE ---
+Purchase List          | /purchases                          | purchases.index      | #/purchases              | GET /api/purchases                    | MIGRATED
+Add Purchase           | /purchases/create                   | purchases.create     | #/purchases/create       | GET /api/purchases/create             | MIGRATED
+Edit Purchase          | /purchases/{id}/edit                | purchases.edit       | #/purchases/:id/edit     | GET /api/purchases/{id}/edit          | MIGRATED
+Import Purchase CSV    | /purchases/purchase_by_csv          | —                    | #/purchases/purchase_by_csv | GET /api/purchases/purchase_by_csv | PARTIAL
+Purchase Return        | /return-purchase                    | return-purchase.index| #/return-purchase        | GET /api/return-purchase              | MIGRATED
+Add Purchase Return    | /return-purchase/create             | return-purchase.create| #/return-purchase/create| GET /api/return-purchase/create       | MIGRATED
+Deleted Purchases      | /purchases/deleted_data             | —                    | #/purchases/deleted_data | GET /api/purchases/deleted_data       | MIGRATED
+
+--- SALE & POS ---
+Sale List              | /sales                              | sales.index          | #/sales                  | GET /api/sales                        | MIGRATED
+POS Screen             | /pos/{id?}                          | sale.pos             | #/pos, #/pos/:draftId    | GET /api/pos                          | MIGRATED
+Add Sale               | /sales/create                       | sales.create         | #/sales/create           | GET /api/sales/create                 | MIGRATED
+Edit Sale              | /sales/{id}/edit                    | sales.edit           | —                        | GET /api/sales/{id}/edit              | NOT_MIG
+Import Sale CSV        | /sales/sale_by_csv                  | —                    | #/sales/sale_by_csv      | GET /api/sales/sale_by_csv            | PARTIAL
+Packing Slips          | /packing-slips                      | packingSlip.index    | #/packing-slips          | GET /api/packing-slips                | MIGRATED
+Challans               | /challans                           | challan.index        | #/challans               | GET /api/challans                     | MIGRATED
+Delivery               | /delivery                           | delivery.index       | #/delivery               | GET /api/deliveries                   | MIGRATED
+Gift Cards             | /gift_cards                         | gift_cards.index     | #/gift_cards             | GET /api/gift_cards                   | MIGRATED
+Coupons                | /coupons                            | coupons.index        | #/coupons                | GET /api/coupons                      | MIGRATED
+Couriers               | /couriers                           | couriers.index       | #/couriers               | GET /api/couriers                     | MIGRATED
+Sale Return            | /return-sale                        | return-sale.index    | #/return-sale            | GET /api/return-sale                  | MIGRATED
+Sale Exchange          | /exchange                           | exchange.index       | #/exchange               | GET /api/exchange                     | MIGRATED
+Customer Display       | /customer-display                   | sales.customerDisplay| —                        | GET /api/customer-display             | NOT_MIG
+
+--- QUOTATION ---
+Quotation List         | /quotations                         | quotations.index     | #/quotations             | GET /api/quotations                   | MIGRATED
+Add Quotation          | /quotations/create                  | quotations.create    | #/quotations/create      | GET /api/quotations/create            | MIGRATED
+Edit Quotation         | /quotations/{id}/edit               | quotations.edit      | #/quotations/:id/edit    | GET /api/quotations/{id}/edit         | MIGRATED
+
+--- TRANSFER ---
+Transfer List          | /transfers                          | transfers.index      | #/transfers              | GET /api/transfers                    | MIGRATED
+Add Transfer           | /transfers/create                   | transfers.create     | #/transfers/create       | GET /api/transfers/create             | MIGRATED
+Edit Transfer          | /transfers/{id}/edit                | transfers.edit       | #/transfers/:id/edit     | GET /api/transfers/{id}/edit          | PARTIAL
+Import Transfer CSV    | /transfers/transfer_by_csv          | —                    | #/transfers/transfer_by_csv | GET /api/transfers/transfer_by_csv | PARTIAL
+
+--- EXPENSE / INCOME ---
+Expense Categories     | /expense_categories                 | expense_categories.* | #/expense_categories     | GET /api/expense_categories           | MIGRATED
+Expense List           | /expenses                           | expenses.index       | #/expenses               | GET /api/expenses                     | MIGRATED
+Income Categories      | /income_categories                  | income_categories.*  | #/income_categories      | GET /api/income_categories            | MIGRATED
+Income List            | /incomes                            | incomes.index        | #/incomes                | GET /api/incomes                      | MIGRATED
+
+--- PEOPLE ---
+Customers              | /customer                           | customer.index       | #/customer               | GET /api/customer                     | MIGRATED
+Suppliers              | /supplier                           | supplier.index       | #/supplier               | GET /api/supplier                     | MIGRATED
+Users                  | /user                               | user.index           | #/user                   | GET /api/user                         | MIGRATED
+User Profile           | /user/profile/{id}                  | user.profile         | #/user-profile           | GET /api/user/profile/{id}            | MIGRATED
+Sale Agents            | /sale-agents                        | sale-agents.index    | #/sale-agents            | GET /api/sale-agents                  | MIGRATED
+Billers                | /biller                             | biller.index         | #/biller                 | GET /api/biller                       | MIGRATED
+Customer Group         | /customer_group                     | customer_group.*     | #/customer_group         | GET /api/customer_group               | MIGRATED
+
+--- ACCOUNTING ---
+Accounts               | /accounts                           | accounts.index       | #/accounts               | GET /api/accounts                     | MIGRATED
+Money Transfer         | /money-transfers                    | money-transfers.*    | #/money-transfers        | GET /api/money-transfers              | MIGRATED
+Balance Sheet          | /balancesheet                       | accounts.balancesheet| #/balancesheet           | GET /api/balancesheet                 | MIGRATED
+Account Statement      | /account-statement                  | accounts.statement   | #/account-statement      | GET /api/account-statement            | MIGRATED
+
+--- HRM ---
+Departments            | /departments                        | departments.*        | #/departments            | GET /api/departments                  | MIGRATED
+Designations           | /designations                       | designations.*       | #/designations           | GET /api/designations                 | MIGRATED
+Shift                  | /shift                              | shift.*              | #/shift                  | GET /api/shift                        | MIGRATED
+Employees              | /employees                          | employees.*          | #/employees              | GET /api/employees                    | MIGRATED
+Add Employee           | /employees/create                   | employees.create     | #/employees/create       | GET /api/employees/create             | MIGRATED
+Attendance             | /attendance                         | attendance.*         | #/attendance             | GET /api/attendance                   | MIGRATED
+Holidays               | /holidays                           | holidays.*           | #/holidays               | GET /api/holidays                     | MIGRATED
+My Holiday             | /holidays/my-holiday/{Y}/{M}        | myHoliday            | #/holidays/my-holiday/Y/M| GET /api/holidays/my-holiday/{Y}/{M}  | PARTIAL (stub)
+Overtime               | /overtime                           | overtime.*           | #/overtime               | GET /api/overtime                     | MIGRATED
+Leave Type             | /leave-type                         | leave-type.*         | #/leave-type             | GET /api/leave-type                   | MIGRATED
+Leave                  | /leave                              | leave.*              | #/leave                  | GET /api/leave                        | MIGRATED
+Payroll                | /payroll                            | payroll.*            | #/payroll                | GET /api/payroll                      | MIGRATED
+Payroll Generate       | /payroll/generate                   | —                    | #/payroll/generate       | GET /api/payroll/generate             | MIGRATED
+HRM Panel              | /hrm-panel                          | —                    | —                        | GET /api/hrm-panel                    | NOT_MIG
+
+--- WHATSAPP ---
+Settings               | /whatsapp/settings                  | whatsapp.settings    | #/whatsapp/settings      | GET /api/whatsapp/settings            | MIGRATED
+Templates              | /whatsapp/templates                 | whatsapp.templates   | #/whatsapp/templates     | GET /api/whatsapp/templates           | MIGRATED
+Send Message           | /whatsapp/send                      | whatsapp.send.page   | #/whatsapp/send          | GET /api/whatsapp/send                | MIGRATED
+
+--- REPORTS (all under /report/) ---
+Activity Log           | /setting/activity-log               | setting.activityLog  | #/setting/activity-log   | GET /api/setting/activity-log         | MIGRATED
+Profit Loss            | /report/profit-loss                 | report.profitLoss    | #/report/profit-loss     | GET /api/report/profit-loss           | MIGRATED
+Best Seller            | /report/best_seller                 | —                    | #/report/best_seller     | GET /api/report/best_seller           | MIGRATED
+Product Report         | /report/product_report              | report.product       | #/report/product_report  | GET /api/report/product_report        | MIGRATED
+Stock Report           | /report/stock                       | report.stock         | #/report/stock           | GET /api/report/stock                 | MIGRATED
+Daily Sale             | /report/daily_sale/{Y}/{M}          | —                    | #/report/daily_sale/Y/M  | GET /api/report/daily_sale/{Y}/{M}    | MIGRATED
+Monthly Sale           | /report/monthly_sale/{Y}            | —                    | #/report/monthly_sale/Y  | GET /api/report/monthly_sale/{Y}      | MIGRATED
+Daily Purchase         | /report/daily_purchase/{Y}/{M}      | —                    | #/report/daily_purchase/Y/M | GET /api/report/daily_purchase/{Y}/{M} | MIGRATED
+Monthly Purchase       | /report/monthly_purchase/{Y}        | —                    | #/report/monthly_purchase/Y | GET /api/report/monthly_purchase/{Y} | MIGRATED
+Sale Report            | /report/sale_report                 | report.sale          | #/report/sale_report     | POST /api/report/sale_report          | MIGRATED
+Challan Report         | /report/challan-report              | report.challan       | #/report/challan-report  | GET /api/report/challan-report        | MIGRATED
+Sale Chart             | /report/sale-report-chart           | report.saleChart     | #/report/sale-report-chart | POST /api/report/sale-report-chart  | MIGRATED
+Payment Report         | /report/payment_report_by_date      | report.paymentByDate | #/report/payment_report_by_date | POST /api/report/payment_report_by_date | MIGRATED
+Purchase Report        | /report/purchase                    | report.purchase      | #/report/purchase        | POST /api/report/purchase             | MIGRATED
+Customer Report        | /report/customer_report             | report.customer      | #/report/customer_report | POST /api/report/customer_report      | MIGRATED
+Customer Group Report  | /report/customer-group              | report.customer_group| #/report/customer-group  | POST /api/report/customer-group       | MIGRATED
+Customer Due Report    | /report/customer-due-report         | report.customerDueByDate | #/report/customer-due-report | POST /api/report/customer-due-report | MIGRATED
+Supplier Report        | /report/supplier                    | report.supplier      | #/report/supplier        | POST /api/report/supplier             | MIGRATED
+Supplier Due Report    | /report/supplier-due-report         | report.supplierDueByDate | #/report/supplier-due-report | POST /api/report/supplier-due-report | MIGRATED
+Warehouse Report       | /report/warehouse_report            | report.warehouse     | #/report/warehouse_report| POST /api/report/warehouse_report     | MIGRATED
+Warehouse Stock        | /report/warehouse_stock             | report.warehouseStock| #/report/warehouse_stock | GET /api/report/warehouse_stock       | MIGRATED
+Product Expiry         | /report/product-expiry              | report.productExpiry | #/report/product-expiry  | GET /api/report/product-expiry        | MIGRATED
+Qty Alert              | /report/product_quantity_alert      | report.qtyAlert      | #/report/product_quantity_alert | GET /api/report/product_quantity_alert | MIGRATED
+Daily Sale Objective   | /report/daily-sale-objective        | report.dailySaleObjective | #/report/daily-sale-objective | GET /api/report/daily-sale-objective | MIGRATED
+User Report            | /report/user_report                 | report.user          | #/report/user_report     | POST /api/report/user_report          | MIGRATED
+Biller Report          | /report/biller_report               | report.biller        | #/report/biller_report   | POST /api/report/biller_report        | MIGRATED
+Cash Register          | /cash-register                      | cashRegister.index   | #/cash-register          | GET /api/cash-register                | MIGRATED
+
+--- SETTINGS ---
+Printers               | /printers                           | printers.*           | #/printers               | GET /api/printers                     | MIGRATED
+Invoice Settings       | /setting/invoice                    | settings.invoice.*   | #/setting/invoice        | GET /api/setting/invoice              | MIGRATED
+Role Permission        | /role                               | role.*               | #/role                   | GET /api/role                         | MIGRATED
+SMS Templates          | /smstemplates                       | smstemplates.*       | #/smstemplates           | GET /api/smstemplates                 | MIGRATED
+Custom Fields          | /custom-fields                      | custom-fields.*      | #/custom-fields          | GET /api/custom-fields                | PLACEHOLDER
+Discount Plans         | /discount-plans                     | discount-plans.*     | #/discount-plans         | GET /api/discount-plans               | MIGRATED
+Discounts              | /discounts                          | discounts.*          | #/discounts              | GET /api/discounts                    | MIGRATED
+Notifications          | /notifications                      | notifications.*      | #/notifications          | GET /api/notifications                | MIGRATED
+Warehouse              | /warehouse                          | warehouse.*          | #/warehouse              | GET /api/warehouse                    | MIGRATED
+Tables                 | /tables                             | tables.*             | #/tables                 | GET /api/tables                       | MIGRATED
+Currency               | /currency                           | currency.*           | #/currency               | GET /api/currency                     | MIGRATED
+Tax                    | /tax                                | tax.*                | #/tax                    | GET /api/tax                          | MIGRATED
+General Setting        | /setting/general_setting            | setting.general      | #/general-settings       | GET /api/setting/general_setting      | MIGRATED
+Reward Points          | /setting/reward-point-setting       | setting.rewardPoint  | #/setting/reward-point-setting | GET /api/setting/reward-point-setting | MIGRATED
+SMS Setting            | /setting/sms_setting                | setting.sms          | #/setting/sms_setting    | GET /api/setting/sms_setting          | MIGRATED
+POS Setting            | /setting/pos_setting                | setting.pos          | #/setting/pos_setting    | GET /api/setting/pos_setting          | MIGRATED
+HRM Setting            | /setting/hrm_setting                | setting.hrm          | #/setting/hrm_setting    | GET /api/setting/hrm_setting          | MIGRATED
+Barcode Settings       | /barcodes                           | barcodes.*           | #/barcodes               | GET /api/barcodes                     | MIGRATED
+Languages              | /languages                          | languages            | #/languages              | GET /api/languages                    | MIGRATED
+Mail Setting           | /setting/mail_setting               | setting.mail         | —                        | GET /api/setting/mail_setting         | NOT_MIG
+Payment Gateways       | /setting/payment-gateways/list      | setting.gateway      | —                        | GET /api/setting/payment-gateways/list| NOT_MIG
+Theme Settings         | /setting/theme-settings             | setting.themeSettings| —                        | GET /api/setting/theme-settings       | NOT_MIG
+Translations           | /translations                       | translations         | —                        | GET /api/translations                 | NOT_MIG
+Labels Print           | /labels/show                        | print.labels         | —                        | GET /api/labels/show                  | NOT_MIG
+Backup                 | /backup                             | setting.backup       | #/backup                 | GET /api/backup                       | PLACEHOLDER
+Empty Database         | /setting/empty-database             | setting.emptyDatabase| —                        | GET /api/empty-database               | NOT_MIG
+Create SMS             | /setting/createsms                  | setting.createSms    | #/setting/createsms      | GET /api/setting/createsms            | PLACEHOLDER
+
+--- NAVBAR (not in sidebar menus table) ---
+My Transaction         | /my-transactions/{Y}/{M}            | —                    | #/my-transactions/Y/M    | GET /api/my-transactions/{Y}/{M}      | PARTIAL (stub)
+Switch Theme           | /switch-theme/{theme}               | switchTheme          | —                        | GET /api/switch-theme/{theme}         | API_ONLY (navbar)
+Navbar Bootstrap       | —                                   | —                    | —                        | GET /api/navbar/bootstrap             | API_ONLY
+
+
+================================================================================
+SECTION C — POS-SPECIFIC ROUTES (Point of Sale core)
+================================================================================
+
+UI ROUTES (React)
+-----------------
+  #/pos                    Main POS screen (SaleController@posSale)
+  #/pos/{draftId}          Resume POS draft sale
+  #/setting/pos_setting    POS configuration (payment options, receipt, etc.)
+  #/cash-register          Cash register list (admin role <= 2)
+  #/tables                 Restaurant table management
+  #/printers               Receipt printer setup
+
+API ROUTES (used by PosPage.jsx / legacy POS)
+---------------------------------------------
+  GET  /api/pos                          Bootstrap POS (warehouses, customers, settings)
+  GET  /api/pos/products                 Product grid for POS
+  POST /api/pos/product-lookup           Barcode / code lookup
+  GET  /api/pos/draft/{id}               Load draft sale
+
+  GET  /api/sales/lims_product_search    Product search during sale
+  GET  /api/sales/getproducts/{wh}/{key}/{val}  Warehouse product fetch
+  GET  /api/sales/getproduct/{id}        Single product for cart
+  GET  /api/sales/getcustomergroup/{id}  Customer group discount rate
+  GET  /api/sales/get_gift_card          Gift card validation
+  GET  /api/sales/check-discount         Discount validation
+  POST /api/sales/set-price-type         Retail/wholesale toggle
+  GET  /api/sales/recent-sale            Recent completed sales
+  GET  /api/sales/recent-draft           Recent draft sales
+  GET  /api/sales/today-sale             Today's sale total
+  GET  /api/sales/today-profit/{wh}      Today's profit
+  GET  /api/sales/print-last-reciept     Reprint last receipt
+  POST /api/sales/add_payment            Add payment to sale
+  GET  /api/sales/gen_invoice/{id}       Generate invoice PDF
+
+  GET  /api/cash-register/               List registers
+  GET  /api/cash-register/check-availability/{warehouse_id}
+  POST /api/cash-register/store            Open register
+  GET  /api/cash-register/getDetails/{id}  Register summary
+  POST /api/cash-register/close            Close register
+
+  GET  /api/setting/pos_setting            POS settings form
+  POST /api/setting/pos_setting_store      Save POS settings
+
+LEGACY BLADE ONLY (not in React yet)
+------------------------------------
+  GET /customer-display                  Customer-facing display screen
+  GET /sales/{id}/create                   sale.draft (alternate draft entry)
+
+
+================================================================================
+SECTION D — LARAVEL REST RESOURCES (52 resource groups × ~7 routes each)
+================================================================================
+Each resource generates: index, create, store, show, edit, update, destroy
+(unless excluded with ->except(['show']))
+
+products (-show)          role                    smstemplates            unit
+category                brand                   supplier                warehouse
+printers                tables                  tax                     customer_group
+discount-plans          discounts               customer                biller
+sales (-show)           quotations              purchases               transfers
+qty_adjustment          return-sale             exchange                return-purchase
+user                    setting/invoice         barcodes                expense_categories
+expenses                income_categories       incomes                 gift_cards
+couriers                coupons                 accounts                money-transfers
+departments             designations            shift                   overtime
+leave-type              leave                   sale-agents (-show)     employees
+payroll                 attendance              stock-count             holidays
+currency                custom-fields           damage-stock            bookings (-create,-edit)
+
+Total estimated REST endpoints: ~359
+Plus ~401 explicit custom routes = ~760 authenticated routes in old web.php
+
+
+================================================================================
+SECTION E — NOT MIGRATED / GAPS (priority backlog)
+================================================================================
+
+HIGH (user-facing sidebar items)
+  - sales/{id}/edit              Sale edit form
+  - sales/sale_by_csv            Sale CSV import page
+  - transfers/{id}/edit          Transfer edit
+  - setting/mail_setting         Mail configuration UI
+  - setting/payment-gateways     Payment gateway UI
+
+MEDIUM
+  - /translations                Translation manager
+  - /setting/theme-settings      Theme customization
+  - /labels/*                    Label printing
+  - sales/deleted_data           Deleted sales recovery
+  - customer-display             POS customer display
+  - installmentplan/{id}         Installment detail
+  - delivery/steadfast/*         SteadFast courier integration
+  - hrm-panel                    HRM dashboard
+
+LOW / ADMIN
+  - new-release                  Version upgrade page
+  - setting/empty-database       Dangerous DB wipe
+  - setting/app_setting          Mobile app tokens
+  - tickets/*                    Support tickets (SaaS landlord)
+  - phpfileinfo                  Debug route
+
+PLACEHOLDER ONLY (route exists, stub page)
+  - /bookings/calendar
+  - /custom-fields
+  - /backup
+  - /setting/createsms
+  - /my-transactions/{Y}/{M}
+  - /holidays/my-holiday/{Y}/{M}
+
+
+================================================================================
+SECTION F — QUICK ADD NAVBAR PERMISSIONS (legacy main.blade.php)
+================================================================================
+Permission name          → React route
+category                 → #/category
+products-add             → #/products/create
+purchases-add            → #/purchases/create
+sales-add                → #/sales/create  (+ #/pos)
+expenses-add             → #/expenses
+quotes-add               → #/quotations/create
+transfers-add            → #/transfers/create
+returns-add              → #/return-sale
+purchase-return-add      → #/return-purchase/create
+users-add                → #/user
+customers-add            → #/customer
+billers-add              → #/biller
+suppliers-add            → #/supplier
+
+
+================================================================================
+SECTION G — SEED MENUS VIA ARTISAN (alternative to Section A SQL)
+================================================================================
+  cd pos-api
+  php artisan db:seed --class=MenuSeeder
+
+This runs the same menu data as Section A programmatically.
+
+
+================================================================================
+END OF FILE
+================================================================================

@@ -1,0 +1,187 @@
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\Facades\DB;
+use App\Models\Translation;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\App;
+use Stancl\Tenancy\Events\TenancyBootstrapped;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Auth;
+use App\Models\GeneralSetting;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Bootstrap any application services.
+     *
+     * @return void
+     */
+
+    /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    public function register()
+    {
+        // Path relative to the root of your project
+        $helperFile = app_path('Helpers/helpers.php');
+
+        if (file_exists($helperFile)) {
+            require_once($helperFile);
+        }
+    }
+
+
+    public function boot()
+    {
+        \Illuminate\Database\Eloquent\Relations\Relation::morphMap([
+            'sale' => 'App\Models\Sale',
+        ]);
+        Schema::defaultStringLength(191);
+        $this->app->bind(\App\ViewModels\ISmsModel::class, \App\ViewModels\SmsModel::class);
+
+        if (app()->runningInConsole()) {
+            return;
+        }
+
+        $translationLogic = function () {
+            try {
+                if (!DB::connection()->getDatabaseName()) {
+                    return;
+                }
+            } catch (\Exception $e) {
+                // Skip logic if DB connection fails
+                return;
+            }
+
+            try {
+                if (isset($_COOKIE['language'])) {
+                    App::setLocale($_COOKIE['language']);
+                } elseif (Schema::hasTable('languages')) {
+                    $language = DB::table('languages')->where('is_default', true)->first();
+                    App::setLocale($language->language ?? 'en');
+                } else {
+                    App::setLocale('en');
+                }
+
+                if (Schema::hasTable('translations')) {
+                    $currentLocale = App::getLocale();
+
+                    $translations = Cache::rememberForever("translations_{$currentLocale}", function () use ($currentLocale) {
+                        return \App\Models\Translation::getTrnaslactionsByLocale($currentLocale);
+                    });
+
+                    if (!empty($translations)) {
+                        app('translator')->addLines($translations, $currentLocale);
+                    }
+                }
+            } catch (\Exception $e) {
+                // Optional: log the error
+                // Log::error($e->getMessage());
+            }
+        };
+
+        $permissionLogic = function () {
+            Blade::if('can', function ($permission) {
+                $user = Auth::user();
+                if (!$user) {
+                    return false;
+                }
+                $role_has_permissions_list = Cache::remember(
+                    'role_has_permissions_list' . $user->role_id,
+                    60 * 60 * 24 * 365,
+                    function () use ($user) {
+                        return DB::table('permissions')
+                            ->join('role_has_permissions', 'permissions.id', '=', 'role_has_permissions.permission_id')
+                            ->where('role_id', $user->role_id)
+                            ->select('permissions.name')
+                            ->get();
+                    }
+                );
+                $permissions = $role_has_permissions_list->pluck('name')->toArray();
+                return in_array($permission, $permissions);
+            });
+        };
+
+        $maintenanceCheck = function () {
+            // general_settings table না থাকলে → ignore
+            if (!Schema::hasTable('general_settings')) {
+                return;
+            }
+
+            $general_setting = GeneralSetting::latest()->first();
+
+            // IP নাই → maintenance OFF
+            if (!$general_setting || empty($general_setting->maintenance_allowed_ips)) {
+                return;
+            }
+
+            $allowedIps = array_map(
+                'trim',
+                explode(',', $general_setting->maintenance_allowed_ips)
+            );
+
+            if (!in_array(request()->ip(), $allowedIps)) {
+                abort(503); // Laravel default page
+            }
+        };
+
+        if (config('database.connections.saleprosaas_landlord')) {
+            ///new code for superadmin//
+            if (!app()->bound('tenancy')) {
+                $locale = null;
+                if (!request()->is('superadmin*') && isset($_COOKIE['frontend_language'])) {
+                    $locale = $_COOKIE['frontend_language'];
+                } elseif (config('database.connections.saleprosaas_landlord.database') && Schema::hasTable('languages')) {
+                    // Fallback to default language
+                    $default_language = DB::table('languages')->where('is_default', true)->first();
+                    $locale = $default_language->code ?? 'en';
+                } else {
+                    $locale = 'en';
+                }
+
+                // Finally, set the app locale
+                App::setLocale($locale);
+
+                // Check if language file exists
+                $langFile = resource_path("lang/{$locale}.php");
+                if (!file_exists($langFile)) {
+                    $langFile = resource_path("lang/master.php");
+                }
+
+                $transData = include $langFile; // loads the array
+                $translations = [];
+                foreach ($transData as $group => $items) {
+                    foreach ($items as $key => $value) {
+                        $translations["{$group}.{$key}"] = $value;
+                    }
+                }
+                // Merge translations into Laravel's translator
+                app('translator')->addLines($translations, $locale);
+            }
+            ///new code for superadmin//
+
+            Event::listen(TenancyBootstrapped::class, function () use ($translationLogic, $permissionLogic, $maintenanceCheck) {
+                $translationLogic();
+                $permissionLogic();
+                $maintenanceCheck();
+            });
+        } else {
+            if (empty(env('DB_DATABASE'))) {
+                if (!request()->is('install/*')) {
+                    redirect('/install/step-1')->send();
+                }
+                return;
+            }
+            $translationLogic();
+            $permissionLogic();
+            $maintenanceCheck();
+        }
+    }
+}

@@ -1,0 +1,148 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/providers/local_print_settings_provider.dart';
+import '../../../core/theme/pos_theme.dart';
+import '../providers/pos_settings_subpage_provider.dart';
+import 'pos_settings_ui.dart';
+
+/// Printer summary on Settings — opens full settings via the gear icon.
+class PosPrinterSettingsCard extends ConsumerWidget {
+  const PosPrinterSettingsCard({super.key, this.accentColor});
+
+  final Color? accentColor;
+
+  void _openPrinterSettings(BuildContext context, WidgetRef ref) {
+    openPosPrinterSettings(ref);
+  }
+
+  String _paperLabel(String size) {
+    switch (size) {
+      case '58mm':
+        return '58 mm';
+      case 'a4':
+        return 'A4';
+      default:
+        return '80 mm';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(localPrintSettingsProvider);
+    final printerLabel = settings.printerName.trim().isNotEmpty
+        ? settings.printerName
+        : 'Windows default';
+
+    return PosSettingsSectionCard(
+      icon: Icons.print_outlined,
+      title: 'Printer & receipts',
+      subtitle: 'Paper size, direct print, header, footer, and logo',
+      trailing: IconButton(
+        tooltip: 'Open printer settings',
+        onPressed: () => _openPrinterSettings(context, ref),
+        icon: const Icon(Icons.settings_outlined),
+        style: IconButton.styleFrom(
+          backgroundColor: (accentColor ?? context.posBrand.primary)
+              .withValues(alpha: 0.1),
+          foregroundColor: accentColor ?? context.posBrand.primary,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SummaryChip(
+            icon: Icons.straighten_outlined,
+            label: 'Paper',
+            value: _paperLabel(settings.paperSize),
+          ),
+          const SizedBox(height: 8),
+          _SummaryChip(
+            icon: Icons.flash_on_outlined,
+            label: 'Direct print',
+            value: settings.directPrint ? 'Enabled' : 'Disabled',
+            highlight: settings.directPrint,
+          ),
+          const SizedBox(height: 8),
+          _SummaryChip(
+            icon: Icons.print_rounded,
+            label: 'Printer',
+            value: printerLabel,
+          ),
+          const SizedBox(height: 14),
+          PosSettingsActionTile(
+            icon: Icons.tune_outlined,
+            title: 'Configure printer',
+            subtitle: 'Receipt layout, logo, numbering, and display options',
+            onTap: () => _openPrinterSettings(context, ref),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final brand = context.posBrand;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: PosColors.pageBg,
+        borderRadius: BorderRadius.circular(kPosButtonRadius),
+        border: Border.all(color: PosColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: brand.primary),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              color: PosColors.textMuted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const Spacer(),
+          if (highlight)
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: PosColors.teal,
+                shape: BoxShape.circle,
+              ),
+            ),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: PosColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

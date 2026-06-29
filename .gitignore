@@ -1,0 +1,27 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Flutter / Dart (pos_app)
+pos_app/build/
+pos_app/.dart_tool/
+pos_app/**/ephemeral/
+pos_app/**/*.pdb
+pos_app/.flutter-plugins
+pos_app/.flutter-plugins-dependencies
+
+# PHP / Laravel (pos-api-new)
+pos-api-new/vendor/
+pos-api-new/node_modules/
+pos-api-new/.env
+pos-api-new/.phpunit.cache
+pos-api-new/storage/*.key
+pos-api-new/public/hot
+pos-api-new/public/storage
+
+# React / Vite (pos-client)
+pos-client/node_modules/
+pos-client/dist/

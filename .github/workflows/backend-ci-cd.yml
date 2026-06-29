@@ -1,0 +1,86 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'pos-api-new/**'
+      - '.github/workflows/backend-ci-cd.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'pos-api-new/**'
+      - '.github/workflows/backend-ci-cd.yml'
+
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: pos-api-new
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, iconv, sqlite, pdo_sqlite, mysql, bcmath, gd
+          coverage: none
+
+      - name: Copy .env
+        run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+
+      - name: Install dependencies
+        run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+      - name: Generate key
+        run: php artisan key:generate
+
+      - name: Directory permissions
+        run: chmod -R 777 storage bootstrap/cache
+
+      - name: Execute tests
+        run: vendor/bin/phpunit
+
+  deploy:
+    needs: laravel-tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, iconv, sqlite, pdo_sqlite, mysql, bcmath, gd
+
+      - name: Install production dependencies
+        run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader
+        working-directory: pos-api-new
+
+      - name: Deploy backend to cPanel
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: ./pos-api-new/
+          server-dir: api/
+          security: loose
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/vendor/**
+            **/node_modules/**
+            **/tests/**
+            **/.env
+            **/.env.*
+            **/storage/logs/**
+            **/public/storage/**
