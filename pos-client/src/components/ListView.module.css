@@ -1,0 +1,11 @@
+.searchList {
+  padding: 0 0 0 0;
+}
+
+.table {
+  padding: 0 0 0 0;
+}
+
+.table .thead {
+  background-color: rgba(17, 103, 177, 1) !important;
+}

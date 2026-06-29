@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en" style="font-size: 14px;">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="https://fonts.googleapis.com/css2?family=Abhaya+Libre:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Iceland&family=Karla:wght@400;700&family=Nova+Square&family=Open+Sans:wght@600&family=Orbitron:wght@900&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Martel+Sans:wght@200;300;400&display=swap" rel="stylesheet"> 
+    <link rel="stylesheet" href="https://cdn.materialdesignicons.com/4.8.95/css/materialdesignicons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dripicons@2.0.0/dist/webfont.min.css">
+    <!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"> -->
+    <style>
+      .branch-list{
+          max-height: 300px;
+          overflow-y: scroll;
+          scrollbar-width: thin;
+          position: relative;
+      }
+
+      .branch-select{
+          transform: none !important;
+          margin-top: 40px !important;
+      }
+
+      .select-all-branch-label{
+          padding: 10px !important;
+          border: 1px solid blue;
+          cursor: pointer;
+          border-radius: 5px !important;
+      }
+
+      #all-branch-select:checked~label{
+          background-color: rgb(0, 155, 70);
+          color: aliceblue;
+      }
+
+      .popup_style {
+          position: fixed;
+          z-index: 50;
+          top: 60px;
+          right: 7px;
+      }    
+
+      .react-confirm-alert-body {
+          text-align: center !important;
+          color: #000 !important;
+          width: fit-content !important;
+      }
+
+      .react-confirm-alert-button-group > button {
+
+          background: #007bff !important;
+          border: none;
+          display: inline-block;
+          padding: 7px 27px !important;
+          color: #eee;
+      }
+
+      .react-confirm-alert-button-group {
+          display: block !important;
+          font: inherit !important;
+
+      }
+
+      .sidenavdiv{
+          min-height: 100vh;
+          overflow-y: scroll;
+          overflow-x: hidden;
+          scrollbar-width: thin;
+      }
+
+      .component-container {
+          /* height: 100vh !important; */
+          /* overflow-y: scroll; */
+      }
+
+      .check-box {
+          display: none;
+      }
+
+      .check-box-label{
+          padding: 5px 10px;
+          border-radius: 5px;
+          border: 1px solid black;
+          display: flex;
+          width: fit-content;
+          cursor: pointer
+      }
+
+      .label-content{
+          display: flex;
+          flex-direction: row
+      }
+
+      .icon{
+          margin: auto;
+          width: 15px;
+          height: 15px;
+          border: 1px solid black;
+          border-radius: 3px
+      }
+
+      .icon-content{
+          display: none;
+      }
+      
+      .check-box:checked + .check-box-label .icon {
+          border: 1px solid #e9ecef;
+      }
+
+      .check-box:checked + .check-box-label {
+          background-color: #5f8efd;
+          color: white;
+      }
+
+      .check-box:checked + .check-box-label .icon-content {
+          display: block
+      }
+
+      .svgdefault{
+          position: relative;
+          z-index: 10;
+          top: -5px;
+          right: 2px;
+      }
+
+      .last-of-type {
+          border: 1px solid black;
+      }
+
+      .radio-lable {
+          border: 1px solid black;
+          border-radius: 5px 0px 0px 5px !important;
+          padding: 5px 10px;
+          cursor: pointer;
+      }
+
+      .radio-lable-active {
+          border: 1px solid black;
+          border-radius: 5px 0px 0px 5px !important;
+          padding: 5px 10px;
+          cursor: pointer;
+          background-color: #858585;
+          color: #eee;
+      }
+  </style>
+    <title>POS - Cloth Shop Management</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

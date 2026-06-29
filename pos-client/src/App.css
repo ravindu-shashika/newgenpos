@@ -1,0 +1,202 @@
+body.pos-standalone-mode {
+  overflow: hidden;
+  background: #0f1117;
+}
+
+body.pos-standalone-mode .app-root {
+  min-height: 100vh;
+}
+
+.material-switch > input[type='checkbox'] {
+  display: none;
+}
+
+.material-switch > label {
+  cursor: pointer;
+  height: 0px;
+  position: relative;
+  width: 40px;
+}
+
+.material-switch > label::before {
+  background: rgb(0, 0, 0);
+  box-shadow: inset 0px 0px 10px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  content: '';
+  height: 16px;
+  margin-top: -8px;
+  position: absolute;
+  opacity: 0.3;
+  transition: all 0.4s ease-in-out;
+  width: 40px;
+}
+.material-switch > label::after {
+  background: rgb(255, 255, 255);
+  border-radius: 16px;
+  box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.3);
+  content: '';
+  height: 24px;
+  left: -4px;
+  margin-top: -8px;
+  position: absolute;
+  top: -4px;
+  transition: all 0.3s ease-in-out;
+  width: 24px;
+}
+.material-switch > input[type='checkbox']:checked + label::before {
+  background: inherit;
+  opacity: 0.5;
+}
+.material-switch > input[type='checkbox']:checked + label::after {
+  background: inherit;
+  left: 20px;
+}
+
+.Toastify__toast--success {
+  background-color: rgb(0, 122, 0);
+}
+
+.Toastify__toast--error {
+  background-color: rgb(184, 0, 0);
+}
+
+.Toastify__toast--info {
+  background-color: rgb(0, 103, 151);
+}
+
+.Toastify__toast--warning {
+  background-color: rgb(216, 122, 0);
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-toggle{
+  color: #262626 !important;
+  text-decoration: none !important;
+}
+
+.dropdown-toggle:focus {
+  outline: 0;
+  text-decoration: none !important;
+}
+
+.dropdown-menu {
+  position: absolute !important;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  display: none;
+  float: left;
+  min-width: 160px;
+  padding: 5px 0;
+  margin: 2px 0 0;
+  list-style: none;
+  font-size: 14px;
+  text-align: left;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  -webkit-box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.175);
+  background-clip: padding-box;
+}
+
+.dropdown-menu.pull-right {
+  right: 0;
+  left: auto;
+}
+
+.dropdown-menu .divider {
+  height: 1px;
+  margin: 10px 0;
+  overflow: hidden;
+  background-color: #e5e5e5;
+}
+
+.dropdown-menu > li > a {
+  display: block;
+  padding: 3px 20px;
+  clear: both;
+  font-weight: normal;
+  line-height: 1.6;
+  color: #333333;
+  white-space: nowrap;
+}
+
+.dropdown-menu > li > a:hover,
+.dropdown-menu > li > a:focus {
+  text-decoration: none;
+  color: #262626;
+  background-color: #f5f5f5;
+}
+
+.dropdown-menu > .active > a,
+.dropdown-menu > .active > a:hover,
+.dropdown-menu > .active > a:focus {
+  color: #fff;
+  text-decoration: none;
+  outline: 0;
+  background-color: #3097D1;
+}
+
+.dropdown-menu > .disabled > a,
+.dropdown-menu > .disabled > a:hover,
+.dropdown-menu > .disabled > a:focus {
+  color: #777777;
+}
+
+.dropdown-menu > .disabled > a:hover,
+.dropdown-menu > .disabled > a:focus {
+  text-decoration: none;
+  background-color: transparent;
+  background-image: none;
+  filter: progid:DXImageTransform.Microsoft.gradient(enabled = false);
+  cursor: not-allowed;
+}
+
+.caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  vertical-align: middle;
+  border-top: 4px dashed;
+  border-top: 4px solid \9;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.table-name {
+  font-size: 1.25rem;
+}
+
+.table-alignment{
+  align-items: center;
+}
+
+.collspane-list{
+  width: 75%;
+}
+
+.checkbox-role{
+  margin: 0px 15px 0px 0px;
+}
+
+.spinner-border {
+  width: 2rem;
+  height: 2rem;
+  border-width: 0.2em;
+  color: #fff;
+}
+
+.text-uppercase{
+  font-size: 12px;
+}
+
+.mb-0 {
+  font-size: 18px;
+}
+
