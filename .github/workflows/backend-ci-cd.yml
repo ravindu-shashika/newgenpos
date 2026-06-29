@@ -77,19 +77,34 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect Composer dependency changes
+        id: deps
+        run: |
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- pos-api-new/composer.lock pos-api-new/composer.json | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup PHP
+        if: steps.deps.outputs.changed == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
           extensions: mbstring, xml, ctype, iconv, sqlite, pdo_sqlite, mysql, bcmath, gd
 
       - name: Install production dependencies
+        if: steps.deps.outputs.changed == 'true'
         run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --no-dev --optimize-autoloader
         working-directory: pos-api-new
 
-      - name: Deploy backend to cPanel
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Deploy application code (incremental FTP sync)
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
@@ -98,7 +113,10 @@ jobs:
           port: 21
           local-dir: ./pos-api-new/
           server-dir: api/
-          security: loose
+          state-name: .ftp-deploy-sync-state.json
+          log-level: minimal
+          security: strict
+          timeout: 120000
           exclude: |
             **/.git*
             **/.git*/**
@@ -107,5 +125,25 @@ jobs:
             **/tests/**
             **/.env
             **/.env.*
-            **/storage/logs/**
+            **/bootstrap/cache/**
+            **/storage/**
             **/public/storage/**
+
+      - name: Deploy vendor when dependencies changed (incremental FTP sync)
+        if: steps.deps.outputs.changed == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          local-dir: ./pos-api-new/vendor/
+          server-dir: api/vendor/
+          state-name: .ftp-deploy-sync-state.json
+          log-level: minimal
+          security: strict
+          timeout: 120000
+          exclude: |
+            **/.git*
+            **/.git*/**

@@ -21,10 +21,10 @@ jobs:
         working-directory: pos-client
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -36,6 +36,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          # Origin only, e.g. https://pos.newgenideas.com (not pos.newgenideas.com, not .../api)
           VITE_APP_DEFAULT_PATH: ${{ secrets.VITE_APP_DEFAULT_PATH }}
 
   deploy:
@@ -44,10 +45,10 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -61,6 +62,7 @@ jobs:
         run: npm run build
         working-directory: pos-client
         env:
+          # Origin only, e.g. https://pos.newgenideas.com (not pos.newgenideas.com, not .../api)
           VITE_APP_DEFAULT_PATH: ${{ secrets.VITE_APP_DEFAULT_PATH }}
 
       - name: Deploy frontend to cPanel
@@ -73,7 +75,8 @@ jobs:
           port: 21
           local-dir: ./pos-client/dist/
           server-dir: /
-          security: loose
+          security: strict
+          timeout: 120000
           exclude: |
             **/.git*
             **/.git*/**
