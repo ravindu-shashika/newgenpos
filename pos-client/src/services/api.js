@@ -7,6 +7,34 @@ import { permissionsBypassed } from '../config/permissions';
 
 const COOKIE_OPTS = { path: '/' };
 
+const getHeaders = (extra = {}, { multipart = false } = {}) => {
+  const token = CookieService.get('access_token') || getToken();
+  const csrfToken = CookieService.get('XSRF-TOKEN');
+
+  const headers = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Authorization: token ? `Bearer ${token}` : null,
+    ...extra,
+  };
+
+  if (multipart) {
+    delete headers['Content-Type'];
+  }
+
+  if (csrfToken) {
+    headers['X-XSRF-TOKEN'] = csrfToken;
+  }
+
+  const branch = CookieService.get('user_branch_code');
+  const cluster = CookieService.get('cluster');
+  if (branch) headers.branch = branch;
+  if (cluster) headers.cluster = cluster;
+
+  return headers;
+};
+
+// Vite: import.meta.env (REACT_APP_* still supported via .env / vite.config define)
 const env = import.meta.env;
 const DEFAULT_PATH =
   env.VITE_APP_DEFAULT_PATH ||
@@ -14,47 +42,10 @@ const DEFAULT_PATH =
   (typeof process !== 'undefined' ? process.env.REACT_APP_DEFAULT_PATH : '') ||
   'http://192.168.1.3:8000';
 
-function normalizeUrl(raw) {
-  let base = String(raw).trim().replace(/\/$/, '');
+const normalizedBase = String(DEFAULT_PATH).trim().replace(/\/$/, '');
+export const defaultPath = `${normalizedBase}/api`;
 
-  if (!/^https?:\/\//i.test(base) && !base.startsWith('/')) {
-    const protocol =
-      typeof window !== 'undefined' && window.location?.protocol === 'http:'
-        ? 'http'
-        : 'https';
-    base = `${protocol}://${base}`;
-  }
-
-  return base.replace(/\/$/, '');
-}
-
-/** Laravel app root (cPanel: https://pos.newgenideas.com/api). */
-function resolveAppRoot() {
-  const base = normalizeUrl(DEFAULT_PATH);
-  if (/\/api\/api$/i.test(base)) {
-    return base.replace(/\/api$/i, '');
-  }
-  if (/\/api$/i.test(base)) {
-    return base;
-  }
-  return base;
-}
-
-/**
- * API route base for routes/api.php.
- * cPanel …/api + Laravel /api prefix → …/api/api/login
- */
-function resolveDefaultPath() {
-  const base = normalizeUrl(DEFAULT_PATH);
-  if (/\/api\/api$/i.test(base)) {
-    return base;
-  }
-  const appRoot = resolveAppRoot();
-  return `${appRoot}/api`;
-}
-
-const appRoot = resolveAppRoot();
-export const defaultPath = resolveDefaultPath();
+const appRoot = defaultPath.replace(/\/api$/, '');
 export const posApiPath = `${appRoot}/pos`;
 const imagePath = `${appRoot}/storage/images/`;
 const defApiPath = appRoot;
@@ -70,36 +61,6 @@ export function brandImageUrl(filename) {
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
   return `${appRoot}/images/brand/${value}`;
 }
-
-const getHeaders = (extra = {}, { multipart = false } = {}) => {
-  const token = getToken() || CookieService.get('access_token');
-  const csrfToken = CookieService.get('XSRF-TOKEN');
-
-  const headers = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    ...extra,
-  };
-
-  if (multipart) {
-    delete headers['Content-Type'];
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  if (csrfToken) {
-    headers['X-XSRF-TOKEN'] = csrfToken;
-  }
-
-  const branch = CookieService.get('user_branch_code');
-  const cluster = CookieService.get('cluster');
-  if (branch) headers.branch = branch;
-  if (cluster) headers.cluster = cluster;
-
-  return headers;
-};
 
 export function signOut() {
   authStore.clearAuth();
@@ -180,16 +141,38 @@ const api = {
   signOut,
 
   async get(url, config = {}) {
-    return axiosRequest('get', url, undefined, config);
+    try {
+      return await axiosRequest('get', url, undefined, config);
+    } catch (err) {
+      return { error: err };
+    }
   },
 
   post(url, data, config) {
     if (data === undefined) {
       return {
-        values: async (payload) => axiosRequest('post', url, payload, config),
+        values: async (payload) => {
+          try {
+            return await axiosRequest('post', url, payload, config);
+          } catch (err) {
+            return err;
+          }
+        },
       };
     }
     return axiosRequest('post', url, data, config);
+  },
+
+  update(url) {
+    return {
+      values: async (data) => {
+        try {
+          return await axiosRequest('post', url, data);
+        } catch (err) {
+          return { error: err.response?.data?.errors || err.message };
+        }
+      },
+    };
   },
 
   async postNew(url, data) {
@@ -199,7 +182,14 @@ const api = {
   put(url, data, config) {
     if (data === undefined) {
       return {
-        values: async (payload) => axiosRequest('put', url, payload, config),
+        values: async (payload, id) => {
+          try {
+            const path = id != null ? `${url}/${id}` : url;
+            return await axiosRequest('put', path, payload, config);
+          } catch (err) {
+            return { error: err.response?.data?.errors || err.message };
+          }
+        },
       };
     }
     return axiosRequest('put', url, data, config);
@@ -207,18 +197,22 @@ const api = {
 
   patch(url, id) {
     return {
-      values: async (data) => axiosRequest('patch', `${url}/${id}`, data),
-    };
-  },
-
-  update(url) {
-    return {
-      values: async (data) => axiosRequest('post', url, data),
+      values: async (data) => {
+        try {
+          return await axiosRequest('patch', `${url}/${id}`, data);
+        } catch (err) {
+          return { error: err.response?.data?.errors || err.message };
+        }
+      },
     };
   },
 
   async delete(url, config = {}) {
-    return axiosRequest('delete', url, undefined, config);
+    try {
+      return await axiosRequest('delete', url, undefined, config);
+    } catch (err) {
+      return { error: err.response?.data?.errors || err.message };
+    }
   },
 
   async postFile(url, data) {

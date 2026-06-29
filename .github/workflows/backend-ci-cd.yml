@@ -3,14 +3,12 @@ name: Backend CI/CD
 on:
   push:
     branches: [main, master]
-    paths:
-      - 'pos-api-new/**'
-      - '.github/workflows/backend-ci-cd.yml'
   pull_request:
     branches: [main, master]
     paths:
       - 'pos-api-new/**'
       - '.github/workflows/backend-ci-cd.yml'
+  workflow_dispatch:
 
 jobs:
   laravel-tests:
@@ -85,7 +83,7 @@ jobs:
   deploy:
     needs: laravel-tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
       - uses: actions/checkout@v4
