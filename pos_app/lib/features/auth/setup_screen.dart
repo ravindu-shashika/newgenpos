@@ -89,12 +89,12 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
             icon: Icons.phonelink_erase_outlined,
             maxWidth: 440,
             maxBodyHeight: 100,
-            body: const Text(
+            body: Text(
               'Terminal not active yet. Please contact admin.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: PosColors.textPrimary,
+                color: Theme.of(ctx).colorScheme.onSurface,
               ),
             ),
             primaryLabel: 'OK',
@@ -186,13 +186,13 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   size: 56,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   'Device registered',
                   style: Theme.of(context).textTheme.headlineMedium,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 if (session.terminalCode != null) ...[
                   Text(
                     'Terminal: ${session.terminalCode}'
@@ -200,10 +200,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                 ],
                 Center(child: _statusChip()),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   'After admin activates this terminal, download POS data. '
                   'Then sign in with your POS Access PIN from the downloaded users list.',
@@ -211,10 +211,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   textAlign: TextAlign.center,
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  SizedBox(height: 12),
+                  Text(_error!, style: TextStyle(color: Colors.red)),
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _loading ? null : _downloadAll,
                   icon: _loading

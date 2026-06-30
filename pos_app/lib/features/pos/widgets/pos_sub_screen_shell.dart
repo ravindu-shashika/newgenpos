@@ -27,13 +27,13 @@ class PosSubScreenShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: PosColors.pageBg,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -53,7 +53,7 @@ class PosSubScreenShell extends StatelessWidget {
                           title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                             color: PosColors.slate,
@@ -64,13 +64,13 @@ class PosSubScreenShell extends StatelessWidget {
                     ],
                   ),
                 ),
-                Container(height: 1, color: PosColors.border),
+                Container(height: 1, color: Theme.of(context).dividerColor),
               ],
             ),
           ),
           Expanded(
             child: Material(
-              color: PosColors.pageBg,
+              color: Theme.of(context).scaffoldBackgroundColor,
               child: body,
             ),
           ),

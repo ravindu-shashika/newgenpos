@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/logging/app_logger.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/pos_meta_provider.dart';
+import '../../core/providers/pos_ui_settings_provider.dart';
 import '../../core/branding/pos_branding.dart';
 import '../../core/theme/pos_theme.dart';
 import '../pos/models/pos_settings.dart';
@@ -37,8 +38,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _probing = false;
   late Timer _clockTimer;
   DateTime _now = DateTime.now();
-
-  static const _pageBg = PosColors.loginPageBg;
 
   @override
   void initState() {
@@ -226,13 +225,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         icon: Icons.lock_outline_rounded,
         maxWidth: 460,
         maxBodyHeight: 140,
-        body: const Text(
+        body: Text(
           'Each operator needs a POS Access PIN set in User List on the server. '
           'Sync POS data to this terminal, then enter your PIN to sign in.',
           style: TextStyle(
             fontSize: 14,
             height: 1.5,
-            color: PosColors.textPrimary,
+            color: Theme.of(ctx).colorScheme.onSurface,
           ),
         ),
         footer: PosProfessionalDialogFooter(
@@ -275,7 +274,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Color get _healthColor {
     if (!_hasLocalUsers) return PosColors.orange;
     if (_online) return PosColors.loginAccent;
-    return PosColors.textMuted;
+    return Theme.of(context).colorScheme.onSurfaceVariant;
   }
 
   @override
@@ -283,10 +282,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.watch(sessionRevisionProvider);
     final timeStr = '${DateFormat('HH:mm:ss').format(_now)} UTC';
 
+    final uiSettings = ref.watch(posUiSettingsProvider);
+
     return Theme(
-      data: buildLoginTheme(),
+      data: buildLoginTheme(uiSettings),
       child: Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -389,18 +390,18 @@ class _LoginTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: PosColors.loginHeaderBg,
+      color: context.posSurface.loginHeaderBg,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 10, 12, 10),
         child: Row(
           children: [
             Text(
               terminalLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
-                color: PosColors.loginText,
+                color: context.posSurface.loginText,
               ),
             ),
             const Spacer(),
@@ -410,39 +411,39 @@ class _LoginTopBar extends StatelessWidget {
                 Icon(
                   Icons.sensors,
                   size: 16,
-                  color: online ? PosColors.loginText : PosColors.loginTextMuted,
+                  color: online ? context.posSurface.loginText : context.posSurface.loginTextMuted,
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Text(
                   online ? 'ACTIVE_LINK' : 'OFFLINE',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.4,
-                    color: online ? PosColors.loginText : PosColors.loginTextMuted,
+                    color: online ? context.posSurface.loginText : context.posSurface.loginTextMuted,
                   ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: 14),
                 IconButton(
                   tooltip: 'Sync',
                   onPressed: probing ? null : onRefresh,
                   icon: probing
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: PosColors.loginText,
+                            color: context.posSurface.loginText,
                           ),
                         )
                       : const Icon(Icons.refresh, size: 20),
-                  color: PosColors.loginText,
+                  color: context.posSurface.loginText,
                 ),
                 IconButton(
                   tooltip: 'Terminal options',
                   onPressed: onPowerMenu,
                   icon: const Icon(Icons.power_settings_new, size: 20),
-                  color: PosColors.loginText,
+                  color: context.posSurface.loginText,
                 ),
               ],
             ),
@@ -483,7 +484,7 @@ class _LoginCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -504,39 +505,39 @@ class _LoginCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             alignment: Alignment.center,
-            child: const Text(
+            child: Text(
               '>_',
               style: TextStyle(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 fontFamily: 'Consolas',
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           Text(
             stationTitle,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
-              color: PosColors.loginText,
+              color: context.posSurface.loginText,
               height: 1.1,
             ),
           ),
-          const SizedBox(height: 6),
-          const Text(
+          SizedBox(height: 6),
+          Text(
             'OPERATIONAL TERMINAL',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.6,
-              color: PosColors.loginTextMuted,
+              color: context.posSurface.loginTextMuted,
             ),
           ),
-          const SizedBox(height: 28),
+          SizedBox(height: 28),
           _CredentialField(
             label: 'ACCESS PIN',
             controller: pinCtrl,
@@ -549,33 +550,33 @@ class _LoginCard extends StatelessWidget {
             onSubmitted: onLogin,
           ),
           if (!hasLocalUsers) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               'No users on device — run Full re-download from terminal menu.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
             ),
           ] else if (localUserCount > 0) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               '$localUserCount operator${localUserCount == 1 ? '' : 's'} registered locally',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           _LoginNumpad(onKey: onNumpad),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _LoginNumpadActions(onKey: onNumpad),
           if (error != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               error!,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: PosColors.red, fontSize: 13),
+              style: TextStyle(color: PosColors.red, fontSize: 13),
             ),
           ],
-          const SizedBox(height: 18),
+          SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             height: 52,
@@ -590,12 +591,12 @@ class _LoginCard extends StatelessWidget {
                 elevation: 0,
               ),
               child: loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.surface,
                       ),
                     )
                   : const Row(
@@ -615,12 +616,12 @@ class _LoginCard extends StatelessWidget {
                     ),
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           TextButton(
             onPressed: loading ? null : onForgot,
             style: TextButton.styleFrom(
               foregroundColor: PosColors.loginAccent,
-              textStyle: const TextStyle(
+              textStyle: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -665,14 +666,14 @@ class _CredentialField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
-            color: PosColors.loginTextMuted,
+            color: context.posSurface.loginTextMuted,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Material(
           color: _fieldFill,
           borderRadius: BorderRadius.circular(12),
@@ -686,7 +687,7 @@ class _CredentialField extends StatelessWidget {
                 border: Border.all(
                   color: active
                       ? PosColors.loginAccent
-                      : PosColors.loginFieldBorder,
+                      : context.posSurface.loginFieldBorder,
                   width: 1.5,
                 ),
               ),
@@ -702,15 +703,15 @@ class _CredentialField extends StatelessWidget {
                       onSubmitted: onSubmitted == null
                           ? null
                           : (_) => onSubmitted!(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: PosColors.loginText,
+                        color: context.posSurface.loginText,
                       ),
                       decoration: InputDecoration(
                         hintText: hint,
-                        hintStyle: const TextStyle(
-                          color: PosColors.loginTextMuted,
+                        hintStyle: TextStyle(
+                          color: context.posSurface.loginTextMuted,
                         ),
                         border: InputBorder.none,
                         isDense: true,
@@ -722,7 +723,7 @@ class _CredentialField extends StatelessWidget {
                   Icon(
                     trailing,
                     size: 20,
-                    color: PosColors.loginTextMuted,
+                    color: context.posSurface.loginTextMuted,
                   ),
                 ],
               ),
@@ -782,14 +783,14 @@ class _LoginNumpadActions extends StatelessWidget {
             onTap: () => onKey('CLEAR'),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(
           child: _NumpadKey(
             label: '0',
             onTap: () => onKey('0'),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(
           child: _NumpadKey(
             label: '⌫',
@@ -827,13 +828,13 @@ class _NumpadKey extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: PosColors.loginNumpadBorder),
+            border: Border.all(color: context.posSurface.loginNumpadBorder),
           ),
           child: label == '⌫'
-              ? const Icon(
+              ? Icon(
                   Icons.backspace_outlined,
                   size: 20,
-                  color: PosColors.loginText,
+                  color: context.posSurface.loginText,
                 )
               : Text(
                   label,
@@ -841,7 +842,7 @@ class _NumpadKey extends StatelessWidget {
                     fontSize: small ? 12 : 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: small ? 0.6 : 0,
-                    color: PosColors.loginText,
+                    color: context.posSurface.loginText,
                   ),
                 ),
         ),
@@ -868,9 +869,9 @@ class _StatusFooter extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: PosColors.loginPillBg,
+          color: context.posSurface.loginPillBg,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: PosColors.loginFieldBorder),
+          border: Border.all(color: context.posSurface.loginFieldBorder),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -883,13 +884,13 @@ class _StatusFooter extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Text(
               'SYSTEM HEALTH: ',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: PosColors.loginTextMuted,
+                color: context.posSurface.loginTextMuted,
                 letterSpacing: 0.3,
               ),
             ),
@@ -899,24 +900,24 @@ class _StatusFooter extends StatelessWidget {
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 color: healthColor == PosColors.loginAccent
-                    ? PosColors.loginText
+                    ? context.posSurface.loginText
                     : healthColor,
                 letterSpacing: 0.3,
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Container(
               width: 1,
               height: 14,
-              color: PosColors.loginNumpadBorder,
+              color: context.posSurface.loginNumpadBorder,
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Text(
               timeLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: PosColors.loginTextMuted,
+                color: context.posSurface.loginTextMuted,
                 letterSpacing: 0.4,
               ),
             ),
@@ -932,7 +933,7 @@ class _SecurityFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.fromLTRB(32, 0, 32, 16),
       child: Text(
         'Security level 4 active. All terminal interactions are monitored '
@@ -941,7 +942,7 @@ class _SecurityFooter extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           height: 1.4,
-          color: PosColors.loginTextMuted,
+          color: context.posSurface.loginTextMuted,
         ),
       ),
     );

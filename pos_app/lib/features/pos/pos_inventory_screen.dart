@@ -38,8 +38,6 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
   int _page = 0;
   static const _pageSize = 4;
 
-  static const _pageBg = Color(0xFFF8F9FC);
-
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -192,7 +190,7 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
 
               return RefreshIndicator(
                 onRefresh: _refresh,
-                color: PosColors.primary,
+                color: context.posBrand.primary,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(28, 20, 28, 88),
                   children: [
@@ -203,7 +201,7 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
                         _page = 0;
                       }),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     _SummaryRow(
                       overview: overview,
                       onSync: () =>
@@ -211,7 +209,7 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
                       onFullDownload: () =>
                           unawaited(_syncCatalog(PosDownloadMode.full)),
                     ),
-                    const SizedBox(height: 20),
+                    SizedBox(height: 20),
                     _InventoryTable(
                       rows: pageRows,
                       totalCount: filtered.length,
@@ -230,20 +228,20 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
 
     final fab = FloatingActionButton(
       onPressed: _showProductInfo,
-      backgroundColor: PosColors.primary,
-      child: const Icon(Icons.add_box_outlined, color: Colors.white),
+      backgroundColor: context.posBrand.primary,
+      child: Icon(Icons.add_box_outlined, color: Theme.of(context).colorScheme.surface),
     );
 
     if (widget.embedded) {
       return Scaffold(
-        backgroundColor: _pageBg,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         floatingActionButton: fab,
         body: content,
       );
     }
 
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       floatingActionButton: fab,
       body: content,
     );
@@ -268,18 +266,18 @@ class _InventorySearchBar extends StatelessWidget {
         hintText: 'Search product name or SKU...',
         prefixIcon: const Icon(Icons.search, size: 20),
         filled: true,
-        fillColor: PosColors.searchFill,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.searchBorder),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.searchBorder),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.primary, width: 1.5),
+          borderSide: BorderSide(color: context.posBrand.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 0),
         isDense: true,
@@ -319,7 +317,7 @@ class _SummaryRow extends StatelessWidget {
                 : '${overview.lowStockCount} need attention',
             valueColor: overview.lowStockCount > 0
                 ? const Color(0xFFE65100)
-                : PosColors.textPrimary,
+                : Theme.of(context).colorScheme.onSurface,
             progress: overview.totalItems <= 0
                 ? 0
                 : overview.inStockCount / overview.totalItems,
@@ -331,9 +329,9 @@ class _SummaryRow extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: cards[0]),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Expanded(child: cards[1]),
-              const SizedBox(width: 16),
+              SizedBox(width: 16),
               Expanded(flex: 2, child: cards[2]),
             ],
           );
@@ -341,9 +339,9 @@ class _SummaryRow extends StatelessWidget {
         return Column(
           children: [
             cards[0],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             cards[1],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             cards[2],
           ],
         );
@@ -372,46 +370,46 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Text(
             value,
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.w800,
-              color: valueColor ?? PosColors.textPrimary,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
               height: 1,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             subtext,
-            style: const TextStyle(fontSize: 12, color: PosColors.textMuted),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           if (progress != null) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progress!.clamp(0, 1),
                 minHeight: 6,
                 backgroundColor: const Color(0xFFE5E9F2),
-                color: PosColors.primary,
+                color: context.posBrand.primary,
               ),
             ),
           ],
@@ -435,30 +433,30 @@ class _AdminCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: PosColors.primary,
+        color: context.posBrand.primary,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Catalog Actions',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             'Sync stock levels from the server or re-download the full product catalog.',
             style: TextStyle(
               fontSize: 13,
-              color: Colors.white.withValues(alpha: 0.85),
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Wrap(
             spacing: 10,
             runSpacing: 8,
@@ -466,8 +464,8 @@ class _AdminCard extends StatelessWidget {
               FilledButton(
                 onPressed: onSync,
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: PosColors.primary,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  foregroundColor: context.posBrand.primary,
                 ),
                 child: const Text('Sync Inventory'),
               ),
@@ -475,7 +473,7 @@ class _AdminCard extends StatelessWidget {
                 onPressed: onFullDownload,
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Colors.white70),
+                  side: BorderSide(color: Colors.white70),
                 ),
                 child: const Text('Full Re-download'),
               ),
@@ -509,9 +507,9 @@ class _InventoryTable extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -519,7 +517,7 @@ class _InventoryTable extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
-              color: PosColors.primaryLight.withValues(alpha: 0.5),
+              color: context.posBrand.primaryLight.withValues(alpha: 0.5),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(11),
               ),
@@ -535,12 +533,12 @@ class _InventoryTable extends StatelessWidget {
             ),
           ),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(40),
               child: Text(
                 'No products synced yet. Run a full POS data download.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: PosColors.textMuted),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           else
@@ -553,9 +551,9 @@ class _InventoryTable extends StatelessWidget {
                   totalCount == 0
                       ? 'No products'
                       : 'Showing $start-$end of $totalCount Products',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: PosColors.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const Spacer(),
@@ -582,11 +580,11 @@ class _HeaderCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
-        color: PosColors.textMuted,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -601,8 +599,8 @@ class _InventoryTableRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: PosColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -615,16 +613,16 @@ class _InventoryTableRow extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: PosColors.productIconBg,
+                    color: context.posSurface.productIconBg,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     Icons.inventory_2_outlined,
                     size: 20,
-                    color: PosColors.primary.withValues(alpha: 0.7),
+                    color: context.posBrand.primary.withValues(alpha: 0.7),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -633,16 +631,16 @@ class _InventoryTableRow extends StatelessWidget {
                         row.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                         ),
                       ),
                       Text(
                         row.code,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: PosColors.textMuted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -655,12 +653,12 @@ class _InventoryTableRow extends StatelessWidget {
             flex: 2,
             child: Text(
               row.code,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ),
           Expanded(
             flex: 2,
-            child: Text(row.categoryName, style: const TextStyle(fontSize: 13)),
+            child: Text(row.categoryName, style: TextStyle(fontSize: 13)),
           ),
           Expanded(
             flex: 3,
@@ -674,7 +672,7 @@ class _InventoryTableRow extends StatelessWidget {
             flex: 2,
             child: Text(
               formatPosMoney(row.price),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
                 color: PosColors.blue,
@@ -710,8 +708,8 @@ class _StockStatus extends StatelessWidget {
         dotColor = const Color(0xFFFF9800);
         textColor = const Color(0xFFE65100);
       case InventoryStockStatus.outOfStock:
-        dotColor = PosColors.textMuted;
-        textColor = PosColors.textMuted;
+        dotColor = Theme.of(context).colorScheme.onSurfaceVariant;
+        textColor = Theme.of(context).colorScheme.onSurfaceVariant;
     }
 
     return Row(
@@ -721,7 +719,7 @@ class _StockStatus extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -736,9 +734,9 @@ class _StockStatus extends StatelessWidget {
               ),
               Text(
                 detail,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: PosColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -766,15 +764,17 @@ class _Pagination extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _pageBtn(
+          context,
           icon: Icons.chevron_left,
           onTap: page > 0 ? () => onChanged(page - 1) : null,
         ),
         for (var i = 0; i < pageCount && i < 5; i++) ...[
-          const SizedBox(width: 4),
-          _pageNum(i, active: i == page),
+          SizedBox(width: 4),
+          _pageNum(context, i, active: i == page),
         ],
-        const SizedBox(width: 4),
+        SizedBox(width: 4),
         _pageBtn(
+          context,
           icon: Icons.chevron_right,
           onTap: page < pageCount - 1 ? () => onChanged(page + 1) : null,
         ),
@@ -782,9 +782,9 @@ class _Pagination extends StatelessWidget {
     );
   }
 
-  Widget _pageNum(int index, {required bool active}) {
+  Widget _pageNum(BuildContext context, int index, {required bool active}) {
     return Material(
-      color: active ? PosColors.primary : Colors.transparent,
+      color: active ? context.posBrand.primary : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () => onChanged(index),
@@ -797,7 +797,7 @@ class _Pagination extends StatelessWidget {
               '${index + 1}',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: active ? Colors.white : PosColors.textMuted,
+                color: active ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -806,7 +806,7 @@ class _Pagination extends StatelessWidget {
     );
   }
 
-  Widget _pageBtn({required IconData icon, VoidCallback? onTap}) {
+  Widget _pageBtn(BuildContext context, {required IconData icon, VoidCallback? onTap}) {
     return Material(
       color: const Color(0xFFF3F4F6),
       borderRadius: BorderRadius.circular(6),
@@ -816,7 +816,7 @@ class _Pagination extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 32,
-          child: Icon(icon, size: 18, color: PosColors.textMuted),
+          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
     );

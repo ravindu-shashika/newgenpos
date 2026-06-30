@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:win32/win32.dart';
-
 import '../branding/pos_branding.dart';
-import '../theme/pos_theme.dart';
 import '../../features/pos/widgets/pos_professional_dialog.dart';
 import '../../features/pos/widgets/show_pos_dialog.dart';
 
@@ -29,9 +27,8 @@ class PosWindowService with WindowListener {
   /// Fires when kiosk mode toggles (custom title bar visibility).
   final ValueNotifier<bool> kioskActiveNotifier = ValueNotifier<bool>(false);
 
-  /// Legacy inset — kept at zero; custom title bar replaces top padding.
-  final ValueNotifier<EdgeInsets> contentPadding =
-      ValueNotifier<EdgeInsets>(EdgeInsets.zero);
+  /// Whether the window is currently maximized (Windows title bar).
+  final ValueNotifier<bool> maximizedNotifier = ValueNotifier<bool>(false);
 
   bool get isKioskActive => _kioskActive;
 
@@ -66,31 +63,27 @@ class PosWindowService with WindowListener {
     await ensureInitialized();
 
     await windowManager.setMinimizable(true);
-    // Keep maximizable on Windows so native minimize works from taskbar/custom bar.
-    await windowManager.setMaximizable(!Platform.isWindows);
+    await windowManager.setMaximizable(true);
     await windowManager.setClosable(false);
 
+    _kioskActive = true;
+    kioskActiveNotifier.value = true;
+
     if (Platform.isWindows) {
-      // Maximized (not exclusive fullscreen) so minimize works from the custom title bar.
       await windowManager.setTitleBarStyle(
         TitleBarStyle.hidden,
         windowButtonVisibility: false,
       );
       await windowManager.maximize();
+      await _syncMaximizedState();
     } else {
       await windowManager.setFullScreen(true);
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     }
-
-    contentPadding.value = EdgeInsets.zero;
-    _kioskActive = true;
-    kioskActiveNotifier.value = true;
   }
 
   Future<void> exitKioskMode() async {
     if (!isSupported || !_kioskActive) return;
-
-    contentPadding.value = EdgeInsets.zero;
 
     await windowManager.setMinimizable(true);
     await windowManager.setMaximizable(true);
@@ -129,10 +122,10 @@ class PosWindowService with WindowListener {
         maxBodyHeight: 80,
         body: Text(
           'Are you sure you want to exit ${PosBranding.appName}?',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             height: 1.5,
-            color: PosColors.textPrimary,
+            color: Theme.of(dialogContext).colorScheme.onSurface,
           ),
         ),
         footer: PosProfessionalDialogFooter(
@@ -154,6 +147,24 @@ class PosWindowService with WindowListener {
     if (!ctx.mounted) return;
     if (!await confirmClose(ctx)) return;
     await closeApp();
+  }
+
+  Future<void> toggleMaximize() async {
+    if (!isSupported) return;
+    await ensureInitialized();
+    if (await windowManager.isMaximized()) {
+      await windowManager.unmaximize();
+    } else {
+      await windowManager.maximize();
+    }
+    await _syncMaximizedState();
+  }
+
+  Future<void> _syncMaximizedState() async {
+    if (!isSupported) return;
+    try {
+      maximizedNotifier.value = await windowManager.isMaximized();
+    } catch (_) {}
   }
 
   Future<void> minimize() async {
@@ -254,6 +265,7 @@ class PosWindowService with WindowListener {
       if (!await windowManager.isMaximized()) {
         await windowManager.maximize();
       }
+      await _syncMaximizedState();
     } else {
       await windowManager.setFullScreen(true);
       await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
@@ -263,6 +275,16 @@ class PosWindowService with WindowListener {
   @override
   void onWindowMinimize() {
     _windowMinimized = true;
+  }
+
+  @override
+  void onWindowMaximize() {
+    maximizedNotifier.value = true;
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    maximizedNotifier.value = false;
   }
 
   @override

@@ -170,14 +170,14 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                 Expanded(
                   child: TextField(
                     controller: _refCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Sale reference',
                       hintText: 'posr20260604153045',
                     ),
                     onSubmitted: (_) => _loadSale(),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 FilledButton(
                   onPressed: _busy ? null : _loadSale,
                   child: const Text('Find'),
@@ -190,16 +190,16 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
               child: Text(
                 _error!,
-                style: const TextStyle(color: PosColors.red),
+                style: TextStyle(color: PosColors.red),
               ),
             ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Text(
               'Looks up sales saved on this device only. No cash refund — '
               'credit can be settled on the next sale. Damaged items are not '
               'added back to stock.',
-              style: TextStyle(fontSize: 12, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),
           Expanded(
@@ -222,15 +222,15 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                               children: [
                                 Text(
                                   line.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 Text(
                                   line.code,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: PosColors.textMuted,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -240,7 +240,7 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                             flex: 2,
                             child: Text(
                               'Max ${line.returnableQty.toStringAsFixed(0)}',
-                              style: const TextStyle(fontSize: 12),
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
                           Expanded(
@@ -257,7 +257,7 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                                 ),
                                 Text(
                                   qty.toStringAsFixed(0),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),

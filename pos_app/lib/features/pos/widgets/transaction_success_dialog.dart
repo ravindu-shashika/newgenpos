@@ -11,6 +11,7 @@ Future<void> showTransactionSuccessDialog({
   required String transactionNo,
   required String refId,
   required double changeDue,
+  double? cashReceived,
   Future<void> Function()? onPrintReceipt,
 }) {
   return showPosDialog<void>(
@@ -20,6 +21,7 @@ Future<void> showTransactionSuccessDialog({
       transactionNo: transactionNo,
       refId: refId,
       changeDue: changeDue,
+      cashReceived: cashReceived,
       onPrintReceipt: onPrintReceipt,
     ),
   );
@@ -30,12 +32,14 @@ class _TransactionSuccessDialog extends StatelessWidget {
     required this.transactionNo,
     required this.refId,
     required this.changeDue,
+    this.cashReceived,
     this.onPrintReceipt,
   });
 
   final String transactionNo;
   final String refId;
   final double changeDue;
+  final double? cashReceived;
   final Future<void> Function()? onPrintReceipt;
 
   String get _displayTxnNo {
@@ -44,14 +48,18 @@ class _TransactionSuccessDialog extends StatelessWidget {
     return raw.startsWith('#') ? raw : '#$raw';
   }
 
+  bool get _hasChange => changeDue > 0.009;
+
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
+
     return PosProfessionalDialogShell(
       title: 'Transaction complete',
       subtitle: 'Sale recorded successfully',
       icon: Icons.check_circle_outline_rounded,
       maxWidth: 480,
-      maxBodyHeight: 320,
+      maxBodyHeight: 360,
       onClose: () => Navigator.pop(context),
       footer: Row(
         children: [
@@ -66,7 +74,7 @@ class _TransactionSuccessDialog extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: _SuccessActionButton(
               icon: Icons.add,
@@ -83,69 +91,90 @@ class _TransactionSuccessDialog extends StatelessWidget {
           RichText(
             textAlign: TextAlign.center,
             text: TextSpan(
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: PosColors.textMuted,
-                height: 1.4,
-              ),
+              style: s.bodyMuted.copyWith(fontSize: 15, height: 1.4),
               children: [
                 const TextSpan(text: 'Transaction No: '),
                 TextSpan(
                   text: _displayTxnNo,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.textPrimary,
-                  ),
+                  style: s.body.copyWith(fontWeight: FontWeight.w800),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             'REF ID: $refId',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              color: PosColors.textMuted,
-              height: 1.4,
-            ),
+            style: s.caption.copyWith(fontSize: 13, height: 1.4),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 22),
-            child: Divider(height: 1, color: PosColors.border),
+            child: Divider(height: 1, color: s.border),
           ),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             decoration: BoxDecoration(
-              color: PosColors.primaryLight,
+              color: _hasChange
+                  ? s.success.withValues(alpha: 0.12)
+                  : s.accent.withValues(alpha: context.isPosDark ? 0.14 : 0.1),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: PosColors.primary.withValues(alpha: 0.1),
+                color: _hasChange
+                    ? s.success.withValues(alpha: 0.45)
+                    : s.accent.withValues(alpha: 0.35),
+                width: _hasChange ? 2 : 1,
               ),
             ),
             child: Column(
               children: [
-                const Text(
-                  'CHANGE DUE',
+                Text(
+                  _hasChange ? 'GIVE CUSTOMER' : 'CHANGE DUE',
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                    color: PosColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: _hasChange ? s.success : s.accent,
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: 10),
                 Text(
                   formatPosMoney(changeDue),
-                  style: const TextStyle(
-                    fontSize: 42,
+                  style: TextStyle(
+                    fontSize: 44,
                     fontWeight: FontWeight.w800,
-                    color: PosColors.primary,
+                    color: s.text,
                     height: 1,
                   ),
                 ),
+                if (_hasChange) ...[
+                  SizedBox(height: 10),
+                  Text(
+                    'Return this amount to the customer',
+                    textAlign: TextAlign.center,
+                    style: s.bodyMuted.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (cashReceived != null && cashReceived! > 0.009) ...[
+                    SizedBox(height: 6),
+                    Text(
+                      'Cash received ${formatPosMoney(cashReceived!)}',
+                      textAlign: TextAlign.center,
+                      style: s.caption.copyWith(fontSize: 12),
+                    ),
+                  ],
+                ] else ...[
+                  SizedBox(height: 8),
+                  Text(
+                    'No change required',
+                    style: s.bodyMuted.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -170,9 +199,10 @@ class _SuccessActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = filled ? Colors.white : PosColors.textPrimary;
-    final bg = filled ? PosColors.primary : Colors.white;
-    final border = filled ? PosColors.primary : PosColors.border;
+    final s = context.posStyles;
+    final fg = filled ? s.onBrand : s.text;
+    final bg = filled ? context.posBrand.buttonPrimary : s.secondaryBtnBg;
+    final border = filled ? context.posBrand.buttonPrimary : s.border;
 
     return Material(
       color: bg,
@@ -190,7 +220,7 @@ class _SuccessActionButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 22, color: fg),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
                 label,
                 style: TextStyle(

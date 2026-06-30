@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../core/theme/pos_theme.dart';
 import 'pos_toast.dart';
 import '../pos_currency.dart';
 import '../pos_helpers.dart';
+import 'discount_entry_dialog.dart';
 import 'finalize_sale_dialog.dart';
+import 'payment_processing_layout.dart';
 import 'pos_amount_numpad.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
@@ -19,36 +21,47 @@ class PaymentOrderLine {
   final double amount;
 }
 
-class _SplitPaymentEntry {
-  _SplitPaymentEntry({
-    required this.id,
-    required this.paidById,
-    required this.label,
-    required this.subtitle,
-    required this.amount,
-    required this.icon,
-    this.cardType,
-    this.lastFour,
-  });
+enum _MixFieldKind { amount, cardDigits, voucherCode, discount }
 
-  final String id;
-  final String paidById;
-  final String label;
-  final String subtitle;
-  final double amount;
-  final IconData icon;
-  final String? cardType;
-  final String? lastFour;
+class _MixPaymentLineState {
+  _MixPaymentLineState({required this.method})
+      : amountCtrl = TextEditingController(),
+        cardDigitsCtrl = TextEditingController(),
+        voucherCodeCtrl = TextEditingController();
 
-  String get listTitle {
-    if (paidById == '3' && lastFour != null && lastFour!.isNotEmpty) {
-      return '$label ending $lastFour';
+  final PosPaymentMethod method;
+  final TextEditingController amountCtrl;
+  final TextEditingController cardDigitsCtrl;
+  final TextEditingController voucherCodeCtrl;
+  String cardType = 'Visa';
+
+  bool get isCard => method.key == 'card' || method.id == '3';
+  bool get isVoucher =>
+      method.key == 'gift_card' || method.id == '2' || method.key == 'voucher';
+
+  String get rowLabel {
+    switch (method.key) {
+      case 'cash':
+        return 'CASH';
+      case 'card':
+        return 'CARD';
+      case 'gift_card':
+        return 'VOUCHER';
+      case 'cheque':
+        return 'CHEQUE';
+      case 'deposit':
+        return 'DEPOSIT';
+      default:
+        return method.label.toUpperCase();
     }
-    return label;
+  }
+
+  void dispose() {
+    amountCtrl.dispose();
+    cardDigitsCtrl.dispose();
+    voucherCodeCtrl.dispose();
   }
 }
-
-enum _SplitInputMode { cash, card }
 
 class PaymentCarouselResult {
   const PaymentCarouselResult({
@@ -103,8 +116,8 @@ Future<PaymentCarouselResult?> showPaymentCarouselDialog({
   required List<LocalCouponRow> coupons,
   String initialSaleNote = '',
   String initialStaffNote = '',
-  bool showPrintInvoiceOption = false,
-  bool defaultPrintInvoice = false,
+  bool showPrintInvoiceOption = true,
+  bool defaultPrintInvoice = true,
   bool showWhatsappOption = false,
   bool defaultSendWhatsapp = false,
   List<PosPaymentMethod> mixMethods = const [],
@@ -208,10 +221,6 @@ class _PaymentCarouselDialog extends StatefulWidget {
 }
 
 class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
-  static const _panelHeight = 420.0;
-  static const _splitPanelHeight = 540.0;
-  static const _splitNumpadHeight = 196.0;
-
   late final List<_CheckoutTab> _tabs;
   late int _selectedIndex;
   bool _busy = false;
@@ -223,7 +232,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   late double _couponDiscount;
 
   late final TextEditingController _cashReceivedCtrl;
-  late final TextEditingController _mixAmountCtrl;
+  late final TextEditingController _discountCtrl;
   late final TextEditingController _cardNumberCtrl;
   late final TextEditingController _cardHolderCtrl;
   late final TextEditingController _chequeNoCtrl;
@@ -231,9 +240,10 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   String _cardType = 'Visa';
   bool _printInvoice = false;
   bool _sendWhatsapp = false;
-  final List<_SplitPaymentEntry> _splitPayments = [];
-  int _splitPaymentSeq = 0;
-  _SplitInputMode _splitInputMode = _SplitInputMode.cash;
+  late final List<_MixPaymentLineState> _mixLines;
+  _MixPaymentLineState? _activeMixLine;
+  _MixFieldKind _activeMixField = _MixFieldKind.amount;
+  bool _cashFieldActive = true;
 
   List<_CheckoutTab> _buildOrderedTabs() {
     final byKey = <String, PosPaymentMethod>{
@@ -267,8 +277,8 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   }
 
   String _displayLabel(PosPaymentMethod method) {
-    if (method.key == 'mix') return 'Split Payment';
-    if (method.key == 'card') return 'Credit/Debit Card';
+    if (method.key == 'mix') return 'Mixed';
+    if (method.key == 'card') return 'Credit / Debit Card';
     if (method.key == 'gift_card') return 'Gift Card';
     return method.label;
   }
@@ -288,17 +298,160 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     _couponId = widget.initialCouponId;
     _couponDiscount = widget.initialCouponDiscount;
 
-    final total = '0';
-    _cashReceivedCtrl = TextEditingController(text: total);
-    _mixAmountCtrl = TextEditingController(text: total);
+    _cashReceivedCtrl = TextEditingController(text: '0');
+    _discountCtrl = TextEditingController(
+      text: _orderDiscountValue == _orderDiscountValue.roundToDouble()
+          ? _orderDiscountValue.toStringAsFixed(0)
+          : _orderDiscountValue.toStringAsFixed(2),
+    );
     _cardNumberCtrl = TextEditingController();
     _cardHolderCtrl = TextEditingController();
     _chequeNoCtrl = TextEditingController();
     _saleNoteCtrl = TextEditingController(text: widget.initialSaleNote);
     _printInvoice = widget.defaultPrintInvoice;
     _sendWhatsapp = widget.defaultSendWhatsapp;
+    _mixLines = _buildMixLines();
+    _activeMixLine = _mixLines.isNotEmpty ? _mixLines.first : null;
     _cashReceivedCtrl.addListener(() => setState(() {}));
-    _mixAmountCtrl.addListener(() => setState(() {}));
+    _discountCtrl.addListener(_onDiscountChanged);
+    for (final line in _mixLines) {
+      line.amountCtrl.addListener(() => setState(() {}));
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final due = _grandTotal;
+      final text = due == due.roundToDouble()
+          ? due.toStringAsFixed(0)
+          : due.toStringAsFixed(2);
+      _cashReceivedCtrl.text = text;
+    });
+  }
+
+  List<_MixPaymentLineState> _buildMixLines() {
+    final source = widget.mixMethods.isNotEmpty
+        ? widget.mixMethods
+        : widget.methods;
+    final lines = <_MixPaymentLineState>[];
+    final seen = <String>{};
+    for (final method in source) {
+      if (method.key == 'mix' || method.key == 'credit') continue;
+      if (isExcludedPaymentMethod(method)) continue;
+      if (!seen.add(method.key)) continue;
+      lines.add(_MixPaymentLineState(method: method));
+    }
+    if (lines.isEmpty) {
+      for (final key in ['cash', 'card', 'gift_card']) {
+        final method = kPosPaymentMethods[key];
+        if (method != null) lines.add(_MixPaymentLineState(method: method));
+      }
+    }
+    return lines;
+  }
+
+  void _onDiscountChanged() {
+    _orderDiscountType = 'Flat';
+    _orderDiscountValue = double.tryParse(_discountCtrl.text.trim()) ?? 0;
+    setState(() {});
+  }
+
+  String _formatDiscountValue(double v) {
+    if (v == 0) return '0';
+    return v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+  }
+
+  void _syncDiscountCtrl() {
+    _discountCtrl.text = _formatDiscountValue(_orderDiscountValue);
+  }
+
+  void _syncCashToGrandTotal() {
+    final due = _grandTotal;
+    final text = due % 1 == 0 ? due.toStringAsFixed(0) : due.toStringAsFixed(2);
+    _cashReceivedCtrl.text = text;
+    _cashReceivedCtrl.selection = TextSelection.collapsed(offset: text.length);
+  }
+
+  String get _discountAmountText {
+    final amount = _orderDiscountType == 'Percentage'
+        ? widget.subtotal * (_orderDiscountValue / 100)
+        : _orderDiscountValue;
+    if (amount <= 0) return formatPosMoney(0);
+    return '-${formatPosMoney(amount)}';
+  }
+
+  String? get _couponDiscountText {
+    if (_couponDiscount <= 0) return null;
+    return '-${formatPosMoney(_couponDiscount)}';
+  }
+
+  Future<void> _openDiscountCouponModal({int initialTabIndex = 0}) async {
+    final result = await showDiscountEntryDialog(
+      context: context,
+      subtotal: widget.subtotal,
+      displaySubtotal: widget.subtotal + widget.lineTax,
+      grandTotalBeforeCoupon: _grandTotalBeforeCoupon,
+      initialDiscountType: _orderDiscountType,
+      initialDiscountValue: _orderDiscountValue,
+      coupons: widget.coupons,
+      initialCouponCode: _couponCode ?? '',
+      initialTabIndex: initialTabIndex,
+    );
+    if (result == null || !mounted) return;
+
+    setState(() {
+      _orderDiscountType = result.orderDiscountType;
+      _orderDiscountValue = result.orderDiscountValue;
+      _syncDiscountCtrl();
+
+      if (result.couponCleared) {
+        _couponCode = null;
+        _couponId = null;
+        _couponDiscount = 0;
+      } else if (result.couponCode != null && result.couponCode!.isNotEmpty) {
+        _couponCode = result.couponCode;
+        _couponId = result.couponId;
+        _couponDiscount = result.couponDiscount;
+      }
+
+      _syncCashToGrandTotal();
+      _cashFieldActive = true;
+      _activeMixField = _MixFieldKind.amount;
+    });
+  }
+
+  void _onDiscountTap() => _openDiscountCouponModal(initialTabIndex: 0);
+
+  void _onCouponTap() => _openDiscountCouponModal(initialTabIndex: 1);
+
+  TextEditingController get _mixNumpadCtrl {
+    if (_activeMixField == _MixFieldKind.discount) return _discountCtrl;
+    final line = _activeMixLine ?? (_mixLines.isNotEmpty ? _mixLines.first : null);
+    if (line == null) return _discountCtrl;
+    switch (_activeMixField) {
+      case _MixFieldKind.cardDigits:
+        return line.cardDigitsCtrl;
+      case _MixFieldKind.voucherCode:
+        return line.voucherCodeCtrl;
+      case _MixFieldKind.amount:
+        return line.amountCtrl;
+      case _MixFieldKind.discount:
+        return _discountCtrl;
+    }
+  }
+
+  bool get _mixNumpadAllowDecimal =>
+      _activeMixField == _MixFieldKind.amount ||
+      _activeMixField == _MixFieldKind.discount;
+
+  int? get _mixNumpadMaxLength {
+    if (_activeMixField == _MixFieldKind.cardDigits) return 4;
+    return null;
+  }
+
+  void _focusMixField(_MixPaymentLineState line, _MixFieldKind field) {
+    setState(() {
+      _activeMixLine = line;
+      _activeMixField = field;
+    });
   }
 
   int _resolveInitialIndex() {
@@ -309,11 +462,14 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   @override
   void dispose() {
     _cashReceivedCtrl.dispose();
-    _mixAmountCtrl.dispose();
+    _discountCtrl.dispose();
     _cardNumberCtrl.dispose();
     _cardHolderCtrl.dispose();
     _chequeNoCtrl.dispose();
     _saleNoteCtrl.dispose();
+    for (final line in _mixLines) {
+      line.dispose();
+    }
     super.dispose();
   }
 
@@ -360,6 +516,29 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
 
   void _applyExactChange() => _setTendered(_grandTotal);
 
+  void _clearCashReceived() {
+    _cashReceivedCtrl.clear();
+    _onAmountChanged();
+  }
+
+  String? get _paymentStatusHint {
+    if (_canCompletePayment || _busy) return null;
+    final key = _currentTab.key;
+    if (key == 'cash' || _currentTab.method?.id == '1') {
+      final short = _grandTotal - _cashReceived;
+      if (short > 0.009) {
+        return 'Need ${formatPosMoney(short)} more to complete';
+      }
+    }
+    if (key == 'mix' && !_mixReady) {
+      if (_mixOverpay > 0.009) {
+        return 'Split is over by ${formatPosMoney(_mixOverpay)}';
+      }
+      return 'Allocate ${formatPosMoney(_mixRemaining)} across methods';
+    }
+    return null;
+  }
+
   Widget _quickCashCell(int index, void Function(double) onTap) {
     if (index >= kPosPaymentQuickCashAmounts.length) {
       return const SizedBox.shrink();
@@ -372,11 +551,11 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   }
 
   Widget _buildQuickCashButtons(void Function(double) onTap) {
-    const labelStyle = TextStyle(
+    final labelStyle = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.8,
-      color: PosColors.textMuted,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
 
     const amounts = kPosPaymentQuickCashAmounts;
@@ -385,8 +564,8 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('QUICK DENOMINATIONS', style: labelStyle),
-        const SizedBox(height: 10),
+        Text('QUICK DENOMINATIONS', style: labelStyle),
+        SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
             const gap = 8.0;
@@ -440,98 +619,45 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     );
   }
 
-  double get _splitTotalPaying =>
-      _splitPayments.fold<double>(0, (sum, entry) => sum + entry.amount);
-
-  double get _splitRemaining =>
-      (_grandTotal - _splitTotalPaying).clamp(0, double.infinity).toDouble();
-
-  bool get _splitReady =>
-      _splitPayments.isNotEmpty && _splitRemaining <= 0.009;
-
-  void _syncMixAmountToRemaining() {
-    final text = _splitRemaining.toStringAsFixed(2);
-    _mixAmountCtrl.text = text;
-    _mixAmountCtrl.selection = TextSelection.collapsed(offset: text.length);
+  double get _mixAllocatedTotal {
+    var sum = 0.0;
+    for (final line in _mixLines) {
+      sum += double.tryParse(line.amountCtrl.text.trim()) ?? 0;
+    }
+    return sum;
   }
 
-  void _setMixAmount(double amount) {
-    final text =
-        amount % 1 == 0 ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
-    _mixAmountCtrl.text = text;
-    _mixAmountCtrl.selection = TextSelection.collapsed(offset: text.length);
+  double get _mixRemaining =>
+      (_grandTotal - _mixAllocatedTotal).clamp(0, double.infinity).toDouble();
+
+  double get _mixOverpay =>
+      (_mixAllocatedTotal - _grandTotal).clamp(0, double.infinity).toDouble();
+
+  bool get _mixReady =>
+      _mixAllocatedTotal > 0 &&
+      _mixRemaining <= 0.009 &&
+      _mixOverpay <= 0.009;
+
+  void _clearMixLines() {
+    for (final line in _mixLines) {
+      line.amountCtrl.clear();
+      line.cardDigitsCtrl.clear();
+      line.voucherCodeCtrl.clear();
+    }
     setState(() {});
   }
 
-  double get _mixApplyAmount =>
-      double.tryParse(_mixAmountCtrl.text.trim()) ?? 0;
-
-  void _addSplitPayment({required bool isCash}) {
-    final amount = _mixApplyAmount;
-    if (amount <= 0) {
-      _snack('Enter an amount to apply');
-      return;
-    }
-    if (amount > _splitRemaining + 0.009) {
-      _snack('Amount exceeds remaining balance');
-      return;
-    }
-
-    if (isCash) {
-      setState(() {
-        _splitPayments.add(
-          _SplitPaymentEntry(
-            id: '${_splitPaymentSeq++}',
-            paidById: '1',
-            label: 'Cash',
-            subtitle: 'Received',
-            amount: amount,
-            icon: Icons.payments_outlined,
-          ),
-        );
-        _syncMixAmountToRemaining();
-      });
-      return;
-    }
-
-    final lastFour = _cardNumberCtrl.text.trim();
-    setState(() {
-      _splitPayments.add(
-        _SplitPaymentEntry(
-          id: '${_splitPaymentSeq++}',
-          paidById: '3',
-          label: _cardType,
-          subtitle: 'Approved',
-          amount: amount,
-          icon: Icons.credit_card_outlined,
-          cardType: _cardType,
-          lastFour: lastFour.isEmpty ? null : lastFour,
-        ),
-      );
-      _cardNumberCtrl.clear();
-      _syncMixAmountToRemaining();
-    });
-  }
-
-  void _resetSplitCardForm() {
-    setState(() {
-      _cardNumberCtrl.clear();
-      _syncMixAmountToRemaining();
-    });
-  }
-
-  String get _mixAmountLabel {
-    final amount = _mixApplyAmount;
-    return _splitInputMode == _SplitInputMode.cash
-        ? 'Apply ${formatPosMoney(amount)} Cash →'
-        : 'Save Card to Order';
-  }
-
-  void _removeSplitPayment(String id) {
-    setState(() {
-      _splitPayments.removeWhere((entry) => entry.id == id);
-      _syncMixAmountToRemaining();
-    });
+  void _fillMixRemaining(_MixPaymentLineState line) {
+    final current = double.tryParse(line.amountCtrl.text.trim()) ?? 0;
+    final others = _mixAllocatedTotal - current;
+    final fill = (_grandTotal - others).clamp(0, double.infinity);
+    final text = fill % 1 == 0
+        ? fill.toStringAsFixed(0)
+        : fill.toStringAsFixed(2);
+    line.amountCtrl.text = text;
+    line.amountCtrl.selection = TextSelection.collapsed(offset: text.length);
+    _focusMixField(line, _MixFieldKind.amount);
+    setState(() {});
   }
 
   PaymentCarouselResult _paymentResult({
@@ -557,27 +683,37 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     final method = _currentTab.method!;
 
     if (method.key == 'mix') {
-      if (!_splitReady) {
-        _snack('Add payments until remaining balance is ${formatPosMoney(0)}');
+      if (!_mixReady) {
+        if (_mixOverpay > 0.009) {
+          _snack('Split total exceeds amount due');
+        } else {
+          _snack(
+            'Allocate ${formatPosMoney(_grandTotal)} across payment methods',
+          );
+        }
         return;
       }
 
       final mixPayments = normalizeMixPayments([
-        for (final entry in _splitPayments)
-          MixPaymentLine(
-            paidById: entry.paidById,
-            payingAmount: entry.amount,
-            cashReceived: entry.paidById == '1' ? entry.amount : entry.amount,
-          ),
+        for (final line in _mixLines)
+          if ((double.tryParse(line.amountCtrl.text.trim()) ?? 0) > 0)
+            MixPaymentLine(
+              paidById: line.method.id,
+              payingAmount: double.parse(line.amountCtrl.text.trim()),
+              cashReceived: line.method.id == '1'
+                  ? double.parse(line.amountCtrl.text.trim())
+                  : double.parse(line.amountCtrl.text.trim()),
+            ),
       ]);
       final totals = computeMixPaymentTotals(
         lines: mixPayments,
         grandTotal: _grandTotal,
       );
-      _SplitPaymentEntry? firstCard;
-      for (final entry in _splitPayments) {
-        if (entry.paidById == '3') {
-          firstCard = entry;
+      _MixPaymentLineState? firstCard;
+      for (final line in _mixLines) {
+        if (line.isCard &&
+            (double.tryParse(line.amountCtrl.text.trim()) ?? 0) > 0) {
+          firstCard = line;
           break;
         }
       }
@@ -592,7 +728,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             mixPayments: mixPayments,
             saleNote: _saleNoteCtrl.text.trim(),
             staffNote: widget.initialStaffNote,
-            cardNumber: firstCard?.lastFour ?? '',
+            cardNumber: firstCard?.cardDigitsCtrl.text.trim() ?? '',
             cardHolderName: '',
             cardType: firstCard?.cardType ?? '',
             chequeNo: '',
@@ -635,9 +771,184 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     );
   }
 
-  double get _taxTotal => widget.lineTax + widget.orderTax;
-
   String get _money => formatPosMoney(_grandTotal);
+
+  String get _invoiceLabel =>
+      widget.orderLines.isEmpty
+          ? 'Invoice'
+          : 'Invoice: ${widget.orderLines.length}';
+
+  bool get _canCompletePayment {
+    final key = _currentTab.key;
+    if (key == 'mix') return _mixReady;
+    if (key == 'cash' || _currentTab.method?.id == '1') {
+      return _cashReceived >= _grandTotal - 0.009;
+    }
+    return true;
+  }
+
+  TextEditingController get _activeNumpadCtrl {
+    if (_currentTab.key == 'mix') return _mixNumpadCtrl;
+    if (_currentTab.key == 'card' || _currentTab.method?.id == '3') {
+      return _cardNumberCtrl;
+    }
+    return _cashReceivedCtrl;
+  }
+
+  bool get _numpadAllowDecimal {
+    if (_currentTab.key == 'mix') return _mixNumpadAllowDecimal;
+    if (_currentTab.key == 'card' || _currentTab.method?.id == '3') {
+      return false;
+    }
+    return true;
+  }
+
+  int? get _numpadMaxLength {
+    if (_currentTab.key == 'mix') return _mixNumpadMaxLength;
+    if (_currentTab.key == 'card' || _currentTab.method?.id == '3') return 4;
+    return null;
+  }
+
+  Widget _buildBillAdjustments() {
+    return PaymentBillAdjustments(
+      discountAmountText: _discountAmountText,
+      onDiscountTap: _onDiscountTap,
+      onCouponTap: _onCouponTap,
+      couponCode: _couponCode,
+      couponDiscountText: _couponDiscountText,
+      onReturnCreditTap: widget.onReturnCreditTap,
+    );
+  }
+
+  Widget _buildPaymentRightRail({required bool showAdjustments}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showAdjustments) ...[
+          _buildBillAdjustments(),
+          const SizedBox(height: 10),
+        ],
+        Expanded(
+          child: PaymentKeypadColumn(
+            controller: _activeNumpadCtrl,
+            onChanged: () => setState(() {}),
+            allowDecimal: _numpadAllowDecimal,
+            maxLength: _numpadMaxLength,
+            clearButtonLabel: 'Clear',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentBody() {
+    final isCash = _currentTab.key == 'cash' || _currentTab.method?.id == '1';
+    final isCard = _currentTab.key == 'card' || _currentTab.method?.id == '3';
+    final isMix = _currentTab.key == 'mix';
+
+    if (isMix) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 2, child: _buildSplitPanel()),
+          const SizedBox(width: 16),
+          Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
+        ],
+      );
+    }
+
+    if (isCash) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PaymentCashLiveSummary(
+                  tenderedText: formatPosMoney(_cashReceived),
+                  changeText: formatPosMoney(_cashChange),
+                  isReady: _cashReceived >= _grandTotal - 0.009,
+                ),
+                const SizedBox(height: 12),
+                PaymentCashQuickActions(
+                  exactAmountText: _money,
+                  onExactAmount: _applyExactChange,
+                  onClear: _clearCashReceived,
+                ),
+                const SizedBox(height: 12),
+                PaymentQuickCashGrid(
+                  onAmount: _setTendered,
+                  onBackspace: () {
+                    final t = _cashReceivedCtrl.text;
+                    if (t.isEmpty) return;
+                    _cashReceivedCtrl.text = t.substring(0, t.length - 1);
+                    _onAmountChanged();
+                  },
+                ),
+                const SizedBox(height: 12),
+                PaymentCashReceivedField(
+                  controller: _cashReceivedCtrl,
+                  active: _cashFieldActive,
+                  onTap: () => setState(() {
+                    _cashFieldActive = true;
+                    _activeMixField = _MixFieldKind.amount;
+                  }),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
+        ],
+      );
+    }
+
+    if (isCard) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PaymentAmountBanner(
+                  label: 'AMOUNT TO CHARGE',
+                  amountText: _money,
+                ),
+                const SizedBox(height: 14),
+                PaymentCardDetailsFields(
+                  cardType: _cardType,
+                  onCardTypeChanged: (v) => setState(() => _cardType = v),
+                  digitsController: _cardNumberCtrl,
+                  digitsActive: _cashFieldActive,
+                  onDigitsTap: () => setState(() => _cashFieldActive = true),
+                ),
+                const Spacer(),
+                const PaymentReadyBanner(
+                  message: 'Tap the digits field, then enter on the keypad.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 2, child: _buildLeftPanel(_currentTab.method!)),
+        const SizedBox(width: 16),
+        Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
+      ],
+    );
+  }
+
 
   void _snack(String msg) {
     PosToast.show(context, msg, type: PosToastType.info);
@@ -652,12 +963,12 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
         icon: Icons.payments_outlined,
         maxWidth: 440,
         maxBodyHeight: 80,
-        body: const Text(
+        body: Text(
           'No payment methods are configured for this terminal.',
           style: TextStyle(
             fontSize: 14,
             height: 1.5,
-            color: PosColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         primaryLabel: 'Close',
@@ -665,256 +976,66 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
       );
     }
 
-    final isCash = _currentTab.key == 'cash' || _currentTab.method?.id == '1';
-    final isCard = _currentTab.key == 'card' || _currentTab.method?.id == '3';
-    final isMix = _currentTab.key == 'mix';
+    final screenH = MediaQuery.sizeOf(context).height;
+    final dialogHeight = (screenH * 0.88).clamp(560.0, 920.0);
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: 920,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.92,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.topCenter,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(40, 8, 40, 0),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Select Payment Method',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: PosColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          const Text(
-                            'TOTAL DUE',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.1,
-                              color: PosColors.textMuted,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _money,
-                            style: const TextStyle(
-                              fontSize: 40,
-                              fontWeight: FontWeight.w800,
-                              color: PosColors.blue,
-                              height: 1.05,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: IconButton(
-                        onPressed: _busy ? null : () => Navigator.pop(context),
-                        tooltip: 'Close',
-                        icon: const Icon(
-                          Icons.close_rounded,
-                          color: PosColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+        width: kPosPaymentDialogWidth,
+        height: dialogHeight,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PaymentProcessingHeader(
+              invoiceLabel: _invoiceLabel,
+              totalText: _money,
+              busy: _busy,
+              onClose: () => Navigator.pop(context),
+            ),
+            PaymentMethodPillTabs(
+              labels: [for (final t in _tabs) t.label],
+              icons: [for (final t in _tabs) t.icon],
+              selectedIndex: _selectedIndex,
+              onChanged: (i) {
+                setState(() {
+                  _selectedIndex = i;
+                  _cashFieldActive = true;
+                  if (_tabs[i].key == 'mix' && _mixLines.isNotEmpty) {
+                    _activeMixLine = _mixLines.first;
+                    _activeMixField = _MixFieldKind.amount;
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildPaymentBody(),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
-                child: _PaymentMethodTabs(
-                  tabs: _tabs,
-                  selectedIndex: _selectedIndex,
-                  onChanged: (i) {
-                    setState(() {
-                      _selectedIndex = i;
-                      if (_tabs[i].key == 'mix') {
-                        _syncMixAmountToRemaining();
-                      }
-                    });
-                  },
-                ),
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
-                  child: SizedBox(
-                    height: isMix ? _splitPanelHeight : _panelHeight,
-                    child: isMix
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 11,
-                                child: _buildLeftPanel(_currentTab.method!),
-                              ),
-                              const SizedBox(width: 20),
-                              Expanded(
-                                flex: 9,
-                                child: _PaymentSplitSummaryPanel(
-                                  totalDue: _grandTotal,
-                                  payments: _splitPayments,
-                                  remaining: _splitRemaining,
-                                  canComplete: _splitReady,
-                                  busy: _busy,
-                                  applyLabel: _mixAmountLabel,
-                                  showApplyButton:
-                                      _splitInputMode == _SplitInputMode.cash,
-                                  onApply: () =>
-                                      _addSplitPayment(isCash: true),
-                                  onRemove: _removeSplitPayment,
-                                  onComplete: _completePayment,
-                                ),
-                              ),
-                            ],
-                          )
-                        : isCard
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                    flex: 11,
-                                    child: _buildCardPanel(),
-                                  ),
-                                  const SizedBox(width: 20),
-                                  Expanded(
-                                    flex: 9,
-                                    child: _CardDigitNumpad(
-                                      controller: _cardNumberCtrl,
-                                      onChanged: () => setState(() {}),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : isCash
-                                ? Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Expanded(
-                                        flex: 11,
-                                        child: _buildCashPanel(),
-                                      ),
-                                      const SizedBox(width: 20),
-                                      Expanded(
-                                        flex: 9,
-                                        child: PosAmountNumpad(
-                                          controller: _cashReceivedCtrl,
-                                          onChanged: _onAmountChanged,
-                                          showQuickCash: false,
-                                          showClearButton: true,
-                                          fillHeight: true,
-                                          largeTouch: true,
-                                          keyOrder:
-                                              PosNumpadKeyOrder.calculator,
-                                          lightKeys: true,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : _buildLeftPanel(_currentTab.method!),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Row(
-                  children: [
-                    if (!isMix)
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _holdOrder,
-                        icon: const Icon(Icons.pause_circle_outline, size: 20),
-                        label: const Text('Hold Order'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 52),
-                          foregroundColor: PosColors.red,
-                          side: BorderSide(
-                            color: PosColors.red.withValues(alpha: 0.35),
-                          ),
-                          backgroundColor:
-                              PosColors.red.withValues(alpha: 0.08),
-                          padding: const EdgeInsets.symmetric(horizontal: 22),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                    if (!isMix) const Spacer(),
-                    if (!isMix)
-                      SizedBox(
-                        width: 340,
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: PosColors.primary,
-                            minimumSize: const Size(double.infinity, 56),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: _busy ? null : _completePayment,
-                          icon: _busy
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.check_circle_outline,
-                                  size: 22),
-                          label: Text(
-                            _busy ? 'Processing…' : 'Complete Transaction',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+            PaymentFooterBar(
+              showPrintOption: true,
+              printInvoice: _printInvoice,
+              onPrintChanged: (v) => setState(() => _printInvoice = v),
+              canComplete: _canCompletePayment,
+              busy: _busy,
+              onComplete: _completePayment,
+              statusHint: _paymentStatusHint,
+              completeLabel: _printInvoice
+                  ? 'COMPLETE & PRINT'
+                  : 'COMPLETE SALE',
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildLeftPanel(PosPaymentMethod method) {
-    if (method.key == 'mix') {
-      return _buildSplitPanel();
-    }
-
-    if (method.key == 'cash' || method.id == '1') {
-      return _buildCashPanel();
-    }
-
-    if (method.key == 'card' || method.id == '3') {
-      return _buildCardPanel();
-    }
-
     if (method.key == 'gift_card' || method.id == '2') {
       return _buildGiftCardPanel();
     }
@@ -927,177 +1048,132 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
       child: Text(
         'Confirm payment of ${formatPosMoney(_grandTotal)} via ${method.label}.',
         textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 15),
+        style: TextStyle(fontSize: 15),
       ),
     );
   }
 
   Widget _buildSplitPanel() {
+    final progress = _grandTotal <= 0
+        ? 0.0
+        : (_mixAllocatedTotal / _grandTotal).clamp(0.0, 1.0);
+    final s = context.posStyles;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SplitInputModeTabs(
-          mode: _splitInputMode,
-          onChanged: (mode) => setState(() => _splitInputMode = mode),
+        PaymentAmountBanner(
+          label: 'TO CHARGE',
+          amountText: _money,
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: _splitInputMode == _SplitInputMode.cash
-                ? _buildSplitCashFields()
-                : _buildSplitCardFields(),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: _splitNumpadHeight,
-          child: PosAmountNumpad(
-            controller: _mixAmountCtrl,
-            onChanged: () => setState(() {}),
-            showQuickCash: false,
-            fillHeight: true,
-            largeTouch: true,
-          ),
-        ),
-        if (_splitInputMode == _SplitInputMode.card) ...[
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _resetSplitCardForm,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 44),
-                    side: const BorderSide(color: PosColors.border),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text('Cancel'),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Text(
+              'Mixed Payment Split',
+              style: s.titleMedium.copyWith(fontSize: 15, fontWeight: FontWeight.w800),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: _clearMixLines,
+              style: TextButton.styleFrom(foregroundColor: s.danger),
+              child: const Text('Clear All'),
+            ),
+            if (_mixReady) ...[
+              SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: s.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: s.success.withValues(alpha: 0.4)),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: FilledButton.icon(
-                  onPressed: () => _addSplitPayment(isCash: false),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: PosColors.primary,
-                    minimumSize: const Size(0, 44),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, size: 16, color: s.success),
+                    SizedBox(width: 4),
+                    Text(
+                      'Complete',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: s.success,
+                      ),
                     ),
-                  ),
-                  icon: const Icon(Icons.save_outlined, size: 18),
-                  label: const Text(
-                    'Save Card to Order',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  ],
                 ),
               ),
             ],
+          ],
+        ),
+        SizedBox(height: 8),
+        if (_mixLines.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'No payment methods configured for mixed payment.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.separated(
+            itemCount: _mixLines.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) {
+              final line = _mixLines[index];
+              final isActiveAmount = identical(_activeMixLine, line) &&
+                  _activeMixField == _MixFieldKind.amount;
+              return _MixedPaymentRow(
+                line: line,
+                isActiveAmount: isActiveAmount,
+                isActiveDigits: identical(_activeMixLine, line) &&
+                    _activeMixField == _MixFieldKind.cardDigits,
+                isActiveVoucher: identical(_activeMixLine, line) &&
+                    _activeMixField == _MixFieldKind.voucherCode,
+                onFocusAmount: () =>
+                    _focusMixField(line, _MixFieldKind.amount),
+                onFocusDigits: () =>
+                    _focusMixField(line, _MixFieldKind.cardDigits),
+                onFocusVoucher: () =>
+                    _focusMixField(line, _MixFieldKind.voucherCode),
+                onFillRemaining: () => _fillMixRemaining(line),
+                onCardTypeChanged: (type) =>
+                    setState(() => line.cardType = type),
+              );
+            },
+          ),
+        ),
+        SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: s.border.withValues(alpha: 0.5),
+            color: _mixReady ? s.success : s.accent,
+          ),
+        ),
+        if (!_mixReady && _mixAllocatedTotal > 0) ...[
+          SizedBox(height: 6),
+          Text(
+            _mixOverpay > 0.009
+                ? 'Over by ${formatPosMoney(_mixOverpay)}'
+                : 'Remaining ${formatPosMoney(_mixRemaining)}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _mixOverpay > 0.009 ? s.danger : s.accent,
+            ),
           ),
         ],
-      ],
-    );
-  }
-
-  Widget _buildSplitCashFields() {
-    final display = _mixAmountCtrl.text.trim().isEmpty
-        ? '0.00'
-        : (double.tryParse(_mixAmountCtrl.text.trim()) ?? 0)
-            .toStringAsFixed(2);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SplitCashAmountField(amount: display),
-        const SizedBox(height: 14),
-        _buildQuickCashButtons(_setMixAmount),
-      ],
-    );
-  }
-
-  Widget _buildSplitCardFields() {
-    final display = _mixAmountCtrl.text.trim().isEmpty
-        ? '0.00'
-        : (double.tryParse(_mixAmountCtrl.text.trim()) ?? 0)
-            .toStringAsFixed(2);
-    const cardTypes = ['Visa', 'Amex', 'Master Card'];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Expanded(
-              child: Text(
-                'Add Manual Card',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.textPrimary,
-                ),
-              ),
-            ),
-            OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.contactless_outlined, size: 18),
-              label: const Text('Swipe Card'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: PosColors.textPrimary,
-                side: const BorderSide(color: PosColors.border),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            for (final type in cardTypes) ...[
-              Expanded(
-                child: _SplitCardNetworkButton(
-                  label: type == 'Master Card' ? 'MASTER' : type.toUpperCase(),
-                  selected: _cardType == type,
-                  onTap: () => setState(() => _cardType = type),
-                ),
-              ),
-              if (type != cardTypes.last) const SizedBox(width: 8),
-            ],
-          ],
-        ),
-        const SizedBox(height: 12),
-        _TenderedAmountField(
-          label: 'Amount to Charge on Card',
-          value: formatPosMoney(
-            double.tryParse(display) ?? 0,
-          ),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _cardNumberCtrl,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            labelText: 'Last 4 Digits (Optional)',
-            counterText: '',
-            hintText: 'XXXX',
-            helperText: 'Used for receipt identification.',
-            helperMaxLines: 2,
-            filled: true,
-            fillColor: Colors.white,
-            isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: PosColors.border),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -1114,7 +1190,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
                 value: formatPosMoney(_cashReceived),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: _AmountStatusBox(
                 label: 'CHANGE DUE',
@@ -1124,7 +1200,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         Expanded(child: _buildQuickCashButtons(_setTendered)),
       ],
     );
@@ -1134,8 +1210,8 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     const cardTypes = ['Visa', 'Master Card', 'Amex'];
     final digits = _cardNumberCtrl.text.trim();
     final masked = digits.isEmpty
-        ? '• • • •'
-        : digits.padRight(4, '•').split('').join(' ');
+        ? 'â€¢ â€¢ â€¢ â€¢'
+        : digits.padRight(4, 'â€¢').split('').join(' ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1147,22 +1223,22 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'MANUAL ENTRY',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.8,
-                      color: PosColors.textMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     '${widget.terminalLabel} - ${widget.stationLabel}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: PosColors.primary,
+                      color: context.posBrand.primary,
                     ),
                   ),
                 ],
@@ -1171,51 +1247,51 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text(
+                Text(
                   'Total Due',
                   style: TextStyle(
                     fontSize: 12,
-                    color: PosColors.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 Text(
                   _money,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
-                    color: PosColors.textPrimary,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         Row(
           children: [
-            Icon(Icons.lock_outline, size: 16, color: PosColors.primary),
-            const SizedBox(width: 6),
+            Icon(Icons.lock_outline, size: 16, color: context.posBrand.primary),
+            SizedBox(width: 6),
             Text(
               'SECURE TRANSACTION',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.6,
-                color: PosColors.primary.withValues(alpha: 0.9),
+                color: context.posBrand.primary.withValues(alpha: 0.9),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        const Text(
+        SizedBox(height: 18),
+        Text(
           'Card Type',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: PosColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         Row(
           children: [
             for (final type in cardTypes) ...[
@@ -1230,31 +1306,31 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             ],
           ],
         ),
-        const SizedBox(height: 18),
-        const Text(
+        SizedBox(height: 18),
+        Text(
           'Last 4 Digits',
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: PosColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           height: 56,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.primary, width: 1.5),
+            border: Border.all(color: context.posBrand.primary, width: 1.5),
           ),
           child: Text(
             masked,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
               letterSpacing: 6,
-              color: PosColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1263,23 +1339,23 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.verified_user_outlined,
-                size: 14, color: PosColors.textMuted.withValues(alpha: 0.8)),
-            const SizedBox(width: 4),
+                size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8)),
+            SizedBox(width: 4),
             Text(
               'PCI Compliant',
-              style: TextStyle(fontSize: 11, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: 16),
             Icon(Icons.shield_outlined,
-                size: 14, color: PosColors.textMuted.withValues(alpha: 0.8)),
-            const SizedBox(width: 4),
+                size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8)),
+            SizedBox(width: 4),
             Text(
               'End-to-End Encryption',
-              style: TextStyle(fontSize: 11, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
       ],
     );
   }
@@ -1292,7 +1368,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 15,
-          color: PosColors.textMuted.withValues(alpha: 0.95),
+          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.95),
           height: 1.5,
         ),
       ),
@@ -1308,10 +1384,10 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           decoration: InputDecoration(
             labelText: 'Cheque number',
             filled: true,
-            fillColor: Colors.white,
+            fillColor: Theme.of(context).colorScheme.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: PosColors.border),
+              borderSide: BorderSide(color: Theme.of(context).dividerColor),
             ),
           ),
         ),
@@ -1320,10 +1396,251 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           'Enter the cheque number, then tap Complete Payment.',
           style: TextStyle(
             fontSize: 13,
-            color: PosColors.textMuted.withValues(alpha: 0.9),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MixedPaymentRow extends StatelessWidget {
+  const _MixedPaymentRow({
+    required this.line,
+    required this.isActiveAmount,
+    required this.isActiveDigits,
+    required this.isActiveVoucher,
+    required this.onFocusAmount,
+    required this.onFocusDigits,
+    required this.onFocusVoucher,
+    required this.onFillRemaining,
+    required this.onCardTypeChanged,
+  });
+
+  final _MixPaymentLineState line;
+  final bool isActiveAmount;
+  final bool isActiveDigits;
+  final bool isActiveVoucher;
+  final VoidCallback onFocusAmount;
+  final VoidCallback onFocusDigits;
+  final VoidCallback onFocusVoucher;
+  final VoidCallback onFillRemaining;
+  final ValueChanged<String> onCardTypeChanged;
+
+  static const _cardTypes = ['Visa', 'Master Card', 'Amex'];
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.posStyles;
+    final borderColor = s.accent;
+
+    InputDecoration amountDecoration({required bool active}) {
+      return InputDecoration(
+        labelText: line.rowLabel,
+        prefixText: '$kPosCurrencySymbol ',
+        isDense: true,
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(
+            color: active ? borderColor : Theme.of(context).dividerColor,
+            width: active ? 2 : 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: borderColor, width: 2),
+        ),
+      );
+    }
+
+    Widget amountField({bool showQuickFill = true}) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: line.amountCtrl,
+              readOnly: true,
+              onTap: onFocusAmount,
+              decoration: amountDecoration(active: isActiveAmount),
+            ),
+          ),
+          if (showQuickFill)
+            _MixFieldIconButton(
+              tooltip: 'Fill remaining',
+              icon: Icons.bolt_outlined,
+              active: false,
+              accent: true,
+              onPressed: onFillRemaining,
+            ),
+        ],
+      );
+    }
+
+    Widget digitsField() {
+      return TextField(
+        controller: line.cardDigitsCtrl,
+        readOnly: true,
+        onTap: onFocusDigits,
+        maxLength: 4,
+        decoration: InputDecoration(
+          labelText: 'Digits',
+          counterText: '',
+          isDense: true,
+          filled: true,
+          fillColor: Theme.of(context).colorScheme.surface,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: isActiveDigits
+                  ? borderColor
+                  : Theme.of(context).dividerColor,
+              width: isActiveDigits ? 2 : 1,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (line.isCard) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          amountField(),
+          SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: line.cardType,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Type',
+                    isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  items: [
+                    for (final type in _cardTypes)
+                      DropdownMenuItem(value: type, child: Text(type)),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) onCardTypeChanged(v);
+                  },
+                ),
+              ),
+              SizedBox(width: 8),
+              Expanded(child: digitsField()),
+            ],
+          ),
+        ],
+      );
+    }
+
+    if (line.isVoucher) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          amountField(),
+          SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: line.voucherCodeCtrl,
+                  readOnly: true,
+                  onTap: onFocusVoucher,
+                  decoration: InputDecoration(
+                    labelText: 'Voucher Code',
+                    isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: isActiveVoucher
+                            ? borderColor
+                            : Theme.of(context).dividerColor,
+                        width: isActiveVoucher ? 2 : 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              _MixFieldIconButton(
+                tooltip: 'Enter code',
+                icon: Icons.qr_code_scanner_outlined,
+                active: isActiveVoucher,
+                onPressed: onFocusVoucher,
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return amountField();
+  }
+}
+
+class _MixFieldIconButton extends StatelessWidget {
+  const _MixFieldIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.active,
+    required this.onPressed,
+    this.accent = false,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onPressed;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.posStyles;
+    final color = accent
+        ? s.accent
+        : (active ? s.accent : s.textMuted);
+    return SizedBox(
+      width: 48,
+      height: 52,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 48, height: 52),
+        style: IconButton.styleFrom(
+          backgroundColor: active
+              ? s.accent.withValues(alpha: 0.12)
+              : (accent
+                  ? s.accent.withValues(alpha: 0.08)
+                  : null),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        icon: Icon(icon, size: 22, color: color),
+      ),
     );
   }
 }
@@ -1342,9 +1659,9 @@ class _PaymentMethodTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: PosColors.border, width: 1),
+          bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1),
         ),
       ),
       child: Row(
@@ -1354,7 +1671,7 @@ class _PaymentMethodTabs extends StatelessWidget {
               Container(
                 width: 1,
                 height: 44,
-                color: PosColors.border,
+                color: Theme.of(context).dividerColor,
               ),
             Expanded(
               child: _PaymentMethodTab(
@@ -1387,7 +1704,7 @@ class _PaymentMethodTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        selected ? PosColors.primary : PosColors.textMuted.withValues(alpha: 0.85);
+        selected ? context.posBrand.primary : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.85);
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -1400,7 +1717,7 @@ class _PaymentMethodTab extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, size: 18, color: color),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     label,
@@ -1415,14 +1732,14 @@ class _PaymentMethodTab extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               height: 3,
               margin: const EdgeInsets.symmetric(horizontal: 8),
               width: double.infinity,
               decoration: BoxDecoration(
-                color: selected ? PosColors.primary : Colors.transparent,
+                color: selected ? context.posBrand.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1449,171 +1766,32 @@ class _AmountStatusBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: PosColors.primaryLight,
+        color: context.posBrand.primaryLight,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: PosColors.border.withValues(alpha: 0.6)),
+        border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w800,
-              color: valueColor ?? PosColors.textPrimary,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CardDigitNumpad extends StatelessWidget {
-  const _CardDigitNumpad({
-    required this.controller,
-    required this.onChanged,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-
-  static const _keys = [
-    '1', '2', '3',
-    '4', '5', '6',
-    '7', '8', '9',
-    '', '0', '⌫',
-  ];
-
-  void _onKey(String key) {
-    if (key == '⌫') {
-      final current = controller.text;
-      if (current.isEmpty) return;
-      controller.text = current.substring(0, current.length - 1);
-      onChanged();
-      return;
-    }
-    if (key.isEmpty || controller.text.length >= 4) return;
-    controller.text = controller.text + key;
-    onChanged();
-  }
-
-  void _clear() {
-    controller.clear();
-    onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 3,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              for (final key in _keys)
-                key.isEmpty
-                    ? const SizedBox.shrink()
-                    : _PaymentNumpadKey(
-                        label: key,
-                        onPressed: () => _onKey(key),
-                      ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Material(
-          color: PosColors.red.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          child: InkWell(
-            onTap: _clear,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: PosColors.red.withValues(alpha: 0.25)),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.delete_outline, color: PosColors.red, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Clear Current Field',
-                    style: TextStyle(
-                      color: PosColors.red,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PaymentNumpadKey extends StatelessWidget {
-  const _PaymentNumpadKey({
-    required this.label,
-    required this.onPressed,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final isBackspace = label == '⌫';
-    return Material(
-      color: isBackspace
-          ? PosColors.red.withValues(alpha: 0.1)
-          : PosColors.primaryLight,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isBackspace
-                  ? PosColors.red.withValues(alpha: 0.35)
-                  : PosColors.primary.withValues(alpha: 0.12),
-            ),
-          ),
-          child: isBackspace
-              ? const Icon(Icons.backspace_outlined,
-                  color: PosColors.red, size: 22)
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.textPrimary,
-                  ),
-                ),
-        ),
       ),
     );
   }
@@ -1638,16 +1816,16 @@ class _TenderedAmountField extends StatelessWidget {
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.primary, width: 1.5),
+            border: Border.all(color: context.posBrand.primary, width: 1.5),
           ),
           child: Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
-              color: PosColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1655,14 +1833,14 @@ class _TenderedAmountField extends StatelessWidget {
           left: 12,
           top: -10,
           child: Container(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: PosColors.textMuted,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -1684,7 +1862,7 @@ class _QuickCashButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -1694,14 +1872,14 @@ class _QuickCashButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: PosColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1733,9 +1911,9 @@ class _PaymentCashSummaryPanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(
             children: [
@@ -1744,34 +1922,34 @@ class _PaymentCashSummaryPanel extends StatelessWidget {
                 value: formatPosMoney(balanceDue),
               ),
               if (showTendered) ...[
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 _SummaryLine(
                   label: 'Tendered',
                   value: formatPosMoney(tendered),
-                  valueColor: PosColors.primary,
+                  valueColor: context.posBrand.primary,
                 ),
               ],
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
-                child: Divider(height: 1, color: PosColors.border),
+                child: Divider(height: 1, color: Theme.of(context).dividerColor),
               ),
               Row(
                 children: [
-                  const Text(
+                  Text(
                     'Change',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: PosColors.textPrimary,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const Spacer(),
                   Text(
                     formatPosMoney(change),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w800,
-                      color: PosColors.textPrimary,
+                      color: Theme.of(context).colorScheme.onSurface,
                       height: 1,
                     ),
                   ),
@@ -1780,19 +1958,19 @@ class _PaymentCashSummaryPanel extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         Expanded(
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: cardReaderActive
-                  ? PosColors.primaryLight
-                  : PosColors.chipInactive,
+                  ? context.posBrand.primaryLight
+                  : context.posBrand.chipInactive,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: cardReaderActive
-                    ? PosColors.primary.withValues(alpha: 0.25)
-                    : PosColors.border,
+                    ? context.posBrand.primary.withValues(alpha: 0.25)
+                    : Theme.of(context).dividerColor,
               ),
             ),
             child: Column(
@@ -1802,21 +1980,21 @@ class _PaymentCashSummaryPanel extends StatelessWidget {
                   Icons.contactless_outlined,
                   size: 36,
                   color: cardReaderActive
-                      ? PosColors.primary
-                      : PosColors.textMuted.withValues(alpha: 0.45),
+                      ? context.posBrand.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Text(
                   cardReaderActive
-                      ? 'Waiting for card reader…\nTap, Insert, or Swipe to process payment via card.'
+                      ? 'Waiting for card readerâ€¦\nTap, Insert, or Swipe to process payment via card.'
                       : 'Card reader inactive.\nSelect Card to process card payments.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: cardReaderActive
-                        ? PosColors.primary
-                        : PosColors.textMuted.withValues(alpha: 0.7),
+                        ? context.posBrand.primary
+                        : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                     height: 1.45,
                   ),
                 ),
@@ -1825,465 +2003,6 @@ class _PaymentCashSummaryPanel extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _SplitInputModeTabs extends StatelessWidget {
-  const _SplitInputModeTabs({
-    required this.mode,
-    required this.onChanged,
-  });
-
-  final _SplitInputMode mode;
-  final ValueChanged<_SplitInputMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: PosColors.chipInactive,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _SplitModeTab(
-              label: 'Add Cash',
-              selected: mode == _SplitInputMode.cash,
-              onTap: () => onChanged(_SplitInputMode.cash),
-            ),
-          ),
-          Expanded(
-            child: _SplitModeTab(
-              label: 'Add Card',
-              selected: mode == _SplitInputMode.card,
-              onTap: () => onChanged(_SplitInputMode.card),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SplitModeTab extends StatelessWidget {
-  const _SplitModeTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? Colors.white : Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
-      elevation: selected ? 1 : 0,
-      shadowColor: Colors.black12,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: SizedBox(
-          height: 40,
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: selected ? PosColors.textPrimary : PosColors.textMuted,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SplitCashAmountField extends StatelessWidget {
-  const _SplitCashAmountField({required this.amount});
-
-  final String amount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          height: 72,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.primary, width: 1.5),
-          ),
-          child: Row(
-            children: [
-              const Text(
-                kPosCurrencySymbol,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: PosColors.textMuted,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                amount,
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.textPrimary,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Positioned(
-          left: 12,
-          top: -10,
-          child: Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: const Text(
-              'Add Cash Amount',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: PosColors.textMuted,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SplitCardNetworkButton extends StatelessWidget {
-  const _SplitCardNetworkButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? PosColors.primary : PosColors.border,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: selected ? PosColors.primary : PosColors.textMuted,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              if (selected)
-                const Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: PosColors.primary,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentSplitSummaryPanel extends StatelessWidget {
-  const _PaymentSplitSummaryPanel({
-    required this.totalDue,
-    required this.payments,
-    required this.remaining,
-    required this.canComplete,
-    required this.busy,
-    required this.applyLabel,
-    required this.showApplyButton,
-    required this.onApply,
-    required this.onRemove,
-    required this.onComplete,
-  });
-
-  final double totalDue;
-  final List<_SplitPaymentEntry> payments;
-  final double remaining;
-  final bool canComplete;
-  final bool busy;
-  final String applyLabel;
-  final bool showApplyButton;
-  final VoidCallback onApply;
-  final ValueChanged<String> onRemove;
-  final VoidCallback onComplete;
-
-  static const _footerBg = Color(0xFF1F2937);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: PosColors.orderPanelBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Total Due',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formatPosMoney(totalDue),
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.textPrimary,
-                    height: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 18),
-            child: Divider(height: 1, color: PosColors.border),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 8),
-            child: Text(
-              'Payments Added',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: PosColors.textMuted.withValues(alpha: 0.95),
-              ),
-            ),
-          ),
-          Expanded(
-            child: payments.isEmpty
-                ? Center(
-                    child: Text(
-                      'No payments added yet',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: PosColors.textMuted.withValues(alpha: 0.8),
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    itemCount: payments.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) {
-                      final payment = payments[i];
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: PosColors.border),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              payment.icon,
-                              size: 20,
-                              color: PosColors.primary,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    payment.listTitle,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: PosColors.textPrimary,
-                                    ),
-                                  ),
-                                  Text(
-                                    payment.subtitle,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: PosColors.textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              formatPosMoney(payment.amount),
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: PosColors.textPrimary,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => onRemove(payment.id),
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: PosColors.red,
-                                size: 20,
-                              ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          if (showApplyButton) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-              child: FilledButton(
-                onPressed: busy ? null : onApply,
-                style: FilledButton.styleFrom(
-                  backgroundColor: PosColors.primary,
-                  minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  applyLabel,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ],
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: const BoxDecoration(
-              color: _footerBg,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(11)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text(
-                      'Remaining Balance',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      formatPosMoney(remaining),
-                      style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF34D399),
-                        height: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: canComplete
-                        ? PosColors.primary
-                        : const Color(0xFF9CA3AF),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: canComplete && !busy ? onComplete : null,
-                  icon: busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(
-                          canComplete ? Icons.check_circle_outline : Icons.lock_outline,
-                          size: 18,
-                        ),
-                  label: Text(
-                    busy ? 'Processing…' : 'Complete Order',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -2312,15 +2031,15 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Order Summary',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w800,
-            color: PosColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         Expanded(
           child: ListView.separated(
             itemCount: orderLines.length,
@@ -2334,20 +2053,20 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
                       line.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: PosColors.textPrimary,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Text(
                     formatPosMoney(line.amount),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: PosColors.textPrimary,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ],
@@ -2355,13 +2074,13 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
             },
           ),
         ),
-        const Divider(height: 24, color: PosColors.border),
+        Divider(height: 24, color: Theme.of(context).dividerColor),
         _SummaryLine(
           label: 'Subtotal',
           value: formatPosMoney(subtotal),
         ),
         if (taxTotal > 0) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _SummaryLine(
             label: taxRate > 0
                 ? 'Tax (${taxRate.toStringAsFixed(2)}%)'
@@ -2370,7 +2089,7 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
           ),
         ],
         if (discountTotal > 0) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _SummaryLine(
             label: 'Discount',
             value: formatPosMoney(-discountTotal),
@@ -2378,53 +2097,53 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
           ),
         ],
         if (shippingCost > 0) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _SummaryLine(
             label: 'Shipping',
             value: formatPosMoney(shippingCost),
           ),
         ],
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: PosColors.primaryLight,
+            color: context.posBrand.primaryLight,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: PosColors.primary.withValues(alpha: 0.2),
+              color: context.posBrand.primary.withValues(alpha: 0.2),
             ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'BALANCE DUE',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: PosColors.primary,
+                  color: context.posBrand.primary,
                   letterSpacing: 0.8,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text(
+                  Text(
                     'LKR',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: PosColors.textMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const Spacer(),
                   Text(
                     formatPosMoney(balanceDue),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.w800,
-                      color: PosColors.textPrimary,
+                      color: Theme.of(context).colorScheme.onSurface,
                       height: 1,
                     ),
                   ),
@@ -2433,26 +2152,26 @@ class _PaymentOrderSummaryPanel extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         OutlinedButton.icon(
           onPressed: null,
           icon: Icon(
             Icons.lock_outline,
             size: 18,
-            color: PosColors.textMuted.withValues(alpha: 0.6),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
           ),
           label: Text(
             'Complete Payment',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: PosColors.textMuted.withValues(alpha: 0.6),
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),
           ),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size(double.infinity, 48),
-            backgroundColor: PosColors.chipInactive,
-            side: const BorderSide(color: PosColors.border),
+            backgroundColor: context.posBrand.chipInactive,
+            side: BorderSide(color: Theme.of(context).dividerColor),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
@@ -2477,7 +2196,7 @@ class _CardTypeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? PosColors.primary : Colors.white,
+      color: selected ? context.posBrand.primary : Colors.white,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -2488,7 +2207,7 @@ class _CardTypeButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? PosColors.primary : PosColors.border,
+              color: selected ? context.posBrand.primary : Theme.of(context).dividerColor,
             ),
           ),
           child: Text(
@@ -2496,7 +2215,7 @@ class _CardTypeButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: selected ? Colors.white : PosColors.textMuted,
+              color: selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
               letterSpacing: 0.3,
             ),
           ),
@@ -2523,10 +2242,10 @@ class _SummaryLine extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: PosColors.textMuted,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         const Spacer(),
@@ -2535,7 +2254,7 @@ class _SummaryLine extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
-            color: valueColor ?? PosColors.textPrimary,
+            color: valueColor ?? Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ],

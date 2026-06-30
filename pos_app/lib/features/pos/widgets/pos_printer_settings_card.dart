@@ -8,9 +8,7 @@ import 'pos_settings_ui.dart';
 
 /// Printer summary on Settings — opens full settings via the gear icon.
 class PosPrinterSettingsCard extends ConsumerWidget {
-  const PosPrinterSettingsCard({super.key, this.accentColor});
-
-  final Color? accentColor;
+  const PosPrinterSettingsCard({super.key});
 
   void _openPrinterSettings(BuildContext context, WidgetRef ref) {
     openPosPrinterSettings(ref);
@@ -29,6 +27,7 @@ class PosPrinterSettingsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = context.posStyles;
     final settings = ref.watch(localPrintSettingsProvider);
     final printerLabel = settings.printerName.trim().isNotEmpty
         ? settings.printerName
@@ -43,9 +42,8 @@ class PosPrinterSettingsCard extends ConsumerWidget {
         onPressed: () => _openPrinterSettings(context, ref),
         icon: const Icon(Icons.settings_outlined),
         style: IconButton.styleFrom(
-          backgroundColor: (accentColor ?? context.posBrand.primary)
-              .withValues(alpha: 0.1),
-          foregroundColor: accentColor ?? context.posBrand.primary,
+          backgroundColor: s.accent.withValues(alpha: 0.1),
+          foregroundColor: s.accent,
         ),
       ),
       child: Column(
@@ -56,20 +54,20 @@ class PosPrinterSettingsCard extends ConsumerWidget {
             label: 'Paper',
             value: _paperLabel(settings.paperSize),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _SummaryChip(
             icon: Icons.flash_on_outlined,
             label: 'Direct print',
             value: settings.directPrint ? 'Enabled' : 'Disabled',
             highlight: settings.directPrint,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _SummaryChip(
             icon: Icons.print_rounded,
             label: 'Printer',
             value: printerLabel,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           PosSettingsActionTile(
             icon: Icons.tune_outlined,
             title: 'Configure printer',
@@ -97,25 +95,21 @@ class _SummaryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: PosColors.pageBg,
+        color: s.elevatedBg,
         borderRadius: BorderRadius.circular(kPosButtonRadius),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: s.border),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: brand.primary),
-          const SizedBox(width: 10),
+          Icon(icon, size: 16, color: s.accent),
+          SizedBox(width: 10),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: PosColors.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
+            style: s.bodyMuted.copyWith(fontSize: 13),
           ),
           const Spacer(),
           if (highlight)
@@ -124,7 +118,7 @@ class _SummaryChip extends StatelessWidget {
               width: 7,
               height: 7,
               decoration: BoxDecoration(
-                color: PosColors.teal,
+                color: s.success,
                 shape: BoxShape.circle,
               ),
             ),
@@ -134,11 +128,7 @@ class _SummaryChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: PosColors.textPrimary,
-              ),
+              style: s.titleMedium.copyWith(fontSize: 13),
             ),
           ),
         ],

@@ -58,14 +58,12 @@ class PosRegisterHeaderBar extends ConsumerWidget {
     if (id == null) return;
     ref.read(posCheckoutProvider.notifier).state =
         checkout.copyWith(customerId: id);
-    ref.read(sessionServiceProvider).setCustomerId(id);
   }
 
   void _setBiller(WidgetRef ref, PosCheckoutState checkout, int? id) {
     if (id == null) return;
     ref.read(posCheckoutProvider.notifier).state =
         checkout.copyWith(billerId: id);
-    ref.read(sessionServiceProvider).setBillerId(id);
   }
 }
 

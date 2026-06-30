@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/pos_theme.dart';
+import '../../../core/theme/pos_app_styles.dart';
 import '../pos_currency.dart';
 import '../models/scanned_product.dart';
 import '../pos_product_image.dart';
@@ -111,11 +112,7 @@ class PosQuickFilterChip extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
+              style: context.posStyles.chipOnGradient,
             ),
           ),
         ),
@@ -139,6 +136,7 @@ class PosFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Material(
@@ -148,11 +146,11 @@ class PosFilterChip extends StatelessWidget {
           borderRadius: BorderRadius.zero,
           child: Ink(
             decoration: BoxDecoration(
-              color: active ? PosColors.primary : PosColors.chipInactive,
+              color: active ? styles.brand.primary : styles.brand.chipInactive,
               borderRadius: BorderRadius.zero,
               border: active
                   ? null
-                  : Border.all(color: PosColors.chipInactive),
+                  : Border.all(color: styles.border),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             child: Text(
@@ -160,7 +158,7 @@ class PosFilterChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: active ? Colors.white : PosColors.chipInactiveText,
+                color: active ? styles.onBrand : styles.text,
               ),
             ),
           ),
@@ -190,77 +188,120 @@ class PosProductCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final brand = context.posBrand;
+    final styles = context.posStyles;
     final code = product.code.trim();
     final posBaseUrl = ref.watch(sessionServiceProvider).posBaseUrl;
     final imageUrl =
         resolveProductImageUrl(product.image, posBaseUrl: posBaseUrl);
+    final inStock = product.warehouseQty > 0;
+    final lowStock = inStock && product.warehouseQty <= 5;
 
     return Material(
-      color: Colors.white,
+      color: styles.cardBg,
+      elevation: styles.isDark ? 0 : 1,
+      shadowColor: styles.shadowColor,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(kPosButtonRadius),
-        side: const BorderSide(color: PosColors.border),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: styles.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _ProductThumb(
-                imageUrl: imageUrl,
-                iconColor: brand.primary,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 11,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _ProductThumb(
+                    imageUrl: imageUrl,
+                    iconColor: styles.accent,
+                    large: true,
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _StockBadge(
+                      qtyLabel: _qtyLabel,
+                      inStock: inStock,
+                      lowStock: lowStock,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: PosColors.textPrimary,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            code.isEmpty ? '—' : '[$code]',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: PosColors.textMuted,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          'Qty: $_qtyLabel',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: brand.primary,
-                          ),
-                        ),
-                      ],
-                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: styles.productName,
+                  ),
+                  if (code.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(code, maxLines: 1, overflow: TextOverflow.ellipsis, style: styles.productCode),
                   ],
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    formatPosMoney(product.price),
+                    style: styles.productPrice,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StockBadge extends StatelessWidget {
+  const _StockBadge({
+    required this.qtyLabel,
+    required this.inStock,
+    required this.lowStock,
+  });
+
+  final String qtyLabel;
+  final bool inStock;
+  final bool lowStock;
+
+  @override
+  Widget build(BuildContext context) {
+    final styles = context.posStyles;
+    final Color bg;
+    final Color fg;
+    if (!inStock) {
+      bg = styles.danger.withValues(alpha: 0.18);
+      fg = styles.danger;
+    } else if (lowStock) {
+      bg = PosColors.orange.withValues(alpha: 0.2);
+      fg = styles.isDark ? const Color(0xFFFCD34D) : PosColors.orange;
+    } else {
+      bg = styles.success.withValues(alpha: 0.18);
+      fg = styles.success;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: fg.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        inStock ? 'Qty $qtyLabel' : 'Out',
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: fg,
         ),
       ),
     );
@@ -271,20 +312,22 @@ class _ProductThumb extends StatelessWidget {
   const _ProductThumb({
     required this.imageUrl,
     required this.iconColor,
+    this.large = false,
   });
 
   final String? imageUrl;
   final Color iconColor;
+  final bool large;
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Container(
-      width: 44,
-      height: 44,
+      width: large ? double.infinity : 44,
+      height: large ? double.infinity : 44,
       decoration: BoxDecoration(
-        color: PosColors.productIconBg,
-        borderRadius: BorderRadius.circular(kPosButtonRadius),
-        border: Border.all(color: PosColors.border),
+        color: styles.surface.productIconBg,
+        border: large ? null : Border.all(color: styles.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: imageUrl != null
@@ -301,7 +344,7 @@ class _ProductThumb extends StatelessWidget {
     return Center(
       child: Icon(
         Icons.inventory_2_outlined,
-        size: 20,
+        size: large ? 36 : 20,
         color: iconColor.withValues(alpha: 0.55),
       ),
     );
@@ -324,27 +367,21 @@ class PosGrandTotalBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (subtotal != null) ...[
-          _summaryRow('Subtotal', subtotal!),
-          const SizedBox(height: 6),
+          _summaryRow(context, 'Subtotal', subtotal!),
+          SizedBox(height: 6),
         ],
         if (taxLabel != null && taxAmount != null) ...[
-          _summaryRow(taxLabel!, taxAmount!),
-          const SizedBox(height: 10),
+          _summaryRow(context, taxLabel!, taxAmount!),
+          SizedBox(height: 10),
         ],
         Row(
           children: [
-            const Text(
-              'Total',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: PosColors.textMuted,
-              ),
-            ),
+            Text('Total', style: styles.bodyMuted.copyWith(fontWeight: FontWeight.w600)),
             const Spacer(),
             Flexible(
               child: FittedBox(
@@ -354,12 +391,7 @@ class PosGrandTotalBanner extends StatelessWidget {
                   formatPosMoney(total),
                   maxLines: 1,
                   softWrap: false,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.primary,
-                    height: 1,
-                  ),
+                  style: styles.moneyLarge,
                 ),
               ),
             ),
@@ -369,27 +401,18 @@ class PosGrandTotalBanner extends StatelessWidget {
     );
   }
 
-  Widget _summaryRow(String label, double amount) {
+  Widget _summaryRow(BuildContext context, String label, double amount) {
+    final styles = context.posStyles;
     return Row(
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            color: PosColors.textMuted,
-          ),
-        ),
+        Text(label, style: styles.bodyMuted),
         const Spacer(),
         Text(
           formatPosMoney(amount),
           maxLines: 1,
           softWrap: false,
           overflow: TextOverflow.fade,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: PosColors.textPrimary,
-          ),
+          style: styles.moneyMedium,
         ),
       ],
     );
@@ -416,6 +439,7 @@ class PosPaymentButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Material(
       color: disabled ? color.withValues(alpha: 0.35) : color,
       borderRadius: BorderRadius.circular(8),
@@ -432,20 +456,15 @@ class PosPaymentButton extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 18, color: Colors.white),
-                  const SizedBox(width: 6),
+                  Icon(icon, size: 18, color: styles.onBrand),
+                  SizedBox(width: 6),
                 ],
                 Text(
                   label,
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.clip,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    height: 1.1,
-                  ),
+                  style: styles.buttonLabel,
                 ),
                 ],
               ),
@@ -462,6 +481,7 @@ class PosOrderEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -469,16 +489,12 @@ class PosOrderEmptyState extends StatelessWidget {
           Icon(
             Icons.shopping_basket_outlined,
             size: 56,
-            color: PosColors.textMuted.withValues(alpha: 0.35),
+            color: styles.textMuted.withValues(alpha: 0.35),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             'Order is empty',
-            style: TextStyle(
-              fontSize: 15,
-              color: PosColors.textMuted.withValues(alpha: 0.8),
-              fontWeight: FontWeight.w500,
-            ),
+            style: styles.bodyMuted.copyWith(fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -498,12 +514,13 @@ class PosPayButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return SizedBox(
       width: double.infinity,
       child: Material(
         color: disabled
-            ? PosColors.primary.withValues(alpha: 0.4)
-            : PosColors.primary,
+            ? styles.brand.buttonPrimary.withValues(alpha: 0.4)
+            : styles.brand.buttonPrimary,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: disabled ? null : onPressed,
@@ -513,11 +530,8 @@ class PosPayButton extends StatelessWidget {
             child: Text(
               'PAY',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: disabled ? 0.7 : 1),
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+              style: styles.payButtonLabel.copyWith(
+                color: disabled ? styles.onBrandMuted : styles.onBrand,
               ),
             ),
           ),
@@ -544,34 +558,37 @@ class PosQtyStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Container(
       decoration: BoxDecoration(
-        color: PosColors.primaryLight,
+        color: styles.isDark
+            ? styles.brand.primary.withValues(alpha: 0.2)
+            : styles.brand.primaryLight,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: styles.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _stepBtn(Icons.remove, onDecrement),
+          _stepBtn(context, Icons.remove, onDecrement),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 2),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: PosColors.primary,
+                color: styles.accent,
               ),
             ),
           ),
-          _stepBtn(Icons.add, onIncrement),
+          _stepBtn(context, Icons.add, onIncrement),
         ],
       ),
     );
   }
 
-  Widget _stepBtn(IconData icon, VoidCallback onTap) {
+  Widget _stepBtn(BuildContext context, IconData icon, VoidCallback onTap) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -580,7 +597,7 @@ class PosQtyStepper extends StatelessWidget {
         child: SizedBox(
           width: 40,
           height: 40,
-          child: Icon(icon, size: 24, color: PosColors.primary),
+          child: Icon(icon, size: 24, color: context.posStyles.accent),
         ),
       ),
     );
@@ -612,16 +629,13 @@ class PosCartLineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     final qtyLabel =
         qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 2);
 
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
-      ),
+      decoration: styles.cardDecoration(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -629,16 +643,16 @@ class PosCartLineCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: PosColors.productIconBg,
+              color: context.posSurface.productIconBg,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               Icons.shopping_bag_outlined,
               size: 20,
-              color: PosColors.primary.withValues(alpha: 0.7),
+              color: styles.accent.withValues(alpha: 0.85),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -665,24 +679,23 @@ class PosCartLineCard extends StatelessWidget {
                                       fontWeight: FontWeight.w600,
                                       fontSize: 14,
                                       color: onEdit != null
-                                          ? PosColors.primary
-                                          : PosColors.textPrimary,
+                                          ? styles.accent
+                                          : styles.text,
                                       height: 1.25,
                                       decoration: onEdit != null
                                           ? TextDecoration.underline
                                           : null,
-                                      decorationColor: PosColors.primary
-                                          .withValues(alpha: 0.35),
+                                      decorationColor:
+                                          styles.accent.withValues(alpha: 0.35),
                                     ),
                                   ),
                                 ),
                                 if (onEdit != null) ...[
-                                  const SizedBox(width: 6),
+                                  SizedBox(width: 6),
                                   Icon(
                                     Icons.edit_outlined,
                                     size: 16,
-                                    color: PosColors.primary
-                                        .withValues(alpha: 0.85),
+                                    color: styles.accent.withValues(alpha: 0.85),
                                   ),
                                 ],
                               ],
@@ -691,18 +704,14 @@ class PosCartLineCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     _CartMoneyText(
                       amount: lineTotal,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        color: PosColors.textPrimary,
-                      ),
+                      style: styles.moneyMedium.copyWith(fontSize: 16),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
@@ -710,14 +719,10 @@ class PosCartLineCard extends StatelessWidget {
                         '${formatPosMoney(unitPrice)} × $qtyLabel',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: PosColors.textMuted,
-                        ),
+                        style: styles.caption.copyWith(fontSize: 13),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     PosQtyStepper(
                       qty: qty,
                       onDecrement: onDecrement,
@@ -769,16 +774,16 @@ class PosCartTableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(
+    final style = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w700,
-      color: PosColors.textMuted,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       letterSpacing: 0.3,
     );
     return Container(
-      color: PosColors.pageBg,
+      color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: const Row(
+      child: Row(
         children: [
           Expanded(flex: 4, child: Text('Product', style: style)),
           Expanded(flex: 2, child: Text('Price', style: style)),

@@ -216,7 +216,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                             RegExp(r'^\d*\.?\d{0,4}'),
                           ),
                         ],
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: '1',
                         ),
                       ),
@@ -233,7 +233,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                             RegExp(r'^\d*\.?\d{0,2}'),
                           ),
                         ],
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: '0.00',
                         ),
                       ),
@@ -243,7 +243,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                         label: 'Price option',
                         child: DropdownButtonFormField<int>(
                           value: _priceOptionIndex,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                           ),
                           items: [
@@ -272,16 +272,16 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                       _EditField(
                         label: 'Price option',
                         child: InputDecorator(
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                           ),
                           child: Text(
                             formatPosMoney(
                               widget.editContext.priceOptions.first.basePrice,
                             ),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: PosColors.textPrimary,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -298,7 +298,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                             RegExp(r'^\d*\.?\d{0,2}'),
                           ),
                         ],
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText: '0.00',
                         ),
                       ),
@@ -307,7 +307,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                       label: 'Tax rate',
                       child: DropdownButtonFormField<int>(
                         value: _taxIndex,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           isDense: true,
                         ),
                         items: [
@@ -328,7 +328,7 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                         label: 'Product unit',
                         child: DropdownButtonFormField<int>(
                           value: _unitIndex,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                           ),
                           items: [
@@ -346,29 +346,29 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: PosColors.pageBg,
+                    color: Theme.of(context).scaffoldBackgroundColor,
                     borderRadius: BorderRadius.circular(kPosButtonRadius),
-                    border: Border.all(color: PosColors.border),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.info_outline,
                         size: 18,
-                        color: PosColors.textMuted,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'Line total preview: ${formatPosMoney(_previewLineTotal())}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: PosColors.textPrimary,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -461,13 +461,13 @@ class _EditField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: PosColors.textMuted,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         child,
       ],
     );

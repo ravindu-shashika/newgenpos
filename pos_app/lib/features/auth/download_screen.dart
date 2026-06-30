@@ -188,8 +188,8 @@ class _DownloadScreenState extends ConsumerState<DownloadScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 if (widget.inApp) ...[
-                  const SizedBox(height: 16),
-                  const Wrap(
+                  SizedBox(height: 16),
+                  Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     alignment: WrapAlignment.center,
@@ -201,18 +201,18 @@ class _DownloadScreenState extends ConsumerState<DownloadScreen> {
                     ],
                   ),
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 if (_loading || _percent > 0) ...[
                   LinearProgressIndicator(value: _percent > 0 ? _percent : null),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                 ],
                 if (_status.isNotEmpty)
                   Text(_status, textAlign: TextAlign.center),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  SizedBox(height: 12),
+                  Text(_error!, style: TextStyle(color: Colors.red)),
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 if (!_loading && !widget.autoStart)
                   FilledButton(
                     onPressed: _runDownload,

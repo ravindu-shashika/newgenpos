@@ -25,7 +25,8 @@ class LocalSaleRepository {
     required int customerId,
     int? billerId,
     int? userId,
-    int? cashRegisterId,
+    int? localCashRegisterId,
+    int? serverCashRegisterId,
     required List<CartLine> lines,
     required double paidAmount,
     double payingAmount = 0,
@@ -55,7 +56,7 @@ class LocalSaleRepository {
       customerId: customerId,
       billerId: billerId,
       userId: userId,
-      cashRegisterId: cashRegisterId,
+      cashRegisterId: serverCashRegisterId,
       lines: lines,
       paidAmount: paidAmount,
       payingAmount: tendered,
@@ -103,6 +104,7 @@ class LocalSaleRepository {
             saleStatus: Value(isDraft ? 3 : 1),
             payloadJson: Value(jsonEncode(payload)),
             syncStatus: Value(isDraft ? 'draft' : 'pending'),
+            localCashRegisterId: Value(localCashRegisterId),
           ));
 
       for (final line in lines) {

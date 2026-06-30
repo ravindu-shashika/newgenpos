@@ -28,22 +28,8 @@ class CashRegisterExitGuard {
     if (userId == null) return true;
 
     final service = ref.read(cashRegisterServiceProvider);
-    final registerId = await service.getCachedRegisterId();
+    final registerId = await service.getOpenRegisterId(userId: userId);
     if (registerId == null) return true;
-
-    final online = await ref.read(syncServiceProvider).probeOnline();
-    if (!online) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Connect to internet and close cash register before exiting',
-            ),
-          ),
-        );
-      }
-      return false;
-    }
 
     if (!context.mounted) return false;
 

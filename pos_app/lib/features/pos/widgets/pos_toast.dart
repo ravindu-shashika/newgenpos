@@ -32,9 +32,9 @@ class PosToast {
           content: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(kPosButtonRadius),
-              border: Border.all(color: PosColors.border),
+              border: Border.all(color: Theme.of(context).dividerColor),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.08),
@@ -54,14 +54,14 @@ class PosToast {
                   ),
                   child: Icon(icon, size: 20, color: iconColor),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     message,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: PosColors.textPrimary,
+                      color: Theme.of(context).colorScheme.onSurface,
                       height: 1.35,
                     ),
                   ),

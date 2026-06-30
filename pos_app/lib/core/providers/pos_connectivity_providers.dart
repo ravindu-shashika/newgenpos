@@ -12,7 +12,8 @@ final posConnectivityServiceProvider = Provider<PosConnectivityService>((ref) {
   return PosConnectivityService();
 });
 
-/// Network link, POS server, and printer — polled via [onlineRefreshTickProvider].
+/// Network link, POS server, and printer — polled on an interval and via
+/// [refreshPosLinkStatus].
 class PosLinkStatus {
   const PosLinkStatus({
     required this.networkConnected,
@@ -42,47 +43,60 @@ Future<bool> _probeBool(
   }
 }
 
-Future<PosLinkStatus> _loadPosLinkStatus(Ref ref) async {
-  ref.watch(onlineRefreshTickProvider);
-  ref.watch(printerRefreshTickProvider);
+class PosLinkStatusNotifier extends AsyncNotifier<PosLinkStatus> {
+  Timer? _pollTimer;
 
-  final connectivity = ref.read(posConnectivityServiceProvider);
-  final sync = ref.read(syncServiceProvider);
-  await ref.read(localPrintSettingsProvider.notifier).ensureLoaded();
-  final printSettings = ref.read(localPrintSettingsProvider);
+  @override
+  Future<PosLinkStatus> build() async {
+    // Manual refresh hooks (printer settings, server settings, header tap).
+    ref.watch(onlineRefreshTickProvider);
+    ref.watch(printerRefreshTickProvider);
 
-  var network = false;
-  var server = false;
-  var printer = false;
+    ref.onDispose(() {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    });
 
-  await Future.wait([
-    _probeBool(connectivity.hasNetworkLink()).then((v) => network = v),
-    _probeBool(sync.probeOnline(force: true)).then((v) => server = v),
-    _probeBool(ReceiptPrintService.isPrinterAvailable(printSettings))
-        .then((v) => printer = v),
-  ]);
+    _pollTimer ??= Timer.periodic(AppConfig.healthCheckInterval, (_) {
+      // Re-probe without mutating tick providers from inside this notifier.
+      ref.invalidateSelf();
+    });
 
-  return PosLinkStatus(
-    networkConnected: network,
-    serverOnline: server,
-    printerConnected: printer,
-  );
+    return _probeLinkStatus();
+  }
+
+  Future<PosLinkStatus> _probeLinkStatus() async {
+    final connectivity = ref.read(posConnectivityServiceProvider);
+    final sync = ref.read(syncServiceProvider);
+    await ref.read(localPrintSettingsProvider.notifier).ensureLoaded();
+    final printSettings = ref.read(localPrintSettingsProvider);
+
+    var network = false;
+    var server = false;
+    var printer = false;
+
+    await Future.wait([
+      _probeBool(connectivity.hasNetworkLink()).then((v) => network = v),
+      _probeBool(sync.probeOnline(quiet: true)).then((v) => server = v),
+      _probeBool(ReceiptPrintService.isPrinterAvailable(printSettings))
+          .then((v) => printer = v),
+    ]);
+
+    return PosLinkStatus(
+      networkConnected: network,
+      serverOnline: server,
+      printerConnected: printer,
+    );
+  }
 }
 
-final posLinkStatusProvider = FutureProvider<PosLinkStatus>((ref) async {
-  final timer = Timer.periodic(AppConfig.healthCheckInterval, (_) {
-    ref.read(onlineRefreshTickProvider.notifier).state++;
-    ref.read(printerRefreshTickProvider.notifier).state++;
-  });
-  ref.onDispose(timer.cancel);
-
-  return _loadPosLinkStatus(ref);
-});
+final posLinkStatusProvider =
+    AsyncNotifierProvider<PosLinkStatusNotifier, PosLinkStatus>(
+  PosLinkStatusNotifier.new,
+);
 
 /// Refresh network, server, and printer status together.
 void refreshPosLinkStatus(WidgetRef ref) {
-  Future<void>.microtask(() {
-    ref.read(onlineRefreshTickProvider.notifier).state++;
-    ref.read(printerRefreshTickProvider.notifier).state++;
-  });
+  ref.read(onlineRefreshTickProvider.notifier).state++;
+  ref.read(printerRefreshTickProvider.notifier).state++;
 }

@@ -30,7 +30,6 @@ class PosAppShell extends ConsumerStatefulWidget {
 }
 
 class _PosAppShellState extends ConsumerState<PosAppShell> {
-  static const _pageBg = Color(0xFFF8F9FC);
 
   late final PageController _pageController;
   bool _pageSyncing = false;
@@ -156,7 +155,7 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
     });
 
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ValueListenableBuilder<bool>(
         valueListenable: PosWindowService.instance.kioskActiveNotifier,
         builder: (context, kioskActive, _) {

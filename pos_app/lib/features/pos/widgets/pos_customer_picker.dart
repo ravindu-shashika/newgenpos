@@ -59,7 +59,7 @@ class PosCustomerPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = _selected;
     final baseDecoration = decoration ??
-        const InputDecoration(
+        InputDecoration(
           labelText: 'Customer',
           isDense: true,
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -78,7 +78,7 @@ class PosCustomerPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: InputDecorator(
           decoration: baseDecoration.copyWith(
-            suffixIcon: const Icon(Icons.search, color: PosColors.primary),
+            suffixIcon: Icon(Icons.search, color: context.posBrand.primary),
           ),
           child: Text(
             selected?.name ?? 'Select customer',
@@ -87,8 +87,8 @@ class PosCustomerPicker extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               color: selected == null
-                  ? PosColors.textMuted
-                  : PosColors.textPrimary,
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -164,20 +164,21 @@ class _CustomerSearchDialogState extends State<_CustomerSearchDialog> {
             controller: _searchCtrl,
             focusNode: _searchFocus,
             decoration: posProfessionalSearchDecoration(
+              context,
               'Search by name, phone, email…',
             ),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Text(
             '${results.length} customer${results.length == 1 ? '' : 's'} found',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Expanded(
             child: results.isEmpty
                 ? const PosProfessionalEmptyState(

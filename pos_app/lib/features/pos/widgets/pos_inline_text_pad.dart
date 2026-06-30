@@ -98,7 +98,7 @@ class PosInlineTextPad extends StatelessWidget {
                   onPressed: () => _insert(' '),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               _PadKey(
                 label: '-',
                 height: keyHeight,
@@ -106,7 +106,7 @@ class PosInlineTextPad extends StatelessWidget {
                 fontSize: keyFont,
                 onPressed: () => _insert('-'),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               _PadKey(
                 label: '_',
                 height: keyHeight,
@@ -114,7 +114,7 @@ class PosInlineTextPad extends StatelessWidget {
                 fontSize: keyFont,
                 onPressed: () => _insert('_'),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               _PadKey(
                 label: '⌫',
                 height: keyHeight,
@@ -122,7 +122,7 @@ class PosInlineTextPad extends StatelessWidget {
                 fontSize: keyFont,
                 onPressed: _backspace,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               _PadKey(
                 label: 'Clear',
                 height: keyHeight,
@@ -195,7 +195,7 @@ class PosCouponQuickBar extends StatelessWidget {
                     for (var c = 0; c < cols; c++) ...[
                       if (c > 0) const SizedBox(width: gap),
                       Expanded(
-                        child: _codeAt(r * cols + c),
+                        child: _codeAt(context, r * cols + c),
                       ),
                     ],
                   ],
@@ -208,11 +208,12 @@ class PosCouponQuickBar extends StatelessWidget {
     );
   }
 
-  Widget _codeAt(int index) {
+  Widget _codeAt(BuildContext context, int index) {
     if (index >= codes.length) return const SizedBox.shrink();
     final code = codes[index];
+    final s = context.posStyles;
     return Material(
-      color: PosColors.primary.withValues(alpha: 0.12),
+      color: s.accent.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: () => onSelect(code),
@@ -230,7 +231,7 @@ class PosCouponQuickBar extends StatelessWidget {
             style: TextStyle(
               fontSize: largeTouch ? 15 : 13,
               fontWeight: FontWeight.w700,
-              color: PosColors.primary,
+              color: s.accent,
             ),
           ),
         ),
@@ -260,12 +261,13 @@ class _PadKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return SizedBox(
       width: width,
       height: height,
       child: Material(
-        color: color ?? Colors.white,
-        elevation: 1,
+        color: color ?? (context.isPosDark ? s.inputFill : Colors.white),
+        elevation: context.isPosDark ? 0 : 1,
         shadowColor: Colors.black12,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
@@ -276,7 +278,7 @@ class _PadKey extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: color == null ? PosColors.border : Colors.transparent,
+                color: color == null ? s.border : Colors.transparent,
               ),
             ),
             child: Text(
@@ -284,7 +286,7 @@ class _PadKey extends StatelessWidget {
               style: TextStyle(
                 fontSize: fontSize,
                 fontWeight: FontWeight.w700,
-                color: foreground ?? PosColors.textPrimary,
+                color: foreground ?? s.text,
               ),
             ),
           ),

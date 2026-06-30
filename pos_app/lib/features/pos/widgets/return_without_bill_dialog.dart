@@ -177,14 +177,14 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                 Expanded(
                   child: TextField(
                     controller: _scanCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Scan barcode or enter code',
                       prefixIcon: Icon(Icons.qr_code_scanner),
                     ),
                     onSubmitted: _addProduct,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 FilledButton(
                   onPressed: _busy ? null : () => _addProduct(_scanCtrl.text),
                   child: const Text('Add'),
@@ -197,7 +197,7 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
               child: Text(
                 _error!,
-                style: const TextStyle(color: PosColors.red),
+                style: TextStyle(color: PosColors.red),
               ),
             ),
           if (lineList.isNotEmpty)
@@ -205,18 +205,18 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
               child: Text(
                 'Credit ${formatPosMoney(_grandTotal)}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: PosColors.primary,
+                  color: context.posBrand.primary,
                 ),
               ),
             ),
           Expanded(
             child: lineList.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'Scan products to return',
-                      style: TextStyle(color: PosColors.textMuted),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   )
                 : ListView.separated(
@@ -234,15 +234,15 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                               children: [
                                 Text(
                                   line.product.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 Text(
                                   line.product.code,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: PosColors.textMuted,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -264,7 +264,7 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                                 ),
                                 Text(
                                   line.qty.toStringAsFixed(0),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),

@@ -40,6 +40,7 @@ class DiscountEntryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return SizedBox(
       height: panelHeight,
       child: Row(
@@ -63,7 +64,7 @@ class DiscountEntryPanel extends StatelessWidget {
                         },
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12),
                     Expanded(
                       child: _DiscountTypeButton(
                         label: 'Rs. Flat Rate',
@@ -77,28 +78,28 @@ class DiscountEntryPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Container(
                   height: 88,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: s.inputFill,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: PosColors.border),
+                    border: Border.all(color: s.border),
                   ),
                   child: Text(
                     _isPercent
                         ? '${_formatDisplay(_value)} %'
                         : formatPosMoney(_value),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 40,
                       fontWeight: FontWeight.w800,
-                      color: PosColors.textPrimary,
+                      color: s.text,
                       height: 1,
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Expanded(
                   child: PosAmountNumpad(
                     controller: controller,
@@ -111,7 +112,7 @@ class DiscountEntryPanel extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 28),
+          SizedBox(width: 28),
           Expanded(
             flex: 9,
             child: OrderAdjustmentPanel(
@@ -163,6 +164,7 @@ class CouponEntryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     final newTotal = (grandTotalBeforeCoupon - previewDiscount)
         .clamp(0.0, double.infinity)
         .toDouble();
@@ -177,24 +179,23 @@ class CouponEntryPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
+                Text(
                   'Enter coupon code',
-                  style: TextStyle(
+                  style: s.caption.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: PosColors.textMuted,
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Container(
                   height: 72,
                   alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: s.inputFill,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: errorText != null ? PosColors.red : PosColors.border,
+                      color: errorText != null ? s.danger : s.border,
                     ),
                   ),
                   child: Text(
@@ -204,44 +205,49 @@ class CouponEntryPanel extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.4,
                       color: controller.text.isEmpty
-                          ? PosColors.textMuted.withValues(alpha: 0.5)
-                          : PosColors.textPrimary,
+                          ? s.textMuted.withValues(alpha: 0.55)
+                          : s.text,
                     ),
                   ),
                 ),
                 if (errorText != null) ...[
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Text(
                     errorText!,
-                    style: const TextStyle(color: PosColors.red, fontSize: 12),
+                    style: TextStyle(color: s.danger, fontSize: 12),
                   ),
                 ],
                 if (quickCodes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text(
+                  SizedBox(height: 12),
+                  Text(
                     'Quick select',
-                    style: TextStyle(
+                    style: s.caption.copyWith(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: PosColors.textMuted,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
                       for (final code in quickCodes)
                         ActionChip(
-                          label: Text(code),
+                          label: Text(
+                            code,
+                            style: TextStyle(
+                              color: s.text,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           onPressed: () => onSelectCode(code),
-                          backgroundColor: PosColors.chipInactive,
-                          side: const BorderSide(color: PosColors.border),
+                          backgroundColor: s.inputFill,
+                          side: BorderSide(color: s.border),
                         ),
                     ],
                   ),
                 ],
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Expanded(
                   child: PosInlineTextPad(
                     controller: controller,
@@ -253,7 +259,7 @@ class CouponEntryPanel extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 28),
+          SizedBox(width: 28),
           Expanded(
             flex: 9,
             child: OrderAdjustmentPanel(
@@ -290,65 +296,61 @@ class OrderAdjustmentPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Order Adjustment',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: PosColors.textPrimary,
-          ),
+          style: s.titleMedium.copyWith(fontSize: 18),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         _SummaryRow(
           label: 'Current Subtotal',
           value: currentSubtotal,
         ),
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         _SummaryRow(
           label: 'Applied Discount',
           value: -appliedDiscount,
-          valueColor: PosColors.primary,
-          labelColor: PosColors.primary,
+          valueColor: s.accent,
+          labelColor: s.accent,
         ),
-        const SizedBox(height: 18),
+        SizedBox(height: 18),
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: s.inputFill,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: s.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'PROMO APPLIED',
-                style: TextStyle(
+                style: s.caption.copyWith(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: PosColors.textMuted.withValues(alpha: 0.9),
                   letterSpacing: 0.8,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Row(
                 children: [
                   Icon(
                     promoApplied ? Icons.check_circle : Icons.info_outline,
                     size: 18,
-                    color: PosColors.primary,
+                    color: s.accent,
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       promoMessage,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: PosColors.primary,
+                        color: s.accent,
                       ),
                     ),
                   ),
@@ -358,27 +360,23 @@ class OrderAdjustmentPanel extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        Container(height: 3, color: PosColors.primary),
-        const SizedBox(height: 18),
+        Container(height: 3, color: s.accent),
+        SizedBox(height: 18),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'New Total',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: PosColors.textPrimary,
-                ),
+                style: s.titleMedium.copyWith(fontSize: 22),
               ),
             ),
             Text(
               formatPosMoney(newTotal),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 36,
                 fontWeight: FontWeight.w800,
-                color: PosColors.primary,
+                color: s.accent,
                 height: 1,
               ),
             ),
@@ -404,6 +402,7 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Row(
       children: [
         Text(
@@ -411,7 +410,7 @@ class _SummaryRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: labelColor ?? PosColors.textMuted,
+            color: labelColor ?? s.textMuted,
           ),
         ),
         const Spacer(),
@@ -420,7 +419,7 @@ class _SummaryRow extends StatelessWidget {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
-            color: valueColor ?? PosColors.textPrimary,
+            color: valueColor ?? s.text,
           ),
         ),
       ],
@@ -441,8 +440,9 @@ class _DiscountTypeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Material(
-      color: selected ? PosColors.primaryLight : Colors.white,
+      color: selected ? s.accent.withValues(alpha: 0.12) : s.secondaryBtnBg,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -453,7 +453,7 @@ class _DiscountTypeButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? PosColors.primary : PosColors.border,
+              color: selected ? s.accent : s.border,
               width: selected ? 2 : 1,
             ),
           ),
@@ -463,7 +463,7 @@ class _DiscountTypeButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: selected ? PosColors.primary : PosColors.textMuted,
+              color: selected ? s.accent : s.textMuted,
             ),
           ),
         ),

@@ -421,7 +421,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                   onChanged: (v) =>
                       setState(() => _printInvoice = v ?? false),
                 ),
-                const Text('Print invoice'),
+                Text('Print invoice'),
               ],
             ),
           if (widget.showWhatsappOption)
@@ -433,7 +433,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                   onChanged: (v) =>
                       setState(() => _sendWhatsapp = v ?? false),
                 ),
-                const Text('Send WhatsApp message'),
+                Text('Send WhatsApp message'),
               ],
             ),
         ],
@@ -451,13 +451,13 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                     if (widget.isMixPayment) ...[
                       for (var i = 0; i < _mixRows.length; i++)
                         _buildMixPaymentRow(i),
-                              const SizedBox(height: 8),
+                              SizedBox(height: 8),
                               Align(
                                 alignment: Alignment.center,
                                 child: FilledButton.icon(
                                   onPressed: _addMixPaymentRow,
                                   style: FilledButton.styleFrom(
-                                    backgroundColor: PosColors.primary,
+                                    backgroundColor: context.posBrand.primary,
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 16,
                                       vertical: 10,
@@ -468,7 +468,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                 ),
                               ),
                               if (_mixHasCardRow) ...[
-                                const SizedBox(height: 14),
+                                SizedBox(height: 14),
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -481,14 +481,14 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                           PosTouchTextField(
                                             controller: _cardNumberCtrl,
                                             kind: PosTouchInputKind.number,
-                                            decoration: const InputDecoration(
+                                            decoration: InputDecoration(
                                               isDense: true,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
+                                    SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -499,14 +499,14 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                             controller: _cardHolderCtrl,
                                             textCapitalization:
                                                 TextCapitalization.words,
-                                            decoration: const InputDecoration(
+                                            decoration: InputDecoration(
                                               isDense: true,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
+                                    SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -516,7 +516,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                           DropdownButtonFormField<String>(
                                             initialValue: _cardType,
                                             isExpanded: true,
-                                            decoration: const InputDecoration(
+                                            decoration: InputDecoration(
                                               isDense: true,
                                             ),
                                             items: _cardTypes
@@ -539,15 +539,15 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                 ),
                               ],
                               if (_mixHasChequeRow) ...[
-                                const SizedBox(height: 14),
+                                SizedBox(height: 14),
                                 _fieldLabel('Cheque Number'),
                                 PosTouchTextField(
                                   controller: _chequeNoCtrl,
                                   decoration:
-                                      const InputDecoration(isDense: true),
+                                      InputDecoration(isDense: true),
                                 ),
                               ],
-                              const SizedBox(height: 14),
+                              SizedBox(height: 14),
                             ] else if (widget.isCash) ...[
                               _fieldLabel(
                                 'Cash Received',
@@ -562,7 +562,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                   showQuickCash: true,
                                   autofocus: true,
                                   textAlign: TextAlign.right,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -574,7 +574,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                   focusNode: _cashFocus,
                                   onTap: () => _cashFocus.requestFocus(),
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(height: 12),
                                 PosAmountNumpad(
                                   controller: _cashReceivedCtrl,
                                   onChanged: _onAmountChanged,
@@ -582,7 +582,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                   onQuickCashUsed: _markQuickCashUsed,
                                 ),
                               ],
-                              const SizedBox(height: 14),
+                              SizedBox(height: 14),
                             ] else if (widget.isCard) ...[
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,14 +598,14 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                           controller: _cardNumberCtrl,
                                           kind: PosTouchInputKind.number,
                                           autofocus: true,
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             isDense: true,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  SizedBox(width: 10),
                                   Expanded(
                                     flex: 5,
                                     child: Column(
@@ -617,14 +617,14 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                           controller: _cardHolderCtrl,
                                           textCapitalization:
                                               TextCapitalization.words,
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             isDense: true,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  SizedBox(width: 10),
                                   Expanded(
                                     flex: 3,
                                     child: Column(
@@ -635,7 +635,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                         DropdownButtonFormField<String>(
                                           initialValue: _cardType,
                                           isExpanded: true,
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             isDense: true,
                                           ),
                                           items: _cardTypes
@@ -656,23 +656,23 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
+                              SizedBox(height: 14),
                             ],
                             _fieldLabel('Payment Receiver'),
                             PosTouchTextField(
                               controller: _paymentReceiverCtrl,
-                              decoration: const InputDecoration(isDense: true),
+                              decoration: InputDecoration(isDense: true),
                             ),
-                            const SizedBox(height: 14),
+                            SizedBox(height: 14),
                             _fieldLabel('Payment Note'),
                             PosTouchTextField(
                               controller: _paymentNoteCtrl,
                               maxLines: 3,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 alignLabelWithHint: true,
                               ),
                             ),
-                            const SizedBox(height: 14),
+                            SizedBox(height: 14),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -685,14 +685,14 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                       PosTouchTextField(
                                         controller: _saleNoteCtrl,
                                         maxLines: 3,
-                                        decoration: const InputDecoration(
+                                        decoration: InputDecoration(
                                           alignLabelWithHint: true,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment:
@@ -702,7 +702,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                                       PosTouchTextField(
                                         controller: _staffNoteCtrl,
                                         maxLines: 3,
-                                        decoration: const InputDecoration(
+                                        decoration: InputDecoration(
                                           alignLabelWithHint: true,
                                         ),
                                       ),
@@ -714,7 +714,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      SizedBox(width: 16),
                       _PaymentSummaryPanel(
                         grandTotal: widget.grandTotal,
                         totalPaying: _totalPaying,
@@ -753,13 +753,13 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                   controller: row.payingCtrl,
                   kind: PosTouchInputKind.amount,
                   textAlign: TextAlign.right,
-                  decoration: const InputDecoration(isDense: true),
+                  decoration: InputDecoration(isDense: true),
                   onChanged: (_) => _onMixPayingAmountChanged(index),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             flex: 3,
             child: Column(
@@ -770,7 +770,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                   key: ValueKey('paid-by-$index-$selectedId'),
                   initialValue: selectedId,
                   isExpanded: true,
-                  decoration: const InputDecoration(isDense: true),
+                  decoration: InputDecoration(isDense: true),
                   items: methods
                       .map(
                         (m) => DropdownMenuItem(
@@ -784,7 +784,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             flex: 3,
             child: Column(
@@ -797,22 +797,22 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
                         'Cash handed over by the customer. Example: sale is 300, customer gives 500 — enter 500.',
                   )
                 else
-                  const SizedBox(height: 25),
+                  SizedBox(height: 25),
                 if (isCash)
                   PosTouchTextField(
                     controller: row.cashCtrl,
                     kind: PosTouchInputKind.amount,
                     textAlign: TextAlign.right,
-                    decoration: const InputDecoration(isDense: true),
+                    decoration: InputDecoration(isDense: true),
                     onChanged: (_) => _onAmountChanged(),
                   )
                 else
-                  const SizedBox(height: 48),
+                  SizedBox(height: 48),
               ],
             ),
           ),
           if (_mixRows.length > 1) ...[
-            const SizedBox(width: 6),
+            SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.only(top: 24),
               child: IconButton(
@@ -839,20 +839,20 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
         children: [
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: PosColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           if (tooltip != null) ...[
-            const SizedBox(width: 4),
+            SizedBox(width: 4),
             Tooltip(
               message: tooltip,
-              child: const Icon(
+              child: Icon(
                 Icons.info_outline,
                 size: 16,
-                color: PosColors.textMuted,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -881,41 +881,41 @@ class _PaymentSummaryPanel extends StatelessWidget {
       width: 168,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
-        color: PosColors.primary,
+        color: context.posBrand.primary,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _summaryBlock('Total Payable', grandTotal),
-          const SizedBox(height: 20),
-          _summaryBlock('Total Paying', totalPaying),
-          const SizedBox(height: 20),
-          _summaryBlock('Change', change),
-          const SizedBox(height: 20),
-          _summaryBlock('Due', due),
+          _summaryBlock(context, 'Total Payable', grandTotal),
+          SizedBox(height: 20),
+          _summaryBlock(context, 'Total Paying', totalPaying),
+          SizedBox(height: 20),
+          _summaryBlock(context, 'Change', change),
+          SizedBox(height: 20),
+          _summaryBlock(context, 'Due', due),
         ],
       ),
     );
   }
 
-  Widget _summaryBlock(String label, double value) {
+  Widget _summaryBlock(BuildContext context, String label, double value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.surface,
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           formatPosMoney(value),
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.surface,
             fontSize: 22,
             fontWeight: FontWeight.w500,
             height: 1.1,

@@ -36,13 +36,15 @@ class PosShellHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
+
     return Material(
-      color: PosColors.panelBg,
+      color: styles.cardBg,
       child: Container(
         height: height ?? defaultHeight,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: PosColors.border)),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: styles.border)),
         ),
         child: Row(
           children: [
@@ -54,11 +56,11 @@ class PosShellHeader extends StatelessWidget {
                   child: leading!,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
             ],
             const Spacer(),
             const _PosLiveClock(),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               reverse: true,
@@ -74,7 +76,7 @@ class PosShellHeader extends StatelessWidget {
                     ),
                     onTap: onRefresh,
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   _PosStatusChip(
                     label: 'Server',
                     icon: Icons.dns_outlined,
@@ -84,7 +86,7 @@ class PosShellHeader extends StatelessWidget {
                     ),
                     onTap: onRefresh,
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   _PosStatusChip(
                     label: 'Network',
                     icon: Icons.wifi_outlined,
@@ -136,10 +138,10 @@ class _PosLiveClockState extends State<_PosLiveClock> {
 
     return Text(
       '$dateStr | $timeStr',
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w600,
-        color: PosColors.textMuted,
+        color: context.posStyles.text,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
     );
@@ -163,7 +165,7 @@ class _PosStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final isDark = context.isPosDark;
 
     final Color dotColor;
     final Color bgColor;
@@ -171,30 +173,31 @@ class _PosStatusChip extends StatelessWidget {
 
     switch (state) {
       case _PosStatusState.connected:
-        dotColor = const Color(0xFF059669);
-        bgColor = const Color(0xFFECFDF5);
-        fgColor = const Color(0xFF047857);
+        dotColor = const Color(0xFF34D399);
+        if (isDark) {
+          bgColor = const Color(0xFF059669).withValues(alpha: 0.24);
+          fgColor = const Color(0xFF6EE7B7);
+        } else {
+          bgColor = const Color(0xFFECFDF5);
+          fgColor = const Color(0xFF047857);
+        }
       case _PosStatusState.disconnected:
         dotColor = PosColors.red;
-        bgColor = PosColors.red.withValues(alpha: 0.08);
-        fgColor = PosColors.red;
+        bgColor = PosColors.red.withValues(alpha: isDark ? 0.2 : 0.08);
+        fgColor = isDark ? const Color(0xFFFCA5A5) : PosColors.red;
       case _PosStatusState.checking:
         dotColor = PosColors.orange;
-        bgColor = PosColors.orange.withValues(alpha: 0.1);
-        fgColor = PosColors.orange;
+        bgColor = PosColors.orange.withValues(alpha: isDark ? 0.22 : 0.1);
+        fgColor = isDark ? const Color(0xFFFCD34D) : PosColors.orange;
     }
 
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: state == _PosStatusState.connected
-            ? brand.primaryLight.withValues(alpha: 0.55)
-            : bgColor,
+        color: bgColor,
         borderRadius: BorderRadius.circular(kPosButtonRadius),
         border: Border.all(
-          color: state == _PosStatusState.connected
-              ? brand.primary.withValues(alpha: 0.2)
-              : fgColor.withValues(alpha: 0.18),
+          color: fgColor.withValues(alpha: isDark ? 0.35 : 0.18),
         ),
       ),
       child: Row(
@@ -205,20 +208,16 @@ class _PosStatusChip extends StatelessWidget {
             height: 6,
             decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 5),
-          Icon(
-            icon,
-            size: 13,
-            color: state == _PosStatusState.connected ? brand.primary : fgColor,
-          ),
-          const SizedBox(width: 4),
+          SizedBox(width: 5),
+          Icon(icon, size: 13, color: fgColor),
+          SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.15,
-              color: state == _PosStatusState.connected ? brand.primary : fgColor,
+              color: fgColor,
             ),
           ),
         ],

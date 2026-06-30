@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/pos_connectivity_providers.dart';
 import '../../../core/providers/pos_ui_settings_provider.dart';
 import '../providers/pos_register_actions_provider.dart';
+import 'pending_sync_dialog.dart';
 import 'pos_brand_logo.dart';
 import 'pos_register_header_bar.dart';
 import 'pos_sidebar.dart';
@@ -100,6 +102,9 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
     final sidebarLogoPath =
         ref.watch(posUiSettingsProvider.select((s) => s.sidebarLogoPath));
     final uiSettings = ref.watch(posUiSettingsProvider);
+    final pendingAsync = ref.watch(pendingSyncCountProvider);
+    final pendingSyncCount = pendingAsync.valueOrNull ?? 0;
+    final syncingSales = ref.watch(salesSyncInProgressProvider);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -113,7 +118,7 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
                 child: PosBrandLogo(
                   logoPath: sidebarLogoPath,
                   size: 44,
-                  variant: PosBrandLogoVariant.light,
+                  variant: PosBrandLogoVariant.sidebar,
                 ),
               ),
               Expanded(
@@ -141,6 +146,12 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
                             posExchangeSaleTriggerProvider,
                           )
                       : null,
+                  onPendingSync: () => showPendingSyncDialog(
+                    context: context,
+                    ref: ref,
+                  ),
+                  pendingSyncCount: pendingSyncCount,
+                  syncingSales: syncingSales,
                   busy: widget.busy,
                   syncing: widget.syncing,
                 ),

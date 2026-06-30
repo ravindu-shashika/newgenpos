@@ -51,8 +51,11 @@ class PosApiClient {
         trimmed.endsWith('/pos') ? trimmed : '$trimmed/pos';
   }
 
-  Future<Map<String, dynamic>> health() async {
-    final res = await _dio.get('/health');
+  Future<Map<String, dynamic>> health({bool quiet = false}) async {
+    final res = await _dio.get(
+      '/health',
+      options: Options(extra: {'quiet': quiet}),
+    );
     return Map<String, dynamic>.from(res.data as Map);
   }
 

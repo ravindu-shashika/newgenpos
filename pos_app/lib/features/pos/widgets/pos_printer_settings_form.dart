@@ -241,21 +241,22 @@ class _PosPrinterSettingsFormState
     String? hint,
     String? helper,
   }) {
+    final s = context.posStyles;
     final radius = BorderRadius.circular(widget.pageLayout ? 10 : 8);
     return InputDecoration(
       labelText: label,
       hintText: hint,
       helperText: helper,
       filled: true,
-      fillColor: widget.pageLayout ? Colors.white : PosColors.searchFill,
+      fillColor: widget.pageLayout ? s.secondaryBtnBg : s.inputFill,
       border: OutlineInputBorder(borderRadius: radius),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: const BorderSide(color: PosColors.border),
+        borderSide: BorderSide(color: s.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: const BorderSide(color: PosColors.primary, width: 1.5),
+        borderSide: BorderSide(color: s.accent, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     );
@@ -263,6 +264,7 @@ class _PosPrinterSettingsFormState
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     if (!_formReady) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
@@ -278,7 +280,7 @@ class _PosPrinterSettingsFormState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _SectionLabel('Paper size', pageLayout: widget.pageLayout),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(
@@ -312,7 +314,7 @@ class _PosPrinterSettingsFormState
             await ref.read(localPrintSettingsProvider.notifier).replace(next);
           },
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -324,7 +326,7 @@ class _PosPrinterSettingsFormState
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: TextField(
                 controller: _heightCtrl,
@@ -337,7 +339,7 @@ class _PosPrinterSettingsFormState
           ],
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -350,24 +352,24 @@ class _PosPrinterSettingsFormState
             style: TextStyle(fontSize: 12, height: 1.35),
           ),
           value: settings.directPrint,
-          activeTrackColor: PosColors.primary.withValues(alpha: 0.35),
-          activeThumbColor: PosColors.primary,
+          activeTrackColor: s.accent.withValues(alpha: 0.35),
+          activeThumbColor: s.accent,
           onChanged: (v) async {
             await ref
                 .read(localPrintSettingsProvider.notifier)
                 .replace(settings.copyWith(directPrint: v));
           },
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         if (_printersLoading)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Center(child: CircularProgressIndicator()),
           )
         else if (_printers.isEmpty)
           Text(
             'No printers found. Set your receipt printer as Windows default, then refresh.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: s.bodyMuted.copyWith(fontSize: 12),
           )
         else
           DropdownButtonFormField<String>(
@@ -408,10 +410,10 @@ class _PosPrinterSettingsFormState
             },
           ),
         if (settings.printerName.isNotEmpty) ...[
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             'Selected: ${settings.printerName}',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            style: s.bodyMuted.copyWith(fontSize: 12),
           ),
         ],
         Align(
@@ -423,16 +425,16 @@ class _PosPrinterSettingsFormState
           ),
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Receipt logo', pageLayout: widget.pageLayout),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         if (settings.logoPath != null && settings.logoPath!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               settings.logoPath!,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+              style: s.caption.copyWith(fontSize: 11),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -447,7 +449,7 @@ class _PosPrinterSettingsFormState
           ),
         ),
         if (settings.logoPath != null) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
@@ -459,7 +461,7 @@ class _PosPrinterSettingsFormState
             ),
           ),
         ],
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -469,7 +471,7 @@ class _PosPrinterSettingsFormState
                 keyboardType: TextInputType.number,
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: TextField(
                 controller: _logoHeightCtrl,
@@ -480,22 +482,21 @@ class _PosPrinterSettingsFormState
           ],
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Receipt header', pageLayout: widget.pageLayout),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         if (_loadedWarehouseName != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                Icon(Icons.store_outlined,
-                    size: 18, color: Colors.grey.shade700),
-                const SizedBox(width: 6),
+                Icon(Icons.store_outlined, size: 18, color: s.textMuted),
+                SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Warehouse: $_loadedWarehouseName',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+                    style: s.body.copyWith(fontSize: 13),
                   ),
                 ),
                 TextButton(
@@ -521,18 +522,18 @@ class _PosPrinterSettingsFormState
             hint: 'PosLanka.lk',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _headerTitle,
           decoration: _fieldDecoration(label: 'Header title'),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _headerText,
           decoration: _fieldDecoration(label: 'Header text'),
           maxLines: 2,
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _warehouseAddress,
           decoration: _fieldDecoration(
@@ -541,7 +542,7 @@ class _PosPrinterSettingsFormState
           ),
           maxLines: 3,
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _phoneNumber,
           decoration: _fieldDecoration(
@@ -549,7 +550,7 @@ class _PosPrinterSettingsFormState
             hint: '+94763549080',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _contactLine,
           decoration: _fieldDecoration(
@@ -558,10 +559,10 @@ class _PosPrinterSettingsFormState
           ),
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Receipt body & footer', pageLayout: widget.pageLayout),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _itemsSectionTitle,
           decoration: _fieldDecoration(
@@ -569,7 +570,7 @@ class _PosPrinterSettingsFormState
             hint: 'INVOICE ITEMS',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _footerTitle,
           decoration: _fieldDecoration(
@@ -577,13 +578,13 @@ class _PosPrinterSettingsFormState
             hint: 'Thank You! Come Again!',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _footerText,
           decoration: _fieldDecoration(label: 'Footer text'),
           maxLines: 8,
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _softwareCredit,
           decoration: _fieldDecoration(
@@ -592,10 +593,10 @@ class _PosPrinterSettingsFormState
           ),
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Numbering & date', pageLayout: widget.pageLayout),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _prefixCtrl,
           decoration: _fieldDecoration(
@@ -605,7 +606,7 @@ class _PosPrinterSettingsFormState
                 'Used on printed invoice number. Enable auto numbering below for auto numbers.',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         DropdownButtonFormField<String>(
           initialValue: settings.numberingType,
           decoration: _fieldDecoration(label: 'Numbering type'),
@@ -620,7 +621,7 @@ class _PosPrinterSettingsFormState
                 );
           },
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _dateFormatCtrl,
           decoration: _fieldDecoration(
@@ -629,10 +630,10 @@ class _PosPrinterSettingsFormState
           ),
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Colors & VAT', pageLayout: widget.pageLayout),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _primaryColorCtrl,
           decoration: _fieldDecoration(
@@ -640,21 +641,21 @@ class _PosPrinterSettingsFormState
             hint: '#000000',
           ),
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextField(
           controller: _vatCtrl,
           decoration: _fieldDecoration(label: 'VAT registration number'),
         ),
         SizedBox(height: sectionGap),
-        const Divider(height: 1, color: PosColors.border),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
         SizedBox(height: sectionGap),
         _SectionLabel('Display options', pageLayout: widget.pageLayout),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: PosColors.pageBg,
+            color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(
             children: [
@@ -670,13 +671,13 @@ class _PosPrinterSettingsFormState
                       );
                 },
               ),
-              const Divider(height: 1),
+              Divider(height: 1),
               ...PrintOptionKeys.toggleable.map(
                 (key) => CheckboxListTile(
                   dense: true,
                   title: Text(
                     PrintOptionKeys.labels[key] ?? key,
-                    style: const TextStyle(fontSize: 13),
+                    style: TextStyle(fontSize: 13),
                   ),
                   value: settings.option(key),
                   onChanged: (v) async {
@@ -689,7 +690,7 @@ class _PosPrinterSettingsFormState
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        SizedBox(height: 20),
         Wrap(
           spacing: 10,
           runSpacing: 8,
@@ -727,12 +728,12 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Text(
       text,
-      style: TextStyle(
+      style: s.titleMedium.copyWith(
         fontSize: pageLayout ? 14 : 13,
-        fontWeight: FontWeight.w700,
-        color: PosColors.textMuted,
+        color: s.text,
       ),
     );
   }

@@ -193,9 +193,9 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
         children: [
           Text(
             'Apply up to ${formatPosMoney(widget.maxApply)} against this sale',
-            style: const TextStyle(fontSize: 13, color: PosColors.textMuted),
+            style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           SegmentedButton<int>(
             segments: const [
               ButtonSegment(value: 0, label: Text('Scan bill')),
@@ -205,17 +205,17 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
             selected: {_tab},
             onSelectionChanged: (s) => setState(() => _tab = s.first),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           if (_error != null) ...[
-            Text(_error!, style: const TextStyle(color: PosColors.red)),
-            const SizedBox(height: 8),
+            Text(_error!, style: TextStyle(color: PosColors.red)),
+            SizedBox(height: 8),
           ],
           Expanded(child: _buildTabBody()),
           if (_selectedTotal > 0) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               'Selected ${formatPosMoney(_selectedTotal)}',
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ],
         ],
@@ -229,11 +229,11 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Scan the return bill barcode or enter return reference',
-              style: TextStyle(fontSize: 12, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -241,14 +241,14 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
                     controller: _scanCtrl,
                     autofocus: true,
                     suppressNativeKeyboard: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Return bill #',
                       prefixIcon: Icon(Icons.qr_code_scanner),
                     ),
                     onSubmitted: (_) => _scanReturnBill(),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 FilledButton(
                   onPressed: _scanBusy ? null : _scanReturnBill,
                   child: _scanBusy
@@ -267,11 +267,11 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Enter return credit amount to settle on this sale',
-              style: TextStyle(fontSize: 12, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -282,14 +282,14 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
                     ],
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Return amount',
                       prefixText: 'Rs ',
                     ),
                     onSubmitted: (_) => _applyManualAmount(),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 FilledButton(
                   onPressed: _applyManualAmount,
                   child: const Text('Apply'),
@@ -314,8 +314,8 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
             return Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: PosColors.pageBg,
-                border: Border.all(color: PosColors.border),
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border.all(color: Theme.of(context).dividerColor),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -323,16 +323,16 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
                 children: [
                   Text(
                     credit.referenceNo,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                   Text(
                     'Credit ${formatPosMoney(credit.creditRemaining)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: PosColors.textMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -352,7 +352,7 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
                         child: Text(
                           formatPosMoney(amount),
                           textAlign: TextAlign.end,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
                     ],

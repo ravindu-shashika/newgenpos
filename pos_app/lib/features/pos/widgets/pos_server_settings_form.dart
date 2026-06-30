@@ -144,20 +144,20 @@ class _PosServerSettingsFormState extends ConsumerState<PosServerSettingsForm> {
           style: TextStyle(
             fontSize: widget.pageLayout ? 13 : 12,
             fontWeight: FontWeight.w700,
-            color: PosColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           'Full URL to the POS API (must end with /pos). '
           'Example: http://127.0.0.1:8000/pos',
-          style: const TextStyle(fontSize: 12, color: PosColors.textMuted),
+          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         PosTouchTextField(
           controller: _urlCtrl,
           kind: PosTouchInputKind.text,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Server API URL',
             hintText: 'http://127.0.0.1:8000/pos',
             border: OutlineInputBorder(),
@@ -165,7 +165,7 @@ class _PosServerSettingsFormState extends ConsumerState<PosServerSettingsForm> {
           ),
           onChanged: (_) => setState(() => _lastTestOk = null),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -182,13 +182,13 @@ class _PosServerSettingsFormState extends ConsumerState<PosServerSettingsForm> {
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         _SummaryChip(
           icon: Icons.code_outlined,
           label: 'Build default',
           value: buildDefault,
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         Row(
           children: [
             Expanded(
@@ -204,7 +204,7 @@ class _PosServerSettingsFormState extends ConsumerState<PosServerSettingsForm> {
                 label: const Text('Test connection'),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Expanded(
               child: FilledButton.icon(
                 onPressed: _busy ? null : _save,
@@ -218,7 +218,7 @@ class _PosServerSettingsFormState extends ConsumerState<PosServerSettingsForm> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         TextButton(
           onPressed: _busy ? null : _clearCustomUrl,
           child: const Text('Reset form to current default'),
@@ -245,33 +245,33 @@ class _SummaryChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: PosColors.pageBg,
+        color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(kPosButtonRadius),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         children: [
           Icon(icon, size: 16, color: brand.primary),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
           Expanded(
             child: Text(
               value,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: PosColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
@@ -308,7 +308,7 @@ class _StatusPill extends StatelessWidget {
             size: 16,
             color: color,
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(

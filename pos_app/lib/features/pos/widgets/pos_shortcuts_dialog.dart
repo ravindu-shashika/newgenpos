@@ -46,16 +46,16 @@ Future<void> showPosShortcuts(
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: PosColors.pageBg,
+              color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: PosColors.border),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     s['action']!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -65,15 +65,15 @@ Future<void> showPosShortcuts(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: PosColors.primaryLight,
+                    color: context.posBrand.primaryLight,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     s['keys']!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: PosColors.primary,
+                      color: context.posBrand.primary,
                     ),
                   ),
                 ),

@@ -47,8 +47,9 @@ class _PosColorPresetPickerState extends State<PosColorPresetPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     final selected =
-        parsePosHexColor(widget.selectedHex, PosColors.primary);
+        parsePosHexColor(widget.selectedHex, context.posBrand.primary);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,11 +58,7 @@ class _PosColorPresetPickerState extends State<PosColorPresetPicker> {
           children: [
             Text(
               widget.label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: PosColors.textPrimary,
-              ),
+              style: s.titleMedium.copyWith(fontSize: 13),
             ),
             const Spacer(),
             Container(
@@ -70,12 +67,12 @@ class _PosColorPresetPickerState extends State<PosColorPresetPicker> {
               decoration: BoxDecoration(
                 color: selected,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: PosColors.border),
+                border: Border.all(color: s.border),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -92,10 +89,10 @@ class _PosColorPresetPickerState extends State<PosColorPresetPicker> {
           }).toList(),
         ),
         if (widget.allowCustomHex) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           TextField(
             controller: _hexCtrl,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Custom hex',
               hintText: '#002C76',
               isDense: true,
@@ -126,6 +123,7 @@ class _Swatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -136,10 +134,12 @@ class _Swatch extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: selected ? color : PosColors.border,
+              color: selected ? color : s.border,
               width: selected ? 2 : 1,
             ),
-            color: selected ? color.withValues(alpha: 0.08) : Colors.white,
+            color: selected
+                ? color.withValues(alpha: 0.08)
+                : (context.isPosDark ? s.inputFill : Colors.white),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -150,16 +150,16 @@ class _Swatch extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: PosColors.border),
+                  border: Border.all(color: s.border),
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: PosColors.textPrimary,
+                  color: s.text,
                 ),
               ),
             ],

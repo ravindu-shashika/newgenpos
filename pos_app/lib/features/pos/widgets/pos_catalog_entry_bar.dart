@@ -35,6 +35,7 @@ class PosCatalogEntryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     final isBarcode = mode == PosCatalogEntryMode.barcode;
 
     return Column(
@@ -42,19 +43,19 @@ class PosCatalogEntryBar extends StatelessWidget {
       children: [
         if (showModeSwitch) ...[
           PosCatalogModeSwitch(mode: mode, onModeChanged: onModeChanged),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
         ],
         Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
               decoration: BoxDecoration(
-                color: PosColors.searchFill,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.zero,
                 border: Border.all(
                   color: isBarcode
-                      ? PosColors.primary.withValues(alpha: 0.35)
-                      : PosColors.searchBorder,
+                      ? styles.accent.withValues(alpha: 0.45)
+                      : styles.border,
                   width: isBarcode ? 1.5 : 1,
                 ),
               ),
@@ -69,7 +70,7 @@ class PosCatalogEntryBar extends StatelessWidget {
                       : 'Search name or code…',
                   prefixIcon: Icon(
                     isBarcode ? Icons.qr_code_scanner : Icons.search,
-                    color: isBarcode ? PosColors.primary : PosColors.textMuted,
+                    color: isBarcode ? styles.accent : styles.textMuted,
                   ),
                   suffixIcon: isBarcode
                       ? Padding(
@@ -77,7 +78,7 @@ class PosCatalogEntryBar extends StatelessWidget {
                           child: Icon(
                             Icons.sensors,
                             size: 18,
-                            color: PosColors.primary.withValues(alpha: 0.7),
+                            color: styles.accent.withValues(alpha: 0.85),
                           ),
                         )
                       : null,
@@ -147,6 +148,7 @@ class PosCatalogModeSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     final chipHeight = compact ? 32.0 : 38.0;
     final fontSize = compact ? 12.0 : 13.0;
     final iconSize = compact ? 14.0 : 16.0;
@@ -156,9 +158,9 @@ class PosCatalogModeSwitch extends StatelessWidget {
       height: chipHeight,
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: styles.elevatedBg,
         borderRadius: radius,
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: styles.border),
       ),
       child: Row(
         children: [
@@ -211,15 +213,20 @@ class _ModeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final styles = context.posStyles;
     const radius = BorderRadius.all(Radius.circular(kPosButtonRadius - 1));
+    final selectedBg = styles.isDark
+        ? styles.brand.primary.withValues(alpha: 0.38)
+        : styles.brand.primaryLight.withValues(alpha: 0.55);
+    final selectedFg = styles.accent;
+    final unselectedFg = styles.text;
 
     return Material(
-      color: selected ? brand.primaryLight.withValues(alpha: 0.55) : Colors.transparent,
+      color: selected ? selectedBg : Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
         side: BorderSide(
-          color: selected ? brand.primary.withValues(alpha: 0.35) : Colors.transparent,
+          color: selected ? styles.accent.withValues(alpha: 0.4) : Colors.transparent,
           width: 1,
         ),
       ),
@@ -234,15 +241,15 @@ class _ModeChip extends StatelessWidget {
               Icon(
                 icon,
                 size: iconSize,
-                color: selected ? brand.primary : PosColors.textMuted,
+                color: selected ? selectedFg : unselectedFg,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: fontSize,
                   fontWeight: FontWeight.w600,
-                  color: selected ? brand.primary : PosColors.textMuted,
+                  color: selected ? selectedFg : unselectedFg,
                 ),
               ),
             ],

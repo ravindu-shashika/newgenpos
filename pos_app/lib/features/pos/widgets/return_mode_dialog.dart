@@ -24,7 +24,7 @@ Future<ReturnEntryMode?> showReturnModeDialog(BuildContext context) {
             subtitle: 'Find original sale by reference and return items',
             onTap: () => Navigator.pop(context, ReturnEntryMode.withPastBill),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _ReturnModeTile(
             icon: Icons.qr_code_scanner,
             title: 'Without past bill',
@@ -32,10 +32,10 @@ Future<ReturnEntryMode?> showReturnModeDialog(BuildContext context) {
             onTap: () =>
                 Navigator.pop(context, ReturnEntryMode.withoutPastBill),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'No cash refund. Credit can be settled on the next sale.',
-            style: TextStyle(fontSize: 12, color: PosColors.textMuted),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -59,7 +59,7 @@ class _ReturnModeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -67,7 +67,7 @@ class _ReturnModeTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -76,35 +76,35 @@ class _ReturnModeTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: PosColors.primaryLight,
+                  color: context.posBrand.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: PosColors.primary),
+                child: Icon(icon, color: context.posBrand.primary),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: PosColors.textMuted,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: PosColors.textMuted),
+              Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ],
           ),
         ),

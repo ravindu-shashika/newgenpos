@@ -6091,6 +6091,705 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
   }
 }
 
+class $LocalCashRegistersTable extends LocalCashRegisters
+    with TableInfo<$LocalCashRegistersTable, LocalCashRegister> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalCashRegistersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _clientUuidMeta =
+      const VerificationMeta('clientUuid');
+  @override
+  late final GeneratedColumn<String> clientUuid = GeneratedColumn<String>(
+      'client_uuid', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _serverRegisterIdMeta =
+      const VerificationMeta('serverRegisterId');
+  @override
+  late final GeneratedColumn<int> serverRegisterId = GeneratedColumn<int>(
+      'server_register_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+      'user_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _warehouseIdMeta =
+      const VerificationMeta('warehouseId');
+  @override
+  late final GeneratedColumn<int> warehouseId = GeneratedColumn<int>(
+      'warehouse_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _cashInHandMeta =
+      const VerificationMeta('cashInHand');
+  @override
+  late final GeneratedColumn<double> cashInHand = GeneratedColumn<double>(
+      'cash_in_hand', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _closingBalanceMeta =
+      const VerificationMeta('closingBalance');
+  @override
+  late final GeneratedColumn<double> closingBalance = GeneratedColumn<double>(
+      'closing_balance', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _actualCashMeta =
+      const VerificationMeta('actualCash');
+  @override
+  late final GeneratedColumn<double> actualCash = GeneratedColumn<double>(
+      'actual_cash', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _isOpenMeta = const VerificationMeta('isOpen');
+  @override
+  late final GeneratedColumn<bool> isOpen = GeneratedColumn<bool>(
+      'is_open', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_open" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _syncStatusMeta =
+      const VerificationMeta('syncStatus');
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+      'sync_status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('pending_open'));
+  static const VerificationMeta _errorMessageMeta =
+      const VerificationMeta('errorMessage');
+  @override
+  late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
+      'error_message', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _openedAtMeta =
+      const VerificationMeta('openedAt');
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+      'opened_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _closedAtMeta =
+      const VerificationMeta('closedAt');
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+      'closed_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _syncedAtMeta =
+      const VerificationMeta('syncedAt');
+  @override
+  late final GeneratedColumn<DateTime> syncedAt = GeneratedColumn<DateTime>(
+      'synced_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        clientUuid,
+        serverRegisterId,
+        userId,
+        warehouseId,
+        cashInHand,
+        closingBalance,
+        actualCash,
+        isOpen,
+        syncStatus,
+        errorMessage,
+        openedAt,
+        closedAt,
+        syncedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_cash_registers';
+  @override
+  VerificationContext validateIntegrity(Insertable<LocalCashRegister> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('client_uuid')) {
+      context.handle(
+          _clientUuidMeta,
+          clientUuid.isAcceptableOrUnknown(
+              data['client_uuid']!, _clientUuidMeta));
+    } else if (isInserting) {
+      context.missing(_clientUuidMeta);
+    }
+    if (data.containsKey('server_register_id')) {
+      context.handle(
+          _serverRegisterIdMeta,
+          serverRegisterId.isAcceptableOrUnknown(
+              data['server_register_id']!, _serverRegisterIdMeta));
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('warehouse_id')) {
+      context.handle(
+          _warehouseIdMeta,
+          warehouseId.isAcceptableOrUnknown(
+              data['warehouse_id']!, _warehouseIdMeta));
+    } else if (isInserting) {
+      context.missing(_warehouseIdMeta);
+    }
+    if (data.containsKey('cash_in_hand')) {
+      context.handle(
+          _cashInHandMeta,
+          cashInHand.isAcceptableOrUnknown(
+              data['cash_in_hand']!, _cashInHandMeta));
+    } else if (isInserting) {
+      context.missing(_cashInHandMeta);
+    }
+    if (data.containsKey('closing_balance')) {
+      context.handle(
+          _closingBalanceMeta,
+          closingBalance.isAcceptableOrUnknown(
+              data['closing_balance']!, _closingBalanceMeta));
+    }
+    if (data.containsKey('actual_cash')) {
+      context.handle(
+          _actualCashMeta,
+          actualCash.isAcceptableOrUnknown(
+              data['actual_cash']!, _actualCashMeta));
+    }
+    if (data.containsKey('is_open')) {
+      context.handle(_isOpenMeta,
+          isOpen.isAcceptableOrUnknown(data['is_open']!, _isOpenMeta));
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+          _syncStatusMeta,
+          syncStatus.isAcceptableOrUnknown(
+              data['sync_status']!, _syncStatusMeta));
+    }
+    if (data.containsKey('error_message')) {
+      context.handle(
+          _errorMessageMeta,
+          errorMessage.isAcceptableOrUnknown(
+              data['error_message']!, _errorMessageMeta));
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(_openedAtMeta,
+          openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta));
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(_closedAtMeta,
+          closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta));
+    }
+    if (data.containsKey('synced_at')) {
+      context.handle(_syncedAtMeta,
+          syncedAt.isAcceptableOrUnknown(data['synced_at']!, _syncedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LocalCashRegister map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalCashRegister(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      clientUuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}client_uuid'])!,
+      serverRegisterId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}server_register_id']),
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_id'])!,
+      warehouseId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}warehouse_id'])!,
+      cashInHand: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}cash_in_hand'])!,
+      closingBalance: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}closing_balance']),
+      actualCash: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}actual_cash']),
+      isOpen: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_open'])!,
+      syncStatus: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sync_status'])!,
+      errorMessage: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      openedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}opened_at'])!,
+      closedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}closed_at']),
+      syncedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
+    );
+  }
+
+  @override
+  $LocalCashRegistersTable createAlias(String alias) {
+    return $LocalCashRegistersTable(attachedDatabase, alias);
+  }
+}
+
+class LocalCashRegister extends DataClass
+    implements Insertable<LocalCashRegister> {
+  final int id;
+  final String clientUuid;
+  final int? serverRegisterId;
+  final int userId;
+  final int warehouseId;
+  final double cashInHand;
+  final double? closingBalance;
+  final double? actualCash;
+  final bool isOpen;
+
+  /// pending_open | synced | pending_close | closed
+  final String syncStatus;
+  final String? errorMessage;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final DateTime? syncedAt;
+  const LocalCashRegister(
+      {required this.id,
+      required this.clientUuid,
+      this.serverRegisterId,
+      required this.userId,
+      required this.warehouseId,
+      required this.cashInHand,
+      this.closingBalance,
+      this.actualCash,
+      required this.isOpen,
+      required this.syncStatus,
+      this.errorMessage,
+      required this.openedAt,
+      this.closedAt,
+      this.syncedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['client_uuid'] = Variable<String>(clientUuid);
+    if (!nullToAbsent || serverRegisterId != null) {
+      map['server_register_id'] = Variable<int>(serverRegisterId);
+    }
+    map['user_id'] = Variable<int>(userId);
+    map['warehouse_id'] = Variable<int>(warehouseId);
+    map['cash_in_hand'] = Variable<double>(cashInHand);
+    if (!nullToAbsent || closingBalance != null) {
+      map['closing_balance'] = Variable<double>(closingBalance);
+    }
+    if (!nullToAbsent || actualCash != null) {
+      map['actual_cash'] = Variable<double>(actualCash);
+    }
+    map['is_open'] = Variable<bool>(isOpen);
+    map['sync_status'] = Variable<String>(syncStatus);
+    if (!nullToAbsent || errorMessage != null) {
+      map['error_message'] = Variable<String>(errorMessage);
+    }
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || syncedAt != null) {
+      map['synced_at'] = Variable<DateTime>(syncedAt);
+    }
+    return map;
+  }
+
+  LocalCashRegistersCompanion toCompanion(bool nullToAbsent) {
+    return LocalCashRegistersCompanion(
+      id: Value(id),
+      clientUuid: Value(clientUuid),
+      serverRegisterId: serverRegisterId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverRegisterId),
+      userId: Value(userId),
+      warehouseId: Value(warehouseId),
+      cashInHand: Value(cashInHand),
+      closingBalance: closingBalance == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closingBalance),
+      actualCash: actualCash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualCash),
+      isOpen: Value(isOpen),
+      syncStatus: Value(syncStatus),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
+      openedAt: Value(openedAt),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      syncedAt: syncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncedAt),
+    );
+  }
+
+  factory LocalCashRegister.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalCashRegister(
+      id: serializer.fromJson<int>(json['id']),
+      clientUuid: serializer.fromJson<String>(json['clientUuid']),
+      serverRegisterId: serializer.fromJson<int?>(json['serverRegisterId']),
+      userId: serializer.fromJson<int>(json['userId']),
+      warehouseId: serializer.fromJson<int>(json['warehouseId']),
+      cashInHand: serializer.fromJson<double>(json['cashInHand']),
+      closingBalance: serializer.fromJson<double?>(json['closingBalance']),
+      actualCash: serializer.fromJson<double?>(json['actualCash']),
+      isOpen: serializer.fromJson<bool>(json['isOpen']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+      errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'clientUuid': serializer.toJson<String>(clientUuid),
+      'serverRegisterId': serializer.toJson<int?>(serverRegisterId),
+      'userId': serializer.toJson<int>(userId),
+      'warehouseId': serializer.toJson<int>(warehouseId),
+      'cashInHand': serializer.toJson<double>(cashInHand),
+      'closingBalance': serializer.toJson<double?>(closingBalance),
+      'actualCash': serializer.toJson<double?>(actualCash),
+      'isOpen': serializer.toJson<bool>(isOpen),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+      'errorMessage': serializer.toJson<String?>(errorMessage),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'syncedAt': serializer.toJson<DateTime?>(syncedAt),
+    };
+  }
+
+  LocalCashRegister copyWith(
+          {int? id,
+          String? clientUuid,
+          Value<int?> serverRegisterId = const Value.absent(),
+          int? userId,
+          int? warehouseId,
+          double? cashInHand,
+          Value<double?> closingBalance = const Value.absent(),
+          Value<double?> actualCash = const Value.absent(),
+          bool? isOpen,
+          String? syncStatus,
+          Value<String?> errorMessage = const Value.absent(),
+          DateTime? openedAt,
+          Value<DateTime?> closedAt = const Value.absent(),
+          Value<DateTime?> syncedAt = const Value.absent()}) =>
+      LocalCashRegister(
+        id: id ?? this.id,
+        clientUuid: clientUuid ?? this.clientUuid,
+        serverRegisterId: serverRegisterId.present
+            ? serverRegisterId.value
+            : this.serverRegisterId,
+        userId: userId ?? this.userId,
+        warehouseId: warehouseId ?? this.warehouseId,
+        cashInHand: cashInHand ?? this.cashInHand,
+        closingBalance:
+            closingBalance.present ? closingBalance.value : this.closingBalance,
+        actualCash: actualCash.present ? actualCash.value : this.actualCash,
+        isOpen: isOpen ?? this.isOpen,
+        syncStatus: syncStatus ?? this.syncStatus,
+        errorMessage:
+            errorMessage.present ? errorMessage.value : this.errorMessage,
+        openedAt: openedAt ?? this.openedAt,
+        closedAt: closedAt.present ? closedAt.value : this.closedAt,
+        syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
+      );
+  LocalCashRegister copyWithCompanion(LocalCashRegistersCompanion data) {
+    return LocalCashRegister(
+      id: data.id.present ? data.id.value : this.id,
+      clientUuid:
+          data.clientUuid.present ? data.clientUuid.value : this.clientUuid,
+      serverRegisterId: data.serverRegisterId.present
+          ? data.serverRegisterId.value
+          : this.serverRegisterId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      warehouseId:
+          data.warehouseId.present ? data.warehouseId.value : this.warehouseId,
+      cashInHand:
+          data.cashInHand.present ? data.cashInHand.value : this.cashInHand,
+      closingBalance: data.closingBalance.present
+          ? data.closingBalance.value
+          : this.closingBalance,
+      actualCash:
+          data.actualCash.present ? data.actualCash.value : this.actualCash,
+      isOpen: data.isOpen.present ? data.isOpen.value : this.isOpen,
+      syncStatus:
+          data.syncStatus.present ? data.syncStatus.value : this.syncStatus,
+      errorMessage: data.errorMessage.present
+          ? data.errorMessage.value
+          : this.errorMessage,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalCashRegister(')
+          ..write('id: $id, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('serverRegisterId: $serverRegisterId, ')
+          ..write('userId: $userId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('cashInHand: $cashInHand, ')
+          ..write('closingBalance: $closingBalance, ')
+          ..write('actualCash: $actualCash, ')
+          ..write('isOpen: $isOpen, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('syncedAt: $syncedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      clientUuid,
+      serverRegisterId,
+      userId,
+      warehouseId,
+      cashInHand,
+      closingBalance,
+      actualCash,
+      isOpen,
+      syncStatus,
+      errorMessage,
+      openedAt,
+      closedAt,
+      syncedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalCashRegister &&
+          other.id == this.id &&
+          other.clientUuid == this.clientUuid &&
+          other.serverRegisterId == this.serverRegisterId &&
+          other.userId == this.userId &&
+          other.warehouseId == this.warehouseId &&
+          other.cashInHand == this.cashInHand &&
+          other.closingBalance == this.closingBalance &&
+          other.actualCash == this.actualCash &&
+          other.isOpen == this.isOpen &&
+          other.syncStatus == this.syncStatus &&
+          other.errorMessage == this.errorMessage &&
+          other.openedAt == this.openedAt &&
+          other.closedAt == this.closedAt &&
+          other.syncedAt == this.syncedAt);
+}
+
+class LocalCashRegistersCompanion extends UpdateCompanion<LocalCashRegister> {
+  final Value<int> id;
+  final Value<String> clientUuid;
+  final Value<int?> serverRegisterId;
+  final Value<int> userId;
+  final Value<int> warehouseId;
+  final Value<double> cashInHand;
+  final Value<double?> closingBalance;
+  final Value<double?> actualCash;
+  final Value<bool> isOpen;
+  final Value<String> syncStatus;
+  final Value<String?> errorMessage;
+  final Value<DateTime> openedAt;
+  final Value<DateTime?> closedAt;
+  final Value<DateTime?> syncedAt;
+  const LocalCashRegistersCompanion({
+    this.id = const Value.absent(),
+    this.clientUuid = const Value.absent(),
+    this.serverRegisterId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.warehouseId = const Value.absent(),
+    this.cashInHand = const Value.absent(),
+    this.closingBalance = const Value.absent(),
+    this.actualCash = const Value.absent(),
+    this.isOpen = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.syncedAt = const Value.absent(),
+  });
+  LocalCashRegistersCompanion.insert({
+    this.id = const Value.absent(),
+    required String clientUuid,
+    this.serverRegisterId = const Value.absent(),
+    required int userId,
+    required int warehouseId,
+    required double cashInHand,
+    this.closingBalance = const Value.absent(),
+    this.actualCash = const Value.absent(),
+    this.isOpen = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.syncedAt = const Value.absent(),
+  })  : clientUuid = Value(clientUuid),
+        userId = Value(userId),
+        warehouseId = Value(warehouseId),
+        cashInHand = Value(cashInHand);
+  static Insertable<LocalCashRegister> custom({
+    Expression<int>? id,
+    Expression<String>? clientUuid,
+    Expression<int>? serverRegisterId,
+    Expression<int>? userId,
+    Expression<int>? warehouseId,
+    Expression<double>? cashInHand,
+    Expression<double>? closingBalance,
+    Expression<double>? actualCash,
+    Expression<bool>? isOpen,
+    Expression<String>? syncStatus,
+    Expression<String>? errorMessage,
+    Expression<DateTime>? openedAt,
+    Expression<DateTime>? closedAt,
+    Expression<DateTime>? syncedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (clientUuid != null) 'client_uuid': clientUuid,
+      if (serverRegisterId != null) 'server_register_id': serverRegisterId,
+      if (userId != null) 'user_id': userId,
+      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (cashInHand != null) 'cash_in_hand': cashInHand,
+      if (closingBalance != null) 'closing_balance': closingBalance,
+      if (actualCash != null) 'actual_cash': actualCash,
+      if (isOpen != null) 'is_open': isOpen,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (syncedAt != null) 'synced_at': syncedAt,
+    });
+  }
+
+  LocalCashRegistersCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? clientUuid,
+      Value<int?>? serverRegisterId,
+      Value<int>? userId,
+      Value<int>? warehouseId,
+      Value<double>? cashInHand,
+      Value<double?>? closingBalance,
+      Value<double?>? actualCash,
+      Value<bool>? isOpen,
+      Value<String>? syncStatus,
+      Value<String?>? errorMessage,
+      Value<DateTime>? openedAt,
+      Value<DateTime?>? closedAt,
+      Value<DateTime?>? syncedAt}) {
+    return LocalCashRegistersCompanion(
+      id: id ?? this.id,
+      clientUuid: clientUuid ?? this.clientUuid,
+      serverRegisterId: serverRegisterId ?? this.serverRegisterId,
+      userId: userId ?? this.userId,
+      warehouseId: warehouseId ?? this.warehouseId,
+      cashInHand: cashInHand ?? this.cashInHand,
+      closingBalance: closingBalance ?? this.closingBalance,
+      actualCash: actualCash ?? this.actualCash,
+      isOpen: isOpen ?? this.isOpen,
+      syncStatus: syncStatus ?? this.syncStatus,
+      errorMessage: errorMessage ?? this.errorMessage,
+      openedAt: openedAt ?? this.openedAt,
+      closedAt: closedAt ?? this.closedAt,
+      syncedAt: syncedAt ?? this.syncedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (clientUuid.present) {
+      map['client_uuid'] = Variable<String>(clientUuid.value);
+    }
+    if (serverRegisterId.present) {
+      map['server_register_id'] = Variable<int>(serverRegisterId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (warehouseId.present) {
+      map['warehouse_id'] = Variable<int>(warehouseId.value);
+    }
+    if (cashInHand.present) {
+      map['cash_in_hand'] = Variable<double>(cashInHand.value);
+    }
+    if (closingBalance.present) {
+      map['closing_balance'] = Variable<double>(closingBalance.value);
+    }
+    if (actualCash.present) {
+      map['actual_cash'] = Variable<double>(actualCash.value);
+    }
+    if (isOpen.present) {
+      map['is_open'] = Variable<bool>(isOpen.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (errorMessage.present) {
+      map['error_message'] = Variable<String>(errorMessage.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (syncedAt.present) {
+      map['synced_at'] = Variable<DateTime>(syncedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalCashRegistersCompanion(')
+          ..write('id: $id, ')
+          ..write('clientUuid: $clientUuid, ')
+          ..write('serverRegisterId: $serverRegisterId, ')
+          ..write('userId: $userId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('cashInHand: $cashInHand, ')
+          ..write('closingBalance: $closingBalance, ')
+          ..write('actualCash: $actualCash, ')
+          ..write('isOpen: $isOpen, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('syncedAt: $syncedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $LocalSalesTable extends LocalSales
     with TableInfo<$LocalSalesTable, LocalSale> {
   @override
@@ -6272,6 +6971,15 @@ class $LocalSalesTable extends LocalSales
   late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
       'error_message', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _localCashRegisterIdMeta =
+      const VerificationMeta('localCashRegisterId');
+  @override
+  late final GeneratedColumn<int> localCashRegisterId = GeneratedColumn<int>(
+      'local_cash_register_id', aliasedName, true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES local_cash_registers (id)'));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -6312,6 +7020,7 @@ class $LocalSalesTable extends LocalSales
         serverSaleId,
         serverReferenceNo,
         errorMessage,
+        localCashRegisterId,
         createdAt,
         syncedAt
       ];
@@ -6464,6 +7173,12 @@ class $LocalSalesTable extends LocalSales
           errorMessage.isAcceptableOrUnknown(
               data['error_message']!, _errorMessageMeta));
     }
+    if (data.containsKey('local_cash_register_id')) {
+      context.handle(
+          _localCashRegisterIdMeta,
+          localCashRegisterId.isAcceptableOrUnknown(
+              data['local_cash_register_id']!, _localCashRegisterIdMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -6529,6 +7244,8 @@ class $LocalSalesTable extends LocalSales
           DriftSqlType.string, data['${effectivePrefix}server_reference_no']),
       errorMessage: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      localCashRegisterId: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}local_cash_register_id']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       syncedAt: attachedDatabase.typeMapping
@@ -6567,6 +7284,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
   final int? serverSaleId;
   final String? serverReferenceNo;
   final String? errorMessage;
+  final int? localCashRegisterId;
   final DateTime createdAt;
   final DateTime? syncedAt;
   const LocalSale(
@@ -6594,6 +7312,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       this.serverSaleId,
       this.serverReferenceNo,
       this.errorMessage,
+      this.localCashRegisterId,
       required this.createdAt,
       this.syncedAt});
   @override
@@ -6636,6 +7355,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
     }
     if (!nullToAbsent || errorMessage != null) {
       map['error_message'] = Variable<String>(errorMessage);
+    }
+    if (!nullToAbsent || localCashRegisterId != null) {
+      map['local_cash_register_id'] = Variable<int>(localCashRegisterId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || syncedAt != null) {
@@ -6684,6 +7406,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       errorMessage: errorMessage == null && nullToAbsent
           ? const Value.absent()
           : Value(errorMessage),
+      localCashRegisterId: localCashRegisterId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localCashRegisterId),
       createdAt: Value(createdAt),
       syncedAt: syncedAt == null && nullToAbsent
           ? const Value.absent()
@@ -6720,6 +7445,8 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       serverReferenceNo:
           serializer.fromJson<String?>(json['serverReferenceNo']),
       errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      localCashRegisterId:
+          serializer.fromJson<int?>(json['localCashRegisterId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
     );
@@ -6752,6 +7479,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       'serverSaleId': serializer.toJson<int?>(serverSaleId),
       'serverReferenceNo': serializer.toJson<String?>(serverReferenceNo),
       'errorMessage': serializer.toJson<String?>(errorMessage),
+      'localCashRegisterId': serializer.toJson<int?>(localCashRegisterId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
     };
@@ -6782,6 +7510,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           Value<int?> serverSaleId = const Value.absent(),
           Value<String?> serverReferenceNo = const Value.absent(),
           Value<String?> errorMessage = const Value.absent(),
+          Value<int?> localCashRegisterId = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent()}) =>
       LocalSale(
@@ -6813,6 +7542,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
             : this.serverReferenceNo,
         errorMessage:
             errorMessage.present ? errorMessage.value : this.errorMessage,
+        localCashRegisterId: localCashRegisterId.present
+            ? localCashRegisterId.value
+            : this.localCashRegisterId,
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
       );
@@ -6869,6 +7601,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       errorMessage: data.errorMessage.present
           ? data.errorMessage.value
           : this.errorMessage,
+      localCashRegisterId: data.localCashRegisterId.present
+          ? data.localCashRegisterId.value
+          : this.localCashRegisterId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
     );
@@ -6901,6 +7636,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           ..write('serverSaleId: $serverSaleId, ')
           ..write('serverReferenceNo: $serverReferenceNo, ')
           ..write('errorMessage: $errorMessage, ')
+          ..write('localCashRegisterId: $localCashRegisterId, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
           ..write(')'))
@@ -6933,6 +7669,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
         serverSaleId,
         serverReferenceNo,
         errorMessage,
+        localCashRegisterId,
         createdAt,
         syncedAt
       ]);
@@ -6964,6 +7701,7 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           other.serverSaleId == this.serverSaleId &&
           other.serverReferenceNo == this.serverReferenceNo &&
           other.errorMessage == this.errorMessage &&
+          other.localCashRegisterId == this.localCashRegisterId &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
 }
@@ -6993,6 +7731,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
   final Value<int?> serverSaleId;
   final Value<String?> serverReferenceNo;
   final Value<String?> errorMessage;
+  final Value<int?> localCashRegisterId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
   const LocalSalesCompanion({
@@ -7020,6 +7759,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     this.serverSaleId = const Value.absent(),
     this.serverReferenceNo = const Value.absent(),
     this.errorMessage = const Value.absent(),
+    this.localCashRegisterId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
   });
@@ -7048,6 +7788,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     this.serverSaleId = const Value.absent(),
     this.serverReferenceNo = const Value.absent(),
     this.errorMessage = const Value.absent(),
+    this.localCashRegisterId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
   })  : clientUuid = Value(clientUuid),
@@ -7079,6 +7820,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     Expression<int>? serverSaleId,
     Expression<String>? serverReferenceNo,
     Expression<String>? errorMessage,
+    Expression<int>? localCashRegisterId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
   }) {
@@ -7107,6 +7849,8 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       if (serverSaleId != null) 'server_sale_id': serverSaleId,
       if (serverReferenceNo != null) 'server_reference_no': serverReferenceNo,
       if (errorMessage != null) 'error_message': errorMessage,
+      if (localCashRegisterId != null)
+        'local_cash_register_id': localCashRegisterId,
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
     });
@@ -7137,6 +7881,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       Value<int?>? serverSaleId,
       Value<String?>? serverReferenceNo,
       Value<String?>? errorMessage,
+      Value<int?>? localCashRegisterId,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt}) {
     return LocalSalesCompanion(
@@ -7164,6 +7909,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       serverSaleId: serverSaleId ?? this.serverSaleId,
       serverReferenceNo: serverReferenceNo ?? this.serverReferenceNo,
       errorMessage: errorMessage ?? this.errorMessage,
+      localCashRegisterId: localCashRegisterId ?? this.localCashRegisterId,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
     );
@@ -7244,6 +7990,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     if (errorMessage.present) {
       map['error_message'] = Variable<String>(errorMessage.value);
     }
+    if (localCashRegisterId.present) {
+      map['local_cash_register_id'] = Variable<int>(localCashRegisterId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -7280,6 +8029,7 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
           ..write('serverSaleId: $serverSaleId, ')
           ..write('serverReferenceNo: $serverReferenceNo, ')
           ..write('errorMessage: $errorMessage, ')
+          ..write('localCashRegisterId: $localCashRegisterId, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
           ..write(')'))
@@ -9587,6 +10337,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductVariantsTable productVariants =
       $ProductVariantsTable(this);
   late final $ProductStockTable productStock = $ProductStockTable(this);
+  late final $LocalCashRegistersTable localCashRegisters =
+      $LocalCashRegistersTable(this);
   late final $LocalSalesTable localSales = $LocalSalesTable(this);
   late final $LocalSaleLinesTable localSaleLines = $LocalSaleLinesTable(this);
   late final $LocalReturnsTable localReturns = $LocalReturnsTable(this);
@@ -9610,6 +10362,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         products,
         productVariants,
         productStock,
+        localCashRegisters,
         localSales,
         localSaleLines,
         localReturns,
@@ -12594,6 +13347,398 @@ typedef $$ProductStockTableProcessedTableManager = ProcessedTableManager<
     ),
     ProductStockData,
     PrefetchHooks Function()>;
+typedef $$LocalCashRegistersTableCreateCompanionBuilder
+    = LocalCashRegistersCompanion Function({
+  Value<int> id,
+  required String clientUuid,
+  Value<int?> serverRegisterId,
+  required int userId,
+  required int warehouseId,
+  required double cashInHand,
+  Value<double?> closingBalance,
+  Value<double?> actualCash,
+  Value<bool> isOpen,
+  Value<String> syncStatus,
+  Value<String?> errorMessage,
+  Value<DateTime> openedAt,
+  Value<DateTime?> closedAt,
+  Value<DateTime?> syncedAt,
+});
+typedef $$LocalCashRegistersTableUpdateCompanionBuilder
+    = LocalCashRegistersCompanion Function({
+  Value<int> id,
+  Value<String> clientUuid,
+  Value<int?> serverRegisterId,
+  Value<int> userId,
+  Value<int> warehouseId,
+  Value<double> cashInHand,
+  Value<double?> closingBalance,
+  Value<double?> actualCash,
+  Value<bool> isOpen,
+  Value<String> syncStatus,
+  Value<String?> errorMessage,
+  Value<DateTime> openedAt,
+  Value<DateTime?> closedAt,
+  Value<DateTime?> syncedAt,
+});
+
+final class $$LocalCashRegistersTableReferences extends BaseReferences<
+    _$AppDatabase, $LocalCashRegistersTable, LocalCashRegister> {
+  $$LocalCashRegistersTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LocalSalesTable, List<LocalSale>>
+      _localSalesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.localSales,
+              aliasName: $_aliasNameGenerator(
+                  db.localCashRegisters.id, db.localSales.localCashRegisterId));
+
+  $$LocalSalesTableProcessedTableManager get localSalesRefs {
+    final manager = $$LocalSalesTableTableManager($_db, $_db.localSales).filter(
+        (f) => f.localCashRegisterId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_localSalesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$LocalCashRegistersTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalCashRegistersTable> {
+  $$LocalCashRegistersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get clientUuid => $composableBuilder(
+      column: $table.clientUuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get serverRegisterId => $composableBuilder(
+      column: $table.serverRegisterId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get warehouseId => $composableBuilder(
+      column: $table.warehouseId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get cashInHand => $composableBuilder(
+      column: $table.cashInHand, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get closingBalance => $composableBuilder(
+      column: $table.closingBalance,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get actualCash => $composableBuilder(
+      column: $table.actualCash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isOpen => $composableBuilder(
+      column: $table.isOpen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+      column: $table.openedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+      column: $table.closedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get syncedAt => $composableBuilder(
+      column: $table.syncedAt, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> localSalesRefs(
+      Expression<bool> Function($$LocalSalesTableFilterComposer f) f) {
+    final $$LocalSalesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.localSales,
+        getReferencedColumn: (t) => t.localCashRegisterId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LocalSalesTableFilterComposer(
+              $db: $db,
+              $table: $db.localSales,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$LocalCashRegistersTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalCashRegistersTable> {
+  $$LocalCashRegistersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get clientUuid => $composableBuilder(
+      column: $table.clientUuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get serverRegisterId => $composableBuilder(
+      column: $table.serverRegisterId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get warehouseId => $composableBuilder(
+      column: $table.warehouseId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get cashInHand => $composableBuilder(
+      column: $table.cashInHand, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get closingBalance => $composableBuilder(
+      column: $table.closingBalance,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get actualCash => $composableBuilder(
+      column: $table.actualCash, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isOpen => $composableBuilder(
+      column: $table.isOpen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+      column: $table.openedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+      column: $table.closedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get syncedAt => $composableBuilder(
+      column: $table.syncedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$LocalCashRegistersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalCashRegistersTable> {
+  $$LocalCashRegistersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get clientUuid => $composableBuilder(
+      column: $table.clientUuid, builder: (column) => column);
+
+  GeneratedColumn<int> get serverRegisterId => $composableBuilder(
+      column: $table.serverRegisterId, builder: (column) => column);
+
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<int> get warehouseId => $composableBuilder(
+      column: $table.warehouseId, builder: (column) => column);
+
+  GeneratedColumn<double> get cashInHand => $composableBuilder(
+      column: $table.cashInHand, builder: (column) => column);
+
+  GeneratedColumn<double> get closingBalance => $composableBuilder(
+      column: $table.closingBalance, builder: (column) => column);
+
+  GeneratedColumn<double> get actualCash => $composableBuilder(
+      column: $table.actualCash, builder: (column) => column);
+
+  GeneratedColumn<bool> get isOpen =>
+      $composableBuilder(column: $table.isOpen, builder: (column) => column);
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+      column: $table.syncStatus, builder: (column) => column);
+
+  GeneratedColumn<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get syncedAt =>
+      $composableBuilder(column: $table.syncedAt, builder: (column) => column);
+
+  Expression<T> localSalesRefs<T extends Object>(
+      Expression<T> Function($$LocalSalesTableAnnotationComposer a) f) {
+    final $$LocalSalesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.localSales,
+        getReferencedColumn: (t) => t.localCashRegisterId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LocalSalesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.localSales,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$LocalCashRegistersTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $LocalCashRegistersTable,
+    LocalCashRegister,
+    $$LocalCashRegistersTableFilterComposer,
+    $$LocalCashRegistersTableOrderingComposer,
+    $$LocalCashRegistersTableAnnotationComposer,
+    $$LocalCashRegistersTableCreateCompanionBuilder,
+    $$LocalCashRegistersTableUpdateCompanionBuilder,
+    (LocalCashRegister, $$LocalCashRegistersTableReferences),
+    LocalCashRegister,
+    PrefetchHooks Function({bool localSalesRefs})> {
+  $$LocalCashRegistersTableTableManager(
+      _$AppDatabase db, $LocalCashRegistersTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalCashRegistersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalCashRegistersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalCashRegistersTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> clientUuid = const Value.absent(),
+            Value<int?> serverRegisterId = const Value.absent(),
+            Value<int> userId = const Value.absent(),
+            Value<int> warehouseId = const Value.absent(),
+            Value<double> cashInHand = const Value.absent(),
+            Value<double?> closingBalance = const Value.absent(),
+            Value<double?> actualCash = const Value.absent(),
+            Value<bool> isOpen = const Value.absent(),
+            Value<String> syncStatus = const Value.absent(),
+            Value<String?> errorMessage = const Value.absent(),
+            Value<DateTime> openedAt = const Value.absent(),
+            Value<DateTime?> closedAt = const Value.absent(),
+            Value<DateTime?> syncedAt = const Value.absent(),
+          }) =>
+              LocalCashRegistersCompanion(
+            id: id,
+            clientUuid: clientUuid,
+            serverRegisterId: serverRegisterId,
+            userId: userId,
+            warehouseId: warehouseId,
+            cashInHand: cashInHand,
+            closingBalance: closingBalance,
+            actualCash: actualCash,
+            isOpen: isOpen,
+            syncStatus: syncStatus,
+            errorMessage: errorMessage,
+            openedAt: openedAt,
+            closedAt: closedAt,
+            syncedAt: syncedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String clientUuid,
+            Value<int?> serverRegisterId = const Value.absent(),
+            required int userId,
+            required int warehouseId,
+            required double cashInHand,
+            Value<double?> closingBalance = const Value.absent(),
+            Value<double?> actualCash = const Value.absent(),
+            Value<bool> isOpen = const Value.absent(),
+            Value<String> syncStatus = const Value.absent(),
+            Value<String?> errorMessage = const Value.absent(),
+            Value<DateTime> openedAt = const Value.absent(),
+            Value<DateTime?> closedAt = const Value.absent(),
+            Value<DateTime?> syncedAt = const Value.absent(),
+          }) =>
+              LocalCashRegistersCompanion.insert(
+            id: id,
+            clientUuid: clientUuid,
+            serverRegisterId: serverRegisterId,
+            userId: userId,
+            warehouseId: warehouseId,
+            cashInHand: cashInHand,
+            closingBalance: closingBalance,
+            actualCash: actualCash,
+            isOpen: isOpen,
+            syncStatus: syncStatus,
+            errorMessage: errorMessage,
+            openedAt: openedAt,
+            closedAt: closedAt,
+            syncedAt: syncedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$LocalCashRegistersTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({localSalesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (localSalesRefs) db.localSales],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (localSalesRefs)
+                    await $_getPrefetchedData<LocalCashRegister,
+                            $LocalCashRegistersTable, LocalSale>(
+                        currentTable: table,
+                        referencedTable: $$LocalCashRegistersTableReferences
+                            ._localSalesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$LocalCashRegistersTableReferences(db, table, p0)
+                                .localSalesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.localCashRegisterId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$LocalCashRegistersTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $LocalCashRegistersTable,
+    LocalCashRegister,
+    $$LocalCashRegistersTableFilterComposer,
+    $$LocalCashRegistersTableOrderingComposer,
+    $$LocalCashRegistersTableAnnotationComposer,
+    $$LocalCashRegistersTableCreateCompanionBuilder,
+    $$LocalCashRegistersTableUpdateCompanionBuilder,
+    (LocalCashRegister, $$LocalCashRegistersTableReferences),
+    LocalCashRegister,
+    PrefetchHooks Function({bool localSalesRefs})>;
 typedef $$LocalSalesTableCreateCompanionBuilder = LocalSalesCompanion Function({
   Value<int> id,
   required String clientUuid,
@@ -12619,6 +13764,7 @@ typedef $$LocalSalesTableCreateCompanionBuilder = LocalSalesCompanion Function({
   Value<int?> serverSaleId,
   Value<String?> serverReferenceNo,
   Value<String?> errorMessage,
+  Value<int?> localCashRegisterId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
 });
@@ -12647,6 +13793,7 @@ typedef $$LocalSalesTableUpdateCompanionBuilder = LocalSalesCompanion Function({
   Value<int?> serverSaleId,
   Value<String?> serverReferenceNo,
   Value<String?> errorMessage,
+  Value<int?> localCashRegisterId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
 });
@@ -12654,6 +13801,22 @@ typedef $$LocalSalesTableUpdateCompanionBuilder = LocalSalesCompanion Function({
 final class $$LocalSalesTableReferences
     extends BaseReferences<_$AppDatabase, $LocalSalesTable, LocalSale> {
   $$LocalSalesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LocalCashRegistersTable _localCashRegisterIdTable(_$AppDatabase db) =>
+      db.localCashRegisters.createAlias($_aliasNameGenerator(
+          db.localSales.localCashRegisterId, db.localCashRegisters.id));
+
+  $$LocalCashRegistersTableProcessedTableManager? get localCashRegisterId {
+    final $_column = $_itemColumn<int>('local_cash_register_id');
+    if ($_column == null) return null;
+    final manager =
+        $$LocalCashRegistersTableTableManager($_db, $_db.localCashRegisters)
+            .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_localCashRegisterIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
 
   static MultiTypedResultKey<$LocalSaleLinesTable, List<LocalSaleLine>>
       _localSaleLinesRefsTable(_$AppDatabase db) =>
@@ -12758,6 +13921,26 @@ class $$LocalSalesTableFilterComposer
 
   ColumnFilters<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnFilters(column));
+
+  $$LocalCashRegistersTableFilterComposer get localCashRegisterId {
+    final $$LocalCashRegistersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localCashRegisterId,
+        referencedTable: $db.localCashRegisters,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LocalCashRegistersTableFilterComposer(
+              $db: $db,
+              $table: $db.localCashRegisters,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 
   Expression<bool> localSaleLinesRefs(
       Expression<bool> Function($$LocalSaleLinesTableFilterComposer f) f) {
@@ -12876,6 +14059,26 @@ class $$LocalSalesTableOrderingComposer
 
   ColumnOrderings<DateTime> get syncedAt => $composableBuilder(
       column: $table.syncedAt, builder: (column) => ColumnOrderings(column));
+
+  $$LocalCashRegistersTableOrderingComposer get localCashRegisterId {
+    final $$LocalCashRegistersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localCashRegisterId,
+        referencedTable: $db.localCashRegisters,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$LocalCashRegistersTableOrderingComposer(
+              $db: $db,
+              $table: $db.localCashRegisters,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$LocalSalesTableAnnotationComposer
@@ -12965,6 +14168,27 @@ class $$LocalSalesTableAnnotationComposer
   GeneratedColumn<DateTime> get syncedAt =>
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
 
+  $$LocalCashRegistersTableAnnotationComposer get localCashRegisterId {
+    final $$LocalCashRegistersTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.localCashRegisterId,
+            referencedTable: $db.localCashRegisters,
+            getReferencedColumn: (t) => t.id,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$LocalCashRegistersTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.localCashRegisters,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return composer;
+  }
+
   Expression<T> localSaleLinesRefs<T extends Object>(
       Expression<T> Function($$LocalSaleLinesTableAnnotationComposer a) f) {
     final $$LocalSaleLinesTableAnnotationComposer composer = $composerBuilder(
@@ -12998,7 +14222,8 @@ class $$LocalSalesTableTableManager extends RootTableManager<
     $$LocalSalesTableUpdateCompanionBuilder,
     (LocalSale, $$LocalSalesTableReferences),
     LocalSale,
-    PrefetchHooks Function({bool localSaleLinesRefs})> {
+    PrefetchHooks Function(
+        {bool localCashRegisterId, bool localSaleLinesRefs})> {
   $$LocalSalesTableTableManager(_$AppDatabase db, $LocalSalesTable table)
       : super(TableManagerState(
           db: db,
@@ -13034,6 +14259,7 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             Value<int?> serverSaleId = const Value.absent(),
             Value<String?> serverReferenceNo = const Value.absent(),
             Value<String?> errorMessage = const Value.absent(),
+            Value<int?> localCashRegisterId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
           }) =>
@@ -13062,6 +14288,7 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             serverSaleId: serverSaleId,
             serverReferenceNo: serverReferenceNo,
             errorMessage: errorMessage,
+            localCashRegisterId: localCashRegisterId,
             createdAt: createdAt,
             syncedAt: syncedAt,
           ),
@@ -13090,6 +14317,7 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             Value<int?> serverSaleId = const Value.absent(),
             Value<String?> serverReferenceNo = const Value.absent(),
             Value<String?> errorMessage = const Value.absent(),
+            Value<int?> localCashRegisterId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
           }) =>
@@ -13118,6 +14346,7 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             serverSaleId: serverSaleId,
             serverReferenceNo: serverReferenceNo,
             errorMessage: errorMessage,
+            localCashRegisterId: localCashRegisterId,
             createdAt: createdAt,
             syncedAt: syncedAt,
           ),
@@ -13127,13 +14356,40 @@ class $$LocalSalesTableTableManager extends RootTableManager<
                     $$LocalSalesTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: ({localSaleLinesRefs = false}) {
+          prefetchHooksCallback: (
+              {localCashRegisterId = false, localSaleLinesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (localSaleLinesRefs) db.localSaleLines
               ],
-              addJoins: null,
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (localCashRegisterId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.localCashRegisterId,
+                    referencedTable: $$LocalSalesTableReferences
+                        ._localCashRegisterIdTable(db),
+                    referencedColumn: $$LocalSalesTableReferences
+                        ._localCashRegisterIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (localSaleLinesRefs)
@@ -13167,7 +14423,8 @@ typedef $$LocalSalesTableProcessedTableManager = ProcessedTableManager<
     $$LocalSalesTableUpdateCompanionBuilder,
     (LocalSale, $$LocalSalesTableReferences),
     LocalSale,
-    PrefetchHooks Function({bool localSaleLinesRefs})>;
+    PrefetchHooks Function(
+        {bool localCashRegisterId, bool localSaleLinesRefs})>;
 typedef $$LocalSaleLinesTableCreateCompanionBuilder = LocalSaleLinesCompanion
     Function({
   Value<int> id,
@@ -14305,6 +15562,8 @@ class $AppDatabaseManager {
       $$ProductVariantsTableTableManager(_db, _db.productVariants);
   $$ProductStockTableTableManager get productStock =>
       $$ProductStockTableTableManager(_db, _db.productStock);
+  $$LocalCashRegistersTableTableManager get localCashRegisters =>
+      $$LocalCashRegistersTableTableManager(_db, _db.localCashRegisters);
   $$LocalSalesTableTableManager get localSales =>
       $$LocalSalesTableTableManager(_db, _db.localSales);
   $$LocalSaleLinesTableTableManager get localSaleLines =>

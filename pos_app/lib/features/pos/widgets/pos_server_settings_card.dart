@@ -10,9 +10,7 @@ import 'pos_settings_ui.dart';
 
 /// Server summary on Settings — opens full API setup via the gear icon.
 class PosServerSettingsCard extends ConsumerWidget {
-  const PosServerSettingsCard({super.key, this.accentColor});
-
-  final Color? accentColor;
+  const PosServerSettingsCard({super.key});
 
   void _openServerSettings(BuildContext context, WidgetRef ref) {
     openPosServerSettings(ref);
@@ -20,6 +18,7 @@ class PosServerSettingsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final s = context.posStyles;
     ref.watch(sessionRevisionProvider);
     final session = ref.read(sessionServiceProvider);
     final linkStatus = ref.watch(posLinkStatusProvider);
@@ -36,9 +35,8 @@ class PosServerSettingsCard extends ConsumerWidget {
         onPressed: () => _openServerSettings(context, ref),
         icon: const Icon(Icons.settings_outlined),
         style: IconButton.styleFrom(
-          backgroundColor: (accentColor ?? context.posBrand.primary)
-              .withValues(alpha: 0.1),
-          foregroundColor: accentColor ?? context.posBrand.primary,
+          backgroundColor: s.accent.withValues(alpha: 0.1),
+          foregroundColor: s.accent,
         ),
       ),
       child: Column(
@@ -49,13 +47,13 @@ class PosServerSettingsCard extends ConsumerWidget {
             label: 'API URL',
             value: apiUrl,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _SummaryChip(
             icon: Icons.cloud_outlined,
             label: 'Source',
             value: usingCustom ? 'Custom URL' : 'Build default',
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _SummaryChip(
             icon: Icons.monitor_heart_outlined,
             label: 'Server status',
@@ -66,7 +64,7 @@ class PosServerSettingsCard extends ConsumerWidget {
                     : 'Offline',
             highlight: serverOnline,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           PosSettingsActionTile(
             icon: Icons.settings_ethernet_outlined,
             title: 'Configure server',
@@ -94,25 +92,21 @@ class _SummaryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: PosColors.pageBg,
+        color: s.elevatedBg,
         borderRadius: BorderRadius.circular(kPosButtonRadius),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: s.border),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: brand.primary),
-          const SizedBox(width: 10),
+          Icon(icon, size: 16, color: s.accent),
+          SizedBox(width: 10),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: PosColors.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
+            style: s.bodyMuted.copyWith(fontSize: 13),
           ),
           const Spacer(),
           if (highlight)
@@ -120,8 +114,8 @@ class _SummaryChip extends StatelessWidget {
               margin: const EdgeInsets.only(right: 8),
               width: 7,
               height: 7,
-              decoration: const BoxDecoration(
-                color: PosColors.teal,
+              decoration: BoxDecoration(
+                color: s.success,
                 shape: BoxShape.circle,
               ),
             ),
@@ -131,11 +125,7 @@ class _SummaryChip extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: PosColors.textPrimary,
-              ),
+              style: s.titleMedium.copyWith(fontSize: 13),
             ),
           ),
         ],

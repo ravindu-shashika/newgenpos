@@ -283,16 +283,16 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                 Text(
                   'Return value: ${formatPosMoney(_exchangeValue)}  ·  '
                   'New total: ${formatPosMoney(_newProductsTotal)}',
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(fontSize: 13),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: 4),
                 Text(
                   _balanceLabel(),
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: _balance > 0
                         ? PosColors.red
-                        : PosColors.primary,
+                        : context.posBrand.primary,
                   ),
                 ),
               ],
@@ -320,14 +320,14 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                   Expanded(
                     child: TextField(
                       controller: _refCtrl,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Original sale reference',
                         hintText: 'posr20260604153045',
                       ),
                       onSubmitted: (_) => _loadSale(),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   FilledButton(
                     onPressed: _busy ? null : _loadSale,
                     child: const Text('Find'),
@@ -340,7 +340,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                 child: Text(
                   _error!,
-                  style: const TextStyle(color: PosColors.red),
+                  style: TextStyle(color: PosColors.red),
                 ),
               ),
             Expanded(
@@ -370,7 +370,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Text(
             'Return items',
@@ -399,10 +399,10 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(line.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                            style: TextStyle(fontWeight: FontWeight.w600)),
                         Text(line.code,
-                            style: const TextStyle(
-                                fontSize: 12, color: PosColors.textMuted)),
+                            style: TextStyle(
+                                fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -440,7 +440,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'New products',
                   style: TextStyle(fontWeight: FontWeight.w700),
@@ -450,7 +450,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                 flex: 2,
                 child: TextField(
                   controller: _productSearchCtrl,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Scan / enter code',
                     border: OutlineInputBorder(),
@@ -458,7 +458,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                   onSubmitted: (_) => _addProduct(),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               IconButton.filled(
                 onPressed: _busy ? null : _addProduct,
                 icon: const Icon(Icons.add),
@@ -482,12 +482,12 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(line.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontWeight: FontWeight.w600)),
                               Text(
                                 '${line.code} · ${formatPosMoney(line.lineTotal)}',
-                                style: const TextStyle(
-                                    fontSize: 12, color: PosColors.textMuted),
+                                style: TextStyle(
+                                    fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),

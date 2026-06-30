@@ -200,7 +200,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   InputDecoration _readOnlyDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      border: const OutlineInputBorder(),
+      border: OutlineInputBorder(),
       prefixIcon: Icon(icon),
       filled: true,
       fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -230,22 +230,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   size: 56,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Text(
                   'Register POS',
                   style: Theme.of(context).textTheme.headlineMedium,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   'Terminal ID and token are generated from this device. '
                   'Select a warehouse and tap Register.',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 InputDecorator(
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Warehouse',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.warehouse),
@@ -275,38 +275,38 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: _terminalIdCtrl,
                   readOnly: true,
                   decoration: _readOnlyDecoration('Terminal ID (MAC)', Icons.tag),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: _tokenCtrl,
                   readOnly: true,
                   decoration: _readOnlyDecoration('Token', Icons.vpn_key),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: _pcNameCtrl,
                   readOnly: true,
                   decoration: _readOnlyDecoration('PC name', Icons.computer),
                 ),
                 if (_loadingIdentity) ...[
-                  const SizedBox(height: 16),
-                  const Center(child: CircularProgressIndicator()),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 16),
+                  Center(child: CircularProgressIndicator()),
+                  SizedBox(height: 8),
+                  Text(
                     'Reading device MAC address…',
                     textAlign: TextAlign.center,
                   ),
                 ],
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  SizedBox(height: 12),
+                  Text(_error!, style: TextStyle(color: Colors.red)),
                 ],
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: (_loading || !canRegister) ? null : _register,
                   icon: _loading

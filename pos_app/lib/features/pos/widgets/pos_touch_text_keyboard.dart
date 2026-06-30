@@ -22,9 +22,10 @@ class PosTouchTextKeyboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Material(
       elevation: 12,
-      color: PosColors.pageBg,
+      color: s.cardBg,
       child: SafeArea(
         top: false,
         child: Padding(
@@ -59,24 +60,24 @@ class PosTouchTextKeyboard extends StatelessWidget {
                       onPressed: () => controller.insertText(' '),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   _KeyButton(
                     label: '⌫',
                     width: 72,
                     onPressed: controller.backspace,
                   ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   if (maxLines > 1)
                     _KeyButton(
                       label: 'Enter',
                       width: 72,
                       onPressed: () => controller.insertText('\n'),
                     ),
-                  const SizedBox(width: 6),
+                  SizedBox(width: 6),
                   _KeyButton(
                     label: 'Done',
                     width: 72,
-                    color: PosColors.primary,
+                    color: context.posBrand.buttonPrimary,
                     foreground: Colors.white,
                     onPressed: controller.detach,
                   ),
@@ -107,29 +108,38 @@ class _KeyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
+    final isBranded = color != null;
+    final bg = color ?? (context.isPosDark ? s.inputFill : Colors.white);
+    final fg = foreground ?? s.text;
+    final borderColor = isBranded ? Colors.transparent : s.border;
+
     return SizedBox(
       width: width,
       height: 44,
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: color ?? Colors.white,
-          foregroundColor: foreground ?? PosColors.textPrimary,
+          backgroundColor: bg,
+          foregroundColor: fg,
           padding: EdgeInsets.zero,
+          elevation: context.isPosDark ? 0 : 1,
+          shadowColor: Colors.black12,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: color == null
-                ? const BorderSide(color: PosColors.border)
-                : BorderSide.none,
+            side: BorderSide(color: borderColor),
           ),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: label.length > 1 ? 13 : 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        child: label == '⌫'
+            ? Icon(Icons.backspace_outlined, size: 20, color: fg)
+            : Text(
+                label,
+                style: TextStyle(
+                  fontSize: label.length > 1 ? 13 : 16,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
       ),
     );
   }

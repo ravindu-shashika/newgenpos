@@ -70,7 +70,7 @@ class _TestPrintScreenState extends ConsumerState<TestPrintScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -80,7 +80,7 @@ class _TestPrintScreenState extends ConsumerState<TestPrintScreen> {
                     'Local print template',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   Text(
                     '${printSettings.paperSize} · '
                     '${printSettings.pageWidthMm} mm · '
@@ -90,7 +90,7 @@ class _TestPrintScreenState extends ConsumerState<TestPrintScreen> {
                       color: Colors.grey.shade700,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     'Only checked options in Print setup appear on the receipt.',
                     style: TextStyle(
@@ -102,7 +102,7 @@ class _TestPrintScreenState extends ConsumerState<TestPrintScreen> {
               ),
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1),
           Expanded(
             child: PdfPreview(
               canChangeOrientation: false,
@@ -118,21 +118,21 @@ class _TestPrintScreenState extends ConsumerState<TestPrintScreen> {
           ),
           Material(
             elevation: 8,
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: FilledButton.icon(
                 onPressed: _printing ? null : _print,
                 icon: _printing
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                         ),
                       )
-                    : const Icon(Icons.print),
+                    : Icon(Icons.print),
                 label: Text(_printing ? 'Printing…' : 'Print test receipt'),
               ),
             ),

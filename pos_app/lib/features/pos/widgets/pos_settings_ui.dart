@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/pos_theme.dart';
 
@@ -17,30 +18,18 @@ class PosSettingsPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: PosColors.textPrimary,
-            height: 1.15,
-            letterSpacing: -0.3,
-          ),
-        ),
-        const SizedBox(height: 6),
+        Text(title, style: s.titleLarge.copyWith(fontSize: 26, height: 1.15)),
+        SizedBox(height: 6),
         Text(
           subtitle,
-          style: const TextStyle(
-            fontSize: 14,
-            color: PosColors.textMuted,
-            height: 1.4,
-          ),
+          style: s.bodyMuted.copyWith(fontSize: 14, height: 1.4),
         ),
         if (badges.isNotEmpty) ...[
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Wrap(spacing: 8, runSpacing: 8, children: badges),
         ],
       ],
@@ -60,25 +49,25 @@ class PosSettingsBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: s.cardBg,
         borderRadius: BorderRadius.circular(kPosButtonRadius),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: s.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: brand.primary),
-          const SizedBox(width: 6),
+          Icon(icon, size: 15, color: s.accent),
+          SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
+            style: s.caption.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: PosColors.textPrimary,
+              color: s.text,
             ),
           ),
         ],
@@ -101,16 +90,16 @@ class PosSettingsStatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: s.cardBg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: s.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: s.shadowColor.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -122,35 +111,30 @@ class PosSettingsStatTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: brand.primaryLight,
+              color: s.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(kPosButtonRadius),
             ),
-            child: Icon(icon, size: 20, color: brand.primary),
+            child: Icon(icon, size: 20, color: s.accent),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: s.caption.copyWith(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
-                    color: PosColors.textMuted,
                   ),
                 ),
-                const SizedBox(height: 3),
+                SizedBox(height: 3),
                 Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: PosColors.textPrimary,
-                  ),
+                  style: s.titleMedium.copyWith(fontSize: 14),
                 ),
               ],
             ),
@@ -179,15 +163,15 @@ class PosSettingsSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: s.cardBg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: s.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: s.shadowColor.withValues(alpha: 0.08),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -205,34 +189,25 @@ class PosSettingsSectionCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: brand.primaryLight,
+                    color: s.accent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(kPosButtonRadius),
                   ),
-                  child: Icon(icon, size: 22, color: brand.primary),
+                  child: Icon(icon, size: 22, color: s.accent),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: PosColors.textPrimary,
-                          height: 1.2,
-                        ),
+                        style: s.titleMedium.copyWith(fontSize: 17, height: 1.2),
                       ),
                       if (subtitle != null && subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           subtitle!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: PosColors.textMuted,
-                            height: 1.35,
-                          ),
+                          style: s.bodyMuted.copyWith(fontSize: 13, height: 1.35),
                         ),
                       ],
                     ],
@@ -270,11 +245,11 @@ class PosSettingsActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
-    final accent = destructive ? PosColors.red : brand.primary;
+    final s = context.posStyles;
+    final accent = destructive ? s.danger : s.accent;
     final bg = destructive
-        ? PosColors.red.withValues(alpha: 0.08)
-        : brand.primaryLight;
+        ? s.danger.withValues(alpha: 0.1)
+        : s.accent.withValues(alpha: 0.1);
 
     return Material(
       color: Colors.transparent,
@@ -284,9 +259,9 @@ class PosSettingsActionTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: PosColors.pageBg,
+            color: s.elevatedBg,
             borderRadius: BorderRadius.circular(kPosButtonRadius),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: s.border),
           ),
           child: Row(
             children: [
@@ -299,34 +274,27 @@ class PosSettingsActionTile extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 20, color: accent),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
+                      style: s.titleMedium.copyWith(
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: destructive ? PosColors.red : PosColors.textPrimary,
+                        color: destructive ? s.danger : s.text,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: PosColors.textMuted,
-                      ),
+                      style: s.caption.copyWith(fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: PosColors.textMuted.withValues(alpha: 0.7),
-              ),
+              Icon(Icons.chevron_right_rounded, color: s.textMuted),
             ],
           ),
         ),
@@ -340,9 +308,105 @@ class PosSettingsDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Divider(height: 1, color: PosColors.border.withValues(alpha: 0.8)),
+      child: Divider(height: 1, color: s.border.withValues(alpha: 0.8)),
+    );
+  }
+}
+
+/// Hub row — opens a settings sub-page.
+class PosSettingsMenuTile extends StatelessWidget {
+  const PosSettingsMenuTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PosSettingsActionTile(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      onTap: onTap,
+    );
+  }
+}
+
+/// Scrollable sub-page with back navigation to the settings hub.
+class PosSettingsSubPageShell extends ConsumerWidget {
+  const PosSettingsSubPageShell({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.onBack,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = context.posStyles;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Material(
+                    color: s.cardBg,
+                    borderRadius: BorderRadius.circular(kPosButtonRadius),
+                    child: InkWell(
+                      onTap: onBack,
+                      borderRadius: BorderRadius.circular(kPosButtonRadius),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(kPosButtonRadius),
+                          border: Border.all(color: s.border),
+                        ),
+                        child: Icon(
+                          Icons.arrow_back_rounded,
+                          size: 20,
+                          color: s.text,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: PosSettingsPageHeader(
+                      title: title,
+                      subtitle: subtitle,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              child,
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

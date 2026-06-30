@@ -55,13 +55,13 @@ class _PosTouchAmountEntryLayoutState extends State<PosTouchAmountEntryLayout> {
                 if (widget.showCaption) ...[
                   Text(
                     widget.fieldLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: PosColors.textMuted,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                 ],
                 PosAmountField(
                   controller: widget.controller,
@@ -69,7 +69,7 @@ class _PosTouchAmountEntryLayoutState extends State<PosTouchAmountEntryLayout> {
                   largeTouch: widget.largeTouch,
                   decoration: InputDecoration(
                     labelText: widget.fieldLabel,
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
                     contentPadding: widget.largeTouch
                         ? const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -80,10 +80,10 @@ class _PosTouchAmountEntryLayoutState extends State<PosTouchAmountEntryLayout> {
                   onTap: () => widget.focusNode.requestFocus(),
                 ),
                 if (widget.leftBody != null) ...[
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   ...widget.leftBody!,
                 ],
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 Expanded(
                   child: widget.quickBar ??
                       PosQuickCashBar(
@@ -99,7 +99,7 @@ class _PosTouchAmountEntryLayoutState extends State<PosTouchAmountEntryLayout> {
               ],
             ),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: 16),
           Expanded(
             flex: 5,
             child: PosAmountNumpad(
@@ -140,21 +140,22 @@ class PosAmountSummaryRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _tile(totalLabel, totalValue, PosColors.textPrimary),
+          child: _tile(context, totalLabel, totalValue, Theme.of(context).colorScheme.onSurface),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: _tile(
+            context,
             secondaryLabel,
             secondaryValue,
-            secondaryColor ?? PosColors.primary,
+            secondaryColor ?? context.posBrand.primary,
           ),
         ),
       ],
     );
   }
 
-  Widget _tile(String label, String value, Color valueColor) {
+  Widget _tile(BuildContext context, String label, String value, Color valueColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -162,7 +163,7 @@ class PosAmountSummaryRow extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: PosColors.textMuted.withValues(alpha: 0.9),
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
           ),
         ),
         Text(

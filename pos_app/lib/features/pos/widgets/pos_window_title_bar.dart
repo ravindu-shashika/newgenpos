@@ -16,6 +16,7 @@ class PosWindowTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brand = context.posBrand;
+    final styles = context.posStyles;
 
     return Material(
       color: brand.primary,
@@ -30,18 +31,18 @@ class PosWindowTitleBar extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.point_of_sale_outlined,
                         size: 16,
-                        color: Colors.white70,
+                        color: styles.titleBarFgMuted,
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         PosBranding.appName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                          color: styles.titleBarFg,
                           letterSpacing: 0.3,
                         ),
                       ),
@@ -54,6 +55,20 @@ class PosWindowTitleBar extends StatelessWidget {
               semanticsLabel: 'Minimize window',
               icon: Icons.remove_rounded,
               onTap: () => unawaited(PosWindowService.instance.minimize()),
+            ),
+            ValueListenableBuilder<bool>(
+              valueListenable: PosWindowService.instance.maximizedNotifier,
+              builder: (context, maximized, _) {
+                return _TitleBarIconButton(
+                  semanticsLabel:
+                      maximized ? 'Restore window' : 'Maximize window',
+                  icon: maximized
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  onTap: () =>
+                      unawaited(PosWindowService.instance.toggleMaximize()),
+                );
+              },
             ),
             _TitleBarIconButton(
               semanticsLabel: 'Close application',
@@ -80,6 +95,8 @@ class _TitleBarIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fg = context.posStyles.titleBarFg;
+
     return Semantics(
       button: true,
       label: semanticsLabel,
@@ -91,7 +108,7 @@ class _TitleBarIconButton extends StatelessWidget {
           child: SizedBox(
             width: 46,
             height: PosWindowTitleBar.height,
-            child: Icon(icon, size: 18, color: Colors.white),
+            child: Icon(icon, size: 18, color: fg),
           ),
         ),
       ),

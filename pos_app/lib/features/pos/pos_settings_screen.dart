@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,20 +10,20 @@ import '../../core/providers/pos_meta_provider.dart';
 import '../../core/providers/pos_ui_settings_provider.dart';
 import '../../core/providers/product_grid_provider.dart';
 import '../../core/services/pos_window_service.dart';
+import '../../core/services/session_service.dart';
 import '../../core/sync/download_models.dart';
 import '../../core/theme/pos_theme.dart';
 import '../auth/download_screen.dart';
 import '../auth/login_screen.dart';
 import 'models/pos_settings.dart';
 import 'models/pos_ui_settings.dart';
+import 'pos_checkout_defaults.dart';
 import 'pos_checkout_state.dart';
 import 'pos_printer_settings_screen.dart';
 import 'pos_server_settings_screen.dart';
 import 'providers/pos_settings_subpage_provider.dart';
 import 'widgets/pos_brand_logo.dart';
 import 'widgets/pos_color_preset_picker.dart';
-import 'widgets/pos_printer_settings_card.dart';
-import 'widgets/pos_server_settings_card.dart';
 import 'widgets/pos_touch_keyboard_controller.dart';
 import 'widgets/pos_touch_keyboard_host.dart';
 import 'widgets/pos_professional_dialog.dart';
@@ -43,12 +42,9 @@ class PosSettingsScreen extends ConsumerStatefulWidget {
 
 class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
   bool _busy = false;
-  bool _advancedOpen = false;
 
   final _refPrefixCtrl = TextEditingController();
   final _refSeqCtrl = TextEditingController();
-
-  static const _pageBg = Color(0xFFF8F9FC);
 
   @override
   void initState() {
@@ -186,38 +182,6 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
     );
   }
 
-  void _showOperatorProfile() {
-    final session = ref.read(sessionServiceProvider);
-    final name = session.userName?.trim();
-    final id = session.userId;
-    final message = name != null && name.isNotEmpty
-        ? '$name${id != null ? '\nID: $id' : ''}'
-        : (id != null ? 'Operator #$id' : 'Signed in');
-    showPosInfoDialog(
-      context: context,
-      title: 'Operator',
-      message: message,
-      icon: Icons.person_outline,
-    );
-  }
-
-  String get _stationCode {
-    final code = ref.read(sessionServiceProvider).terminalCode?.trim();
-    if (code != null && code.isNotEmpty) return code.toUpperCase();
-    return 'STATION 01';
-  }
-
-  String get _userInitials {
-    final name = ref.read(sessionServiceProvider).userName?.trim();
-    if (name == null || name.isEmpty) return 'TA';
-    final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    final list = parts.toList();
-    if (list.length >= 2) {
-      return '${list.first[0]}${list[1][0]}'.toUpperCase();
-    }
-    return name.substring(0, math.min(2, name.length)).toUpperCase();
-  }
-
   void _syncReferenceFields(PosUiSettings ui) {
     if (_refPrefixCtrl.text != ui.saleReferencePrefix) {
       _refPrefixCtrl.text = ui.saleReferencePrefix;
@@ -241,140 +205,93 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
     final metaAsync = ref.watch(posLocalMetaProvider);
     final checkout = ref.watch(posCheckoutProvider);
     final session = ref.watch(sessionServiceProvider);
-    final brand = context.posBrand;
 
     _syncReferenceFields(uiSettings);
+
+    final Widget body;
+    if (subPage == PosSettingsSubPage.main) {
+      body = _SettingsHub(
+        busy: _busy,
+        session: session,
+        metaAsync: metaAsync,
+        onOpen: (page) => openPosSettingsSubPage(ref, page),
+      );
+    } else if (subPage == PosSettingsSubPage.terminal) {
+      body = PosSettingsSubPageShell(
+        title: 'Terminal identity',
+        subtitle: 'Station details assigned to this device',
+        onBack: () => closePosSettingsSubPage(ref),
+        child: _TerminalIdentityCard(
+          stationId: session.terminalCode?.trim().toUpperCase() ?? '—',
+          location: session.terminalName?.trim().isNotEmpty == true
+              ? session.terminalName!.trim()
+              : 'Not set',
+        ),
+      );
+    } else if (subPage == PosSettingsSubPage.appearance) {
+      body = PosSettingsSubPageShell(
+        title: 'Appearance & theme',
+        subtitle: 'Brand colors, dark mode, font size, and sidebar logo',
+        onBack: () => closePosSettingsSubPage(ref),
+        child: Column(
+          children: [
+            _VisualsCard(
+              uiSettings: uiSettings,
+              onPatch: (fn) =>
+                  ref.read(posUiSettingsProvider.notifier).patch(fn),
+            ),
+            const SizedBox(height: 16),
+            _SidebarLogoCard(
+              logoPath: uiSettings.sidebarLogoPath,
+              onPick: () => unawaited(_pickSidebarLogo()),
+              onRemove: () => ref.read(posUiSettingsProvider.notifier).patch(
+                    (s) => s.copyWith(clearSidebarLogo: true),
+                  ),
+            ),
+          ],
+        ),
+      );
+    } else if (subPage == PosSettingsSubPage.checkout) {
+      body = PosSettingsSubPageShell(
+        title: 'Checkout & POS',
+        subtitle: 'Warehouse, defaults, tax, returns, and sale reference',
+        onBack: () => closePosSettingsSubPage(ref),
+        child: _CheckoutOptionsCard(
+          metaAsync: metaAsync,
+          checkout: checkout,
+          uiSettings: uiSettings,
+          posSettings: posSettings,
+          refPrefixCtrl: _refPrefixCtrl,
+          refSeqCtrl: _refSeqCtrl,
+          onCheckoutChanged: (s) =>
+              ref.read(posCheckoutProvider.notifier).state = s,
+          onRefreshServerSettings: () => unawaited(_refreshPosSettings()),
+        ),
+      );
+    } else if (subPage == PosSettingsSubPage.maintenance) {
+      body = PosSettingsSubPageShell(
+        title: 'Maintenance',
+        subtitle: 'Sync catalog data and manage this terminal',
+        onBack: () => closePosSettingsSubPage(ref),
+        child: _MaintenanceActions(
+          onRefresh: () => unawaited(_openSync(PosDownloadMode.delta)),
+          onFullDownload: () => unawaited(_openSync(PosDownloadMode.full)),
+          onReboot: () => unawaited(_rebootStation()),
+          onLogout: _logout,
+        ),
+      );
+    } else {
+      body = const SizedBox.shrink();
+    }
 
     final content = Column(
       children: [
         Expanded(
           child: _busy
               ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
-                  children: [
-                    PosSettingsPageHeader(
-                      title: 'Settings',
-                      subtitle:
-                          'Configure terminal identity, appearance, and maintenance',
-                      badges: [
-                        PosSettingsBadge(
-                          icon: Icons.storefront_outlined,
-                          label: session.terminalCode?.trim().toUpperCase() ??
-                              'TERMINAL',
-                        ),
-                        PosSettingsBadge(
-                          icon: Icons.person_outline,
-                          label: session.userName?.trim().isNotEmpty == true
-                              ? session.userName!.trim()
-                              : 'Operator',
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final wide = constraints.maxWidth >= 900;
-                        final stats = _SettingsStatsRow(
-                          stationId: session.terminalCode?.trim().toUpperCase() ??
-                              '—',
-                          location: session.terminalName?.trim().isNotEmpty == true
-                              ? session.terminalName!.trim()
-                              : 'Not set',
-                          warehouse: () {
-                            final list = metaAsync.valueOrNull?.warehouses
-                                .where((w) => w.id == session.warehouseId);
-                            if (list == null || list.isEmpty) return '—';
-                            return list.first.name;
-                          }(),
-                        );
-                        final primaryColumn = Column(
-                          children: [
-                            stats,
-                            const SizedBox(height: 16),
-                            _TerminalIdentityCard(
-                              stationId: session.terminalCode?.trim().toUpperCase() ??
-                                  '—',
-                              location: session.terminalName?.trim().isNotEmpty == true
-                                  ? session.terminalName!.trim()
-                                  : 'Not set',
-                            ),
-                            const SizedBox(height: 16),
-                            _VisualsCard(
-                              uiSettings: uiSettings,
-                              onPatch: (fn) => ref
-                                  .read(posUiSettingsProvider.notifier)
-                                  .patch(fn),
-                            ),
-                            const SizedBox(height: 16),
-                            _SidebarLogoCard(
-                              logoPath: uiSettings.sidebarLogoPath,
-                              onPick: () => unawaited(_pickSidebarLogo()),
-                              onRemove: () => ref
-                                  .read(posUiSettingsProvider.notifier)
-                                  .patch(
-                                    (s) => s.copyWith(clearSidebarLogo: true),
-                                  ),
-                            ),
-                          ],
-                        );
-                        final secondaryColumn = Column(
-                          children: [
-                            _MaintenanceCard(
-                              onRefresh: () =>
-                                  unawaited(_openSync(PosDownloadMode.delta)),
-                              onFullDownload: () =>
-                                  unawaited(_openSync(PosDownloadMode.full)),
-                              onReboot: () => unawaited(_rebootStation()),
-                              onLogout: _logout,
-                            ),
-                            const SizedBox(height: 16),
-                            _AdvancedSettingsCard(
-                              open: _advancedOpen,
-                              onToggle: () => setState(
-                                () => _advancedOpen = !_advancedOpen,
-                              ),
-                              metaAsync: metaAsync,
-                              checkout: checkout,
-                              uiSettings: uiSettings,
-                              posSettings: posSettings,
-                              refPrefixCtrl: _refPrefixCtrl,
-                              refSeqCtrl: _refSeqCtrl,
-                              onCheckoutChanged: (s) => ref
-                                  .read(posCheckoutProvider.notifier)
-                                  .state = s,
-                              onRefreshServerSettings: () =>
-                                  unawaited(_refreshPosSettings()),
-                            ),
-                          ],
-                        );
-                        if (wide) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(flex: 3, child: primaryColumn),
-                              const SizedBox(width: 20),
-                              Expanded(flex: 2, child: secondaryColumn),
-                            ],
-                          );
-                        }
-                        return Column(
-                          children: [
-                            primaryColumn,
-                            const SizedBox(height: 16),
-                            secondaryColumn,
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    PosServerSettingsCard(accentColor: brand.primary),
-                    const SizedBox(height: 16),
-                    PosPrinterSettingsCard(accentColor: brand.primary),
-                  ],
-                ),
+              : body,
         ),
-        _SettingsFooter(onSave: _saveAll),
+        if (subPage == PosSettingsSubPage.main) _SettingsFooter(onSave: _saveAll),
       ],
     );
 
@@ -384,9 +301,103 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
 
     return PosTouchKeyboardHost(
       child: Scaffold(
-        backgroundColor: _pageBg,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: content,
       ),
+    );
+  }
+}
+
+class _SettingsHub extends StatelessWidget {
+  const _SettingsHub({
+    required this.busy,
+    required this.session,
+    required this.metaAsync,
+    required this.onOpen,
+  });
+
+  final bool busy;
+  final SessionService session;
+  final AsyncValue<PosLocalMeta> metaAsync;
+  final ValueChanged<PosSettingsSubPage> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+      children: [
+        PosSettingsPageHeader(
+          title: 'Settings',
+          subtitle: 'Choose a category to configure this terminal',
+          badges: [
+            PosSettingsBadge(
+              icon: Icons.storefront_outlined,
+              label: session.terminalCode?.trim().toUpperCase() ?? 'TERMINAL',
+            ),
+            PosSettingsBadge(
+              icon: Icons.person_outline,
+              label: session.userName?.trim().isNotEmpty == true
+                  ? session.userName!.trim()
+                  : 'Operator',
+            ),
+          ],
+        ),
+        const SizedBox(height: 22),
+        _SettingsStatsRow(
+          stationId: session.terminalCode?.trim().toUpperCase() ?? '—',
+          location: session.terminalName?.trim().isNotEmpty == true
+              ? session.terminalName!.trim()
+              : 'Not set',
+          warehouse: () {
+            final list = metaAsync.valueOrNull?.warehouses
+                .where((w) => w.id == session.warehouseId);
+            if (list == null || list.isEmpty) return '—';
+            return list.first.name;
+          }(),
+        ),
+        const SizedBox(height: 22),
+        PosSettingsMenuTile(
+          icon: Icons.badge_outlined,
+          title: 'Terminal identity',
+          subtitle: 'Station ID and location on receipts',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.terminal),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.palette_outlined,
+          title: 'Appearance & theme',
+          subtitle: 'Colors, dark mode, font size, sidebar logo',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.appearance),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.tune_outlined,
+          title: 'Checkout & POS',
+          subtitle: 'Warehouse, defaults, tax, returns, keyboard',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.checkout),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.dns_outlined,
+          title: 'Server & API',
+          subtitle: 'API URL, connection test, and sync path',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.server),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.print_outlined,
+          title: 'Printer & receipts',
+          subtitle: 'Paper size, receipt layout, logo, direct print',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.printer),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.build_circle_outlined,
+          title: 'Maintenance',
+          subtitle: 'Sync data, reboot station, sign out',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.maintenance),
+        ),
+      ],
     );
   }
 }
@@ -468,7 +479,7 @@ class _TerminalIdentityCard extends StatelessWidget {
             label: 'Station ID',
             value: stationId,
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           _ReadOnlySettingField(
             label: 'Location',
             value: location,
@@ -493,30 +504,30 @@ class _ReadOnlySettingField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
+        labelStyle: TextStyle(color: s.textMuted),
         filled: true,
-        fillColor: PosColors.pageBg,
+        fillColor: s.inputFill,
         enabled: false,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        prefixIcon: prefixIcon != null
+            ? Icon(prefixIcon, color: s.textMuted)
+            : null,
         suffixIcon: Icon(
           Icons.lock_outline,
           size: 18,
-          color: PosColors.textMuted.withValues(alpha: 0.8),
+          color: s.textMuted,
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(kPosButtonRadius),
-          borderSide: const BorderSide(color: PosColors.border),
+          borderSide: BorderSide(color: s.border),
         ),
       ),
       child: Text(
         value,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: PosColors.textPrimary,
-        ),
+        style: s.titleMedium.copyWith(fontSize: 15),
       ),
     );
   }
@@ -533,6 +544,7 @@ class _VisualsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     final buttonHex = uiSettings.buttonPrimaryColor.trim().isEmpty
         ? uiSettings.themePrimaryColor
         : uiSettings.buttonPrimaryColor;
@@ -551,7 +563,7 @@ class _VisualsCard extends StatelessWidget {
               onPatch((s) => s.copyWith(themePrimaryColor: hex)),
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           PosColorPresetPicker(
             label: 'Button color',
             selectedHex: buttonHex,
@@ -573,10 +585,10 @@ class _VisualsCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Using theme color for buttons',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: s.caption.copyWith(fontSize: 12),
               ),
             ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20),
           Row(
             children: [
               Expanded(
@@ -589,7 +601,7 @@ class _VisualsCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: _ThemeOption(
                   label: 'Dark Mode',
@@ -602,14 +614,14 @@ class _VisualsCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const Text(
+          SizedBox(height: 20),
+          Text(
             'Font Size',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            style: s.titleMedium.copyWith(fontSize: 13),
           ),
           Row(
             children: [
-              const Text('A', style: TextStyle(fontSize: 12)),
+              Text('A', style: TextStyle(fontSize: 12, color: s.textMuted)),
               Expanded(
                 child: Slider(
                   value: uiSettings.fontScale,
@@ -620,10 +632,10 @@ class _VisualsCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const Text('A', style: TextStyle(fontSize: 18)),
+              Text('A', style: TextStyle(fontSize: 18, color: s.text)),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton(
@@ -670,10 +682,10 @@ class _SidebarLogoCard extends StatelessWidget {
             child: PosBrandLogo(
               logoPath: logoPath,
               size: 72,
-              variant: PosBrandLogoVariant.light,
+              variant: PosBrandLogoVariant.sidebar,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -684,7 +696,7 @@ class _SidebarLogoCard extends StatelessWidget {
                 ),
               ),
               if (logoPath != null && logoPath!.isNotEmpty) ...[
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 IconButton(
                   tooltip: 'Remove logo',
                   onPressed: onRemove,
@@ -714,9 +726,14 @@ class _ThemeOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
+    final lightPreviewBg = const Color(0xFFF8FAFC);
+    final lightPreviewFg = const Color(0xFF1A2B56);
+    final darkPreviewBg = const Color(0xFF1E293B);
+    final darkPreviewFg = Colors.white;
+
     return Material(
-      color: light ? Colors.white : const Color(0xFF1A2B56),
+      color: light ? lightPreviewBg : darkPreviewBg,
       borderRadius: BorderRadius.circular(kPosButtonRadius),
       child: InkWell(
         onTap: onTap,
@@ -727,7 +744,7 @@ class _ThemeOption extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(kPosButtonRadius),
             border: Border.all(
-              color: selected ? brand.primary : PosColors.border,
+              color: selected ? s.accent : s.border,
               width: selected ? 2 : 1,
             ),
           ),
@@ -735,7 +752,7 @@ class _ThemeOption extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: light ? PosColors.textPrimary : Colors.white,
+              color: light ? lightPreviewFg : darkPreviewFg,
             ),
           ),
         ),
@@ -744,8 +761,8 @@ class _ThemeOption extends StatelessWidget {
   }
 }
 
-class _MaintenanceCard extends StatelessWidget {
-  const _MaintenanceCard({
+class _MaintenanceActions extends StatelessWidget {
+  const _MaintenanceActions({
     required this.onRefresh,
     required this.onFullDownload,
     required this.onReboot,
@@ -759,42 +776,37 @@ class _MaintenanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PosSettingsSectionCard(
-      icon: Icons.build_circle_outlined,
-      title: 'Maintenance',
-      subtitle: 'Sync catalog data and manage this terminal',
-      child: Column(
-        children: [
-          PosSettingsActionTile(
-            icon: Icons.sync_outlined,
-            title: 'Refresh data',
-            subtitle: 'Download latest changes from the server',
-            onTap: onRefresh,
-          ),
-          const SizedBox(height: 8),
-          PosSettingsActionTile(
-            icon: Icons.cloud_download_outlined,
-            title: 'Full download',
-            subtitle: 'Re-download the complete product catalog',
-            onTap: onFullDownload,
-          ),
-          const PosSettingsDivider(),
-          PosSettingsActionTile(
-            icon: Icons.restart_alt_outlined,
-            title: 'Reboot station',
-            subtitle: 'Restart the POS application',
-            onTap: onReboot,
-          ),
-          const SizedBox(height: 8),
-          PosSettingsActionTile(
-            icon: Icons.logout_outlined,
-            title: 'Log out',
-            subtitle: 'Sign out of this terminal',
-            onTap: onLogout,
-            destructive: true,
-          ),
-        ],
-      ),
+    return Column(
+      children: [
+        PosSettingsActionTile(
+          icon: Icons.sync_outlined,
+          title: 'Refresh data',
+          subtitle: 'Download latest changes from the server',
+          onTap: onRefresh,
+        ),
+        const SizedBox(height: 8),
+        PosSettingsActionTile(
+          icon: Icons.cloud_download_outlined,
+          title: 'Full download',
+          subtitle: 'Re-download the complete product catalog',
+          onTap: onFullDownload,
+        ),
+        const PosSettingsDivider(),
+        PosSettingsActionTile(
+          icon: Icons.restart_alt_outlined,
+          title: 'Reboot station',
+          subtitle: 'Restart the POS application',
+          onTap: onReboot,
+        ),
+        const SizedBox(height: 8),
+        PosSettingsActionTile(
+          icon: Icons.logout_outlined,
+          title: 'Log out',
+          subtitle: 'Sign out of this terminal',
+          onTap: onLogout,
+          destructive: true,
+        ),
+      ],
     );
   }
 }
@@ -806,15 +818,15 @@ class _SettingsFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final s = context.posStyles;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: PosColors.border)),
+        color: s.cardBg,
+        border: Border(top: BorderSide(color: s.border)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: s.shadowColor.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, -2),
           ),
@@ -825,24 +837,23 @@ class _SettingsFooter extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: PosColors.pageBg,
+              color: s.elevatedBg,
               borderRadius: BorderRadius.circular(kPosButtonRadius),
-              border: Border.all(color: PosColors.border),
+              border: Border.all(color: s.border),
             ),
-            child: const Text(
+            child: Text(
               'v0.1.0',
-              style: TextStyle(
+              style: s.caption.copyWith(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: PosColors.textMuted,
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          const Expanded(
+          SizedBox(width: 12),
+          Expanded(
             child: Text(
               'Changes to theme and terminal settings apply immediately after save.',
-              style: TextStyle(fontSize: 12, color: PosColors.textMuted),
+              style: s.caption.copyWith(fontSize: 12),
             ),
           ),
           FilledButton.icon(
@@ -850,7 +861,8 @@ class _SettingsFooter extends StatelessWidget {
             icon: const Icon(Icons.save_outlined, size: 18),
             label: const Text('Save all changes'),
             style: FilledButton.styleFrom(
-              backgroundColor: brand.buttonPrimary,
+              backgroundColor: context.posBrand.buttonPrimary,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             ),
           ),
@@ -860,10 +872,8 @@ class _SettingsFooter extends StatelessWidget {
   }
 }
 
-class _AdvancedSettingsCard extends ConsumerWidget {
-  const _AdvancedSettingsCard({
-    required this.open,
-    required this.onToggle,
+class _CheckoutOptionsCard extends ConsumerWidget {
+  const _CheckoutOptionsCard({
     required this.metaAsync,
     required this.checkout,
     required this.uiSettings,
@@ -874,8 +884,6 @@ class _AdvancedSettingsCard extends ConsumerWidget {
     required this.onRefreshServerSettings,
   });
 
-  final bool open;
-  final VoidCallback onToggle;
   final AsyncValue<PosLocalMeta> metaAsync;
   final PosCheckoutState checkout;
   final PosUiSettings uiSettings;
@@ -889,16 +897,10 @@ class _AdvancedSettingsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return PosSettingsSectionCard(
       icon: Icons.tune_outlined,
-      title: 'Advanced options',
+      title: 'Checkout options',
       subtitle: 'Warehouse, defaults, tax, and reference numbering',
-      trailing: IconButton(
-        tooltip: open ? 'Collapse' : 'Expand',
-        onPressed: onToggle,
-        icon: Icon(open ? Icons.expand_less : Icons.expand_more),
-      ),
-      child: open
-          ? metaAsync.when(
-              data: (meta) => Column(
+      child: metaAsync.when(
+        data: (meta) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   DropdownButtonFormField<int>(
@@ -908,7 +910,7 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                     ),
                     initialValue: checkout.warehouseId ??
                         ref.read(sessionServiceProvider).warehouseId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Warehouse',
                       border: OutlineInputBorder(),
                     ),
@@ -927,13 +929,13 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                       reloadProductGrid(ref);
                     },
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   DropdownButtonFormField<int?>(
                     key: ValueKey(
                       'default-customer-${uiSettings.defaultCustomerId}',
                     ),
                     initialValue: uiSettings.defaultCustomerId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Default customer',
                       border: OutlineInputBorder(),
                     ),
@@ -955,19 +957,39 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                                 ? s.copyWith(clearDefaultCustomerId: true)
                                 : s.copyWith(defaultCustomerId: v),
                           );
-                      if (v != null) {
-                        onCheckoutChanged(checkout.copyWith(customerId: v));
-                        ref.read(sessionServiceProvider).setCustomerId(v);
+                      final ui = ref.read(posUiSettingsProvider);
+                      final settings =
+                          await ref.read(posSettingsProvider.future);
+                      final syncMeta =
+                          await ref.read(appDatabaseProvider).getSyncMeta();
+                      final session = ref.read(sessionServiceProvider);
+                      final parties = resolveCheckoutPartyIds(
+                        ui: ui,
+                        settings: settings,
+                        syncMeta: syncMeta,
+                        sessionCustomerId: session.customerId,
+                        sessionBillerId: session.billerId,
+                        sessionWarehouseId: session.warehouseId,
+                        customers: meta.customers,
+                        billers: meta.billers,
+                        warehouses: meta.warehouses,
+                        includeSessionFallback: false,
+                      );
+                      onCheckoutChanged(
+                        checkout.copyWith(customerId: parties.customerId),
+                      );
+                      if (parties.customerId != null) {
+                        await session.setCustomerId(parties.customerId!);
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   DropdownButtonFormField<int?>(
                     key: ValueKey(
                       'default-biller-${uiSettings.defaultBillerId}',
                     ),
                     initialValue: uiSettings.defaultBillerId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Default biller',
                       border: OutlineInputBorder(),
                     ),
@@ -989,13 +1011,33 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                                 ? s.copyWith(clearDefaultBillerId: true)
                                 : s.copyWith(defaultBillerId: v),
                           );
-                      if (v != null) {
-                        onCheckoutChanged(checkout.copyWith(billerId: v));
-                        ref.read(sessionServiceProvider).setBillerId(v);
+                      final ui = ref.read(posUiSettingsProvider);
+                      final settings =
+                          await ref.read(posSettingsProvider.future);
+                      final syncMeta =
+                          await ref.read(appDatabaseProvider).getSyncMeta();
+                      final session = ref.read(sessionServiceProvider);
+                      final parties = resolveCheckoutPartyIds(
+                        ui: ui,
+                        settings: settings,
+                        syncMeta: syncMeta,
+                        sessionCustomerId: session.customerId,
+                        sessionBillerId: session.billerId,
+                        sessionWarehouseId: session.warehouseId,
+                        customers: meta.customers,
+                        billers: meta.billers,
+                        warehouses: meta.warehouses,
+                        includeSessionFallback: false,
+                      );
+                      onCheckoutChanged(
+                        checkout.copyWith(billerId: parties.billerId),
+                      );
+                      if (parties.billerId != null) {
+                        await session.setBillerId(parties.billerId!);
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable tax'),
@@ -1061,10 +1103,10 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                       }
                     },
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   TextField(
                     controller: refPrefixCtrl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Sale reference prefix',
                       border: OutlineInputBorder(),
                     ),
@@ -1074,7 +1116,7 @@ class _AdvancedSettingsCard extends ConsumerWidget {
                           (s) => s.copyWith(saleReferencePrefix: v.trim()),
                         ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   OutlinedButton(
                     onPressed: onRefreshServerSettings,
                     child: const Text('Refresh server POS settings'),
@@ -1083,14 +1125,6 @@ class _AdvancedSettingsCard extends ConsumerWidget {
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Text('$e'),
-            )
-          : Text(
-              'Tap expand to configure warehouse, tax, return, exchange, keyboard, and sale reference options.',
-              style: TextStyle(
-                color: PosColors.textMuted.withValues(alpha: 0.95),
-                fontSize: 13,
-                height: 1.45,
-              ),
             ),
     );
   }

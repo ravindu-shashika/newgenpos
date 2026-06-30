@@ -22,6 +22,7 @@ import 'models/pos_settings.dart';
 import 'models/pos_ui_settings.dart';
 import 'models/return_models.dart';
 import 'models/scanned_product.dart';
+import 'pos_checkout_defaults.dart';
 import 'pos_checkout_state.dart';
 import 'pos_helpers.dart';
 import 'sale_reference.dart';
@@ -30,6 +31,7 @@ import 'pos_currency.dart';
 import 'pos_entry_mode.dart';
 import 'product_filter.dart';
 import '../../core/theme/pos_theme.dart';
+import '../../core/theme/pos_app_styles.dart';
 import 'models/cash_register_details.dart';
 import 'services/cash_register_day_end_print_service.dart';
 import 'services/receipt_print_service.dart';
@@ -173,25 +175,28 @@ class _PosScreenState extends ConsumerState<PosScreen>
     if (userId == null || warehouseId == null) return;
 
     final service = ref.read(cashRegisterServiceProvider);
-    _openCashRegisterId = await service.getCachedRegisterId();
+    _openCashRegisterId = await service.getOpenRegisterId(
+      userId: userId,
+      warehouseId: warehouseId,
+    );
 
-    final online = await ref.read(syncServiceProvider).probeOnline();
-    if (!online) {
-      if (_openCashRegisterId == null && mounted) {
-        _showSnack('Connect to internet to open cash register', error: true);
-      }
+    if (_openCashRegisterId != null) {
+      if (mounted) setState(() {});
       return;
     }
 
     try {
-      final openId = await service.checkOpenRegister(
-        warehouseId: warehouseId,
-        userId: userId,
-      );
-      if (!mounted) return;
-      if (openId != null) {
-        setState(() => _openCashRegisterId = openId);
-        return;
+      final online = await ref.read(syncServiceProvider).probeOnline();
+      if (online) {
+        final openId = await service.checkOpenRegister(
+          warehouseId: warehouseId,
+          userId: userId,
+        );
+        if (!mounted) return;
+        if (openId != null) {
+          setState(() => _openCashRegisterId = openId);
+          return;
+        }
       }
 
       final meta = await ref.read(posLocalMetaProvider.future);
@@ -216,7 +221,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
       );
       if (!mounted) return;
       if (opened) {
-        final id = await service.getCachedRegisterId();
+        final id = await service.getOpenRegisterId(
+          userId: userId,
+          warehouseId: warehouseId,
+        );
         setState(() => _openCashRegisterId = id);
       }
     } catch (e) {
@@ -227,16 +235,19 @@ class _PosScreenState extends ConsumerState<PosScreen>
   Future<void> _showCashRegisterDetails({bool requireClose = false}) async {
     final session = ref.read(sessionServiceProvider);
     final userId = session.userId;
-    final registerId = _openCashRegisterId ??
-        await ref.read(cashRegisterServiceProvider).getCachedRegisterId();
-    if (userId == null || registerId == null) {
+    final warehouseId = session.warehouseId ?? _checkout.warehouseId;
+    if (userId == null) {
       _showSnack('No open cash register', error: true);
       return;
     }
-
-    final online = await ref.read(syncServiceProvider).probeOnline();
-    if (!online) {
-      _showSnack('Connect to internet for cash register', error: true);
+    final service = ref.read(cashRegisterServiceProvider);
+    final registerId = _openCashRegisterId ??
+        await service.getOpenRegisterId(
+          userId: userId,
+          warehouseId: warehouseId,
+        );
+    if (registerId == null) {
+      _showSnack('No open cash register', error: true);
       return;
     }
 
@@ -274,32 +285,60 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final checkout = ref.read(posCheckoutProvider);
     final ui = ref.read(posUiSettingsProvider);
 
-    int? customerId = settings?.customerId ??
-        ui.defaultCustomerId ??
-        syncMeta?.defaultCustomerId ??
-        session.customerId;
-    int? billerId = settings?.billerId ??
-        ui.defaultBillerId ??
-        syncMeta?.defaultBillerId ??
-        session.billerId;
-    int? warehouseId = session.warehouseId ??
-        settings?.warehouseId ??
-        syncMeta?.warehouseId;
-
-    customerId ??= meta.customers.isNotEmpty ? meta.customers.first.id : null;
-    billerId ??= meta.billers.isNotEmpty ? meta.billers.first.id : null;
-    warehouseId ??=
-        meta.warehouses.isNotEmpty ? meta.warehouses.first.id : null;
+    final parties = resolveCheckoutPartyIds(
+      ui: ui,
+      settings: settings,
+      syncMeta: syncMeta,
+      sessionCustomerId: session.customerId,
+      sessionBillerId: session.billerId,
+      sessionWarehouseId: session.warehouseId,
+      customers: meta.customers,
+      billers: meta.billers,
+      warehouses: meta.warehouses,
+      includeSessionFallback: true,
+    );
 
     if (persistSession) {
-      if (customerId != null) await session.setCustomerId(customerId);
-      if (billerId != null) await session.setBillerId(billerId);
+      if (parties.customerId != null) {
+        await session.setCustomerId(parties.customerId!);
+      }
+      if (parties.billerId != null) {
+        await session.setBillerId(parties.billerId!);
+      }
     }
 
     _setCheckout(checkout.copyWith(
-      customerId: customerId,
-      billerId: billerId,
-      warehouseId: warehouseId,
+      customerId: parties.customerId,
+      billerId: parties.billerId,
+      warehouseId: parties.warehouseId,
+      saleDate: DateTime.now(),
+    ));
+  }
+
+  Future<void> _resetCheckoutForNewSale() async {
+    final session = ref.read(sessionServiceProvider);
+    final meta = await ref.read(posLocalMetaProvider.future);
+    final syncMeta = await ref.read(appDatabaseProvider).getSyncMeta();
+    final ui = ref.read(posUiSettingsProvider);
+    final settings = await ref.read(posSettingsProvider.future);
+
+    final parties = resolveCheckoutPartyIds(
+      ui: ui,
+      settings: settings,
+      syncMeta: syncMeta,
+      sessionCustomerId: session.customerId,
+      sessionBillerId: session.billerId,
+      sessionWarehouseId: session.warehouseId,
+      customers: meta.customers,
+      billers: meta.billers,
+      warehouses: meta.warehouses,
+      includeSessionFallback: false,
+    );
+
+    _setCheckout(PosCheckoutState(
+      customerId: parties.customerId,
+      billerId: parties.billerId,
+      warehouseId: parties.warehouseId,
       saleDate: DateTime.now(),
     ));
   }
@@ -466,22 +505,18 @@ class _PosScreenState extends ConsumerState<PosScreen>
         await ref.read(posSettingsProvider.future);
     if (settings?.cashRegister == true) {
       final service = ref.read(cashRegisterServiceProvider);
-      final registerId =
-          _openCashRegisterId ?? await service.getCachedRegisterId();
-      if (registerId != null) {
-        final online = await ref.read(syncServiceProvider).probeOnline();
-        if (!online) {
-          _showSnack(
-            'Connect to internet and close cash register before logout',
-            error: true,
+      final session = ref.read(sessionServiceProvider);
+      final registerId = _openCashRegisterId ??
+          await service.getOpenRegisterId(
+            userId: session.userId ?? 0,
+            warehouseId: session.warehouseId ?? _checkout.warehouseId,
           );
-          return;
-        }
+      if (registerId != null) {
         final closed = await showCashRegisterDetailsDialog(
           context: context,
           service: service,
           registerId: registerId,
-          userId: ref.read(sessionServiceProvider).userId!,
+          userId: session.userId!,
           requireClose: true,
           onDayEndPrint: _printDayEndSummary,
         );
@@ -960,8 +995,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
       final changeDue = isDraft
           ? 0.0
           : (tendered - applied).clamp(0, double.infinity).toDouble();
-      final cashRegisterId = _openCashRegisterId ??
-          await ref.read(cashRegisterServiceProvider).getCachedRegisterId();
+      final cashRegisterService = ref.read(cashRegisterServiceProvider);
+      final localCashRegisterId = _openCashRegisterId ??
+          await cashRegisterService.getOpenRegisterId(
+            userId: session.userId ?? 0,
+            warehouseId: warehouseId,
+          );
+      final serverCashRegisterId = localCashRegisterId != null
+          ? await cashRegisterService.serverIdForLocal(localCashRegisterId)
+          : null;
       await ref.read(localSaleRepositoryProvider).saveCheckout(
             clientUuid: clientUuid,
             referenceNo: referenceNo,
@@ -969,7 +1011,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
             customerId: customerId,
             billerId: _checkout.billerId ?? session.billerId,
             userId: session.userId,
-            cashRegisterId: cashRegisterId,
+            localCashRegisterId: localCashRegisterId,
+            serverCashRegisterId: serverCashRegisterId,
             lines: lines,
             paidAmount: applied,
             payingAmount: isDraft ? 0 : tendered,
@@ -1012,11 +1055,12 @@ class _PosScreenState extends ConsumerState<PosScreen>
           transactionNo: formatSaleReferenceDisplay(referenceNo),
           refId: clientUuid,
           changeDue: changeDue,
+          cashReceived: changeDue > 0.009 ? tendered : null,
           onPrintReceipt: () => _printLastReceipt(),
         );
       }
 
-      _setCheckout(_checkout.clearCart());
+      await _resetCheckoutForNewSale();
       reloadProductGrid(ref);
 
       if (isDraft) {
@@ -1056,6 +1100,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
               background: true,
             );
         ref.invalidate(pendingSyncCountProvider);
+        ref.read(syncRevisionProvider.notifier).update((n) => n + 1);
         if (!mounted) return;
 
         if (syncResult.failed > 0) {
@@ -1191,8 +1236,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       coupons: coupons,
       initialSaleNote: _checkout.saleNote,
       initialStaffNote: _checkout.staffNote,
-      showPrintInvoiceOption: settings?.showPrintInvoice ?? false,
-      defaultPrintInvoice: settings?.showPrintInvoice ?? false,
+      showPrintInvoiceOption: true,
+      defaultPrintInvoice: true,
       showWhatsappOption: uiSettings.enableWhatsapp,
       defaultSendWhatsapp: settings?.sendSms ?? false,
       mixMethods: _paymentMethodsForMix(),
@@ -1582,7 +1627,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
           body: PosTouchTextField(
             controller: amountCtrl,
             kind: PosTouchInputKind.number,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Amount',
               border: OutlineInputBorder(),
             ),
@@ -1698,15 +1743,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TabBar(
-                labelColor: PosColors.primary,
-                unselectedLabelColor: PosColors.textMuted,
-                indicatorColor: PosColors.primary,
+                labelColor: context.posBrand.primary,
+                unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                indicatorColor: context.posBrand.primary,
                 tabs: const [
                   Tab(text: 'Drafts'),
                   Tab(text: 'Sales'),
                 ],
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Expanded(
                 child: TabBarView(
                   children: [
@@ -1732,7 +1777,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       confirmLabel: 'Clear',
       destructive: true,
     );
-    if (ok == true) _setCheckout(_checkout.clearCart());
+    if (ok == true) await _resetCheckoutForNewSale();
   }
 
   Widget _recentList(List<LocalSale> items, {required String empty}) {
@@ -1778,6 +1823,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
             retryFailed: manual,
           );
       ref.invalidate(pendingSyncCountProvider);
+      ref.read(syncRevisionProvider.notifier).update((n) => n + 1);
       if (!mounted) return;
 
       if (!result.wasOnline) {
@@ -1856,10 +1902,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(flex: 7, child: _buildCatalog()),
-        const VerticalDivider(
+        VerticalDivider(
           width: 1,
           thickness: 1,
-          color: PosColors.border,
+          color: Theme.of(context).dividerColor,
         ),
         Expanded(
           flex: 4,
@@ -1900,7 +1946,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         child: widget.embedded
             ? registerBody
             : Scaffold(
-                backgroundColor: PosColors.pageBg,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 resizeToAvoidBottomInset: false,
                 body: registerBody,
               ),
@@ -1922,7 +1968,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
     if (!mounted || picked == null) return;
     _setCheckout(checkout.copyWith(customerId: picked));
-    await ref.read(sessionServiceProvider).setCustomerId(picked);
   }
 
   Widget _buildHeaderSearchField() {
@@ -1962,7 +2007,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final products = grid.products;
 
     return ColoredBox(
-      color: PosColors.catalogBg,
+      color: context.posStyles.catalogBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1979,17 +2024,17 @@ class _PosScreenState extends ConsumerState<PosScreen>
             ),
           ),
           if (grid.isLoading && products.isNotEmpty)
-            const LinearProgressIndicator(minHeight: 2),
+            LinearProgressIndicator(minHeight: 2),
           Expanded(
             child: grid.isLoading && products.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : grid.error != null && products.isEmpty
                     ? Center(child: Text('$grid.error'))
                     : products.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
                               'No products — try Featured, Category, or Brand, or sync data',
-                              style: TextStyle(color: PosColors.textMuted),
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                             ),
                           )
                         : CustomScrollView(
@@ -2003,9 +2048,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
                                   gridDelegate:
                                       SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: gridColumns,
-                                    mainAxisSpacing: 8,
-                                    crossAxisSpacing: 8,
-                                    childAspectRatio: 2.35,
+                                    mainAxisSpacing: 10,
+                                    crossAxisSpacing: 10,
+                                    childAspectRatio: 0.78,
                                   ),
                                   delegate: SliverChildBuilderDelegate(
                                     (context, i) => PosProductCard(
@@ -2095,6 +2140,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     PosCheckoutState checkout,
     PosTotals totals,
   ) {
+    final styles = context.posStyles;
     final ui = ref.watch(posUiSettingsProvider);
     final taxRate = ui.enableTax ? checkout.orderTaxRate : 0.0;
     final orderRef = generateSaleReference(ui);
@@ -2105,7 +2151,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final hasReturnCredit = totals.returnCredit > 0;
 
     return ColoredBox(
-      color: PosColors.orderPanelBg,
+      color: context.posSurface.orderPanelBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2116,13 +2162,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
               children: [
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       'Current Order',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: PosColors.textPrimary,
-                      ),
+                      style: styles.titleLarge,
                     ),
                     const Spacer(),
                     TextButton.icon(
@@ -2132,20 +2174,20 @@ class _PosScreenState extends ConsumerState<PosScreen>
                       label: const Text('Clear'),
                       style: TextButton.styleFrom(
                         foregroundColor: PosColors.red,
-                        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                        textStyle: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
                 ),
                 if (!checkout.isEmpty) ...[
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: PosColors.primary,
+                      color: context.posBrand.primary,
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Row(
@@ -2155,14 +2197,14 @@ class _PosScreenState extends ConsumerState<PosScreen>
                             'Order #${formatSaleReferenceDisplay(orderRef.reference)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: styles.onBrand,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Text(
                           DateFormat('MMM d, h:mm a').format(orderTime),
                           maxLines: 1,
@@ -2170,7 +2212,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white.withValues(alpha: 0.85),
+                            color: styles.onBrandMuted,
                           ),
                         ),
                       ],
@@ -2193,8 +2235,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: PosColors.border)),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
             ),
             child: Column(
               children: [
@@ -2207,7 +2249,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                   total: totals.grandTotal,
                 ),
                 if (hasOrderDiscount) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   _orderSummaryRow(
                     'Discount',
                     -totals.orderDiscount,
@@ -2215,7 +2257,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                   ),
                 ],
                 if (hasPromoDiscount) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   _orderSummaryRow(
                     checkout.couponCode != null &&
                             checkout.couponCode!.isNotEmpty
@@ -2226,14 +2268,14 @@ class _PosScreenState extends ConsumerState<PosScreen>
                   ),
                 ],
                 if (hasReturnCredit) ...[
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   _orderSummaryRow(
                     'Return credit',
                     -totals.returnCredit,
-                    valueColor: PosColors.primary,
+                    valueColor: styles.accent,
                   ),
                 ],
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -2243,23 +2285,12 @@ class _PosScreenState extends ConsumerState<PosScreen>
                             : _showCouponModal,
                         icon: const Icon(Icons.local_offer_outlined, size: 18),
                         label: const Text('Coupon'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 46),
-                          foregroundColor: hasPromoDiscount
-                              ? PosColors.primary
-                              : PosColors.textPrimary,
-                          side: BorderSide(
-                            color: hasPromoDiscount
-                                ? PosColors.primary
-                                : PosColors.border,
-                          ),
-                          backgroundColor: hasPromoDiscount
-                              ? PosColors.primaryLight
-                              : Colors.white,
+                        style: styles.checkoutOutlinedStyle(
+                          highlighted: hasPromoDiscount,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: _checkout.isEmpty || _busy
@@ -2267,24 +2298,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
                             : _showDiscountModal,
                         icon: const Icon(Icons.discount_outlined, size: 18),
                         label: const Text('Discount'),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 46),
-                          foregroundColor: hasOrderDiscount
-                              ? PosColors.primary
-                              : PosColors.textPrimary,
-                          side: BorderSide(
-                            color: hasOrderDiscount
-                                ? PosColors.primary
-                                : PosColors.border,
-                          ),
-                          backgroundColor: hasOrderDiscount
-                              ? PosColors.primaryLight
-                              : Colors.white,
+                        style: styles.checkoutOutlinedStyle(
+                          highlighted: hasOrderDiscount,
                         ),
                       ),
                     ),
                     if (ui.enableReturn) ...[
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: _checkout.isEmpty || _busy
@@ -2297,26 +2317,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
                           label: Text(
                             hasReturnCredit ? 'Return credit' : 'Settle return',
                           ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 46),
-                            foregroundColor: hasReturnCredit
-                                ? PosColors.primary
-                                : PosColors.textPrimary,
-                            side: BorderSide(
-                              color: hasReturnCredit
-                                  ? PosColors.primary
-                                  : PosColors.border,
-                            ),
-                            backgroundColor: hasReturnCredit
-                                ? PosColors.primaryLight
-                                : Colors.white,
+                          style: styles.checkoutOutlinedStyle(
+                            highlighted: hasReturnCredit,
                           ),
                         ),
                       ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 14),
+                SizedBox(height: 14),
                 PosPayButton(
                   disabled: _checkout.isEmpty || _busy,
                   onPressed: _showSavePaymentCarousel,
@@ -2334,15 +2343,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
     double amount, {
     Color? valueColor,
   }) {
+    final styles = context.posStyles;
     return Row(
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            color: PosColors.textMuted,
-          ),
-        ),
+        Text(label, style: styles.bodyMuted),
         const Spacer(),
         Flexible(
           child: Text(
@@ -2351,10 +2355,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
             softWrap: false,
             overflow: TextOverflow.fade,
             textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: valueColor ?? PosColors.textPrimary,
+            style: styles.moneyMedium.copyWith(
+              color: valueColor ?? styles.text,
             ),
           ),
         ),

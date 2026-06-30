@@ -39,8 +39,6 @@ class PosDashboardScreen extends ConsumerStatefulWidget {
 
 class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
   _TrendPeriod _trendPeriod = _TrendPeriod.week;
-
-  static const _pageBg = Color(0xFFF8F9FC);
   static const _accent = PosColors.blue;
 
   Future<void> _refresh() async {
@@ -181,13 +179,13 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
           children: [
             _KpiGrid(stats: stats),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             _RevenueTrendsCard(
               points: stats.dailyRevenue,
               period: _trendPeriod,
               onPeriodChanged: (p) => setState(() => _trendPeriod = p),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             LayoutBuilder(
               builder: (context, constraints) {
                 final wide = constraints.maxWidth >= 960;
@@ -202,7 +200,7 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: topProducts),
-                      const SizedBox(width: 20),
+                      SizedBox(width: 20),
                       Expanded(child: staff),
                     ],
                   );
@@ -210,7 +208,7 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
                 return Column(
                   children: [
                     topProducts,
-                    const SizedBox(height: 20),
+                    SizedBox(height: 20),
                     staff,
                   ],
                 );
@@ -224,7 +222,7 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
     if (widget.embedded) return content;
 
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: content,
     );
   }
@@ -314,9 +312,9 @@ class _KpiCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,30 +323,30 @@ class _KpiCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: PosColors.textMuted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
               const Spacer(),
               if (trend != null) _TrendPill(percent: trend!),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Text(
             value,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
-              color: valueColor ?? PosColors.textPrimary,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
               height: 1.1,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             subtext,
-            style: const TextStyle(fontSize: 12, color: PosColors.textMuted),
+            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -398,9 +396,9 @@ class _RevenueTrendsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -408,7 +406,7 @@ class _RevenueTrendsCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -417,13 +415,13 @@ class _RevenueTrendsCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: PosColors.textPrimary,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
                       'Daily revenue performance over the last 7 days',
-                      style: TextStyle(fontSize: 13, color: PosColors.textMuted),
+                      style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -431,7 +429,7 @@ class _RevenueTrendsCard extends StatelessWidget {
               _PeriodToggle(period: period, onChanged: onPeriodChanged),
             ],
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           SizedBox(
             height: 200,
             child: _WeeklyRevenueChart(points: points),
@@ -457,20 +455,20 @@ class _PeriodToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF3F5FA),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _periodBtn('Last 7 Days', _TrendPeriod.week),
-          _periodBtn('Month', _TrendPeriod.month),
-          _periodBtn('Year', _TrendPeriod.year),
+          _periodBtn(context, 'Last 7 Days', _TrendPeriod.week),
+          _periodBtn(context, 'Month', _TrendPeriod.month),
+          _periodBtn(context, 'Year', _TrendPeriod.year),
         ],
       ),
     );
   }
 
-  Widget _periodBtn(String label, _TrendPeriod value) {
+  Widget _periodBtn(BuildContext context, String label, _TrendPeriod value) {
     final active = period == value;
     return Material(
       color: active ? PosColors.blue : Colors.transparent,
@@ -485,7 +483,7 @@ class _PeriodToggle extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : PosColors.textMuted,
+              color: active ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -515,7 +513,7 @@ class _WeeklyRevenueChart extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: p.isToday ? FontWeight.w800 : FontWeight.w500,
-                  color: p.isToday ? PosColors.textPrimary : PosColors.textMuted,
+                  color: p.isToday ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
           ],
@@ -613,12 +611,12 @@ class _TopProductsCard extends StatelessWidget {
         child: const Text('View All'),
       ),
       child: products.isEmpty
-          ? const Padding(
+          ? Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
               child: Text(
                 'No product sales recorded today.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: PosColors.textMuted),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           : Column(
@@ -636,13 +634,13 @@ class _ProductTableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(
+    final style = TextStyle(
       fontSize: 11,
       fontWeight: FontWeight.w700,
-      color: PosColors.textMuted,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       letterSpacing: 0.3,
     );
-    return const Padding(
+    return Padding(
       padding: EdgeInsets.fromLTRB(4, 8, 4, 10),
       child: Row(
         children: [
@@ -677,9 +675,9 @@ class _ProductTableRow extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: PosColors.productIconBg,
+                    color: context.posSurface.productIconBg,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: PosColors.border),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Icon(
                     Icons.shopping_bag_outlined,
@@ -687,13 +685,13 @@ class _ProductTableRow extends StatelessWidget {
                     color: PosColors.blue.withValues(alpha: 0.7),
                   ),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     product.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -708,7 +706,7 @@ class _ProductTableRow extends StatelessWidget {
               product.qtySold == product.qtySold.roundToDouble()
                   ? '${product.qtySold.toInt()}'
                   : product.qtySold.toStringAsFixed(1),
-              style: const TextStyle(fontSize: 14),
+              style: TextStyle(fontSize: 14),
             ),
           ),
           Expanded(
@@ -716,7 +714,7 @@ class _ProductTableRow extends StatelessWidget {
             child: Text(
               formatPosMoney(product.revenue),
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
                 color: PosColors.blue,
@@ -746,31 +744,31 @@ class _StaffPerformanceCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.calendar_today_outlined,
-              size: 14, color: PosColors.textMuted.withValues(alpha: 0.8)),
-          const SizedBox(width: 6),
-          const Text(
+              size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8)),
+          SizedBox(width: 6),
+          Text(
             'TODAY',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               letterSpacing: 0.5,
             ),
           ),
           if (onTap != null) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             Icon(Icons.chevron_right,
-                size: 18, color: PosColors.textMuted.withValues(alpha: 0.7)),
+                size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
           ],
         ],
       ),
       child: staff.isEmpty
-          ? const Padding(
+          ? Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
               child: Text(
                 'No staff sales recorded today.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: PosColors.textMuted),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           : Column(
@@ -804,10 +802,10 @@ class _StaffRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: highlight ? PosColors.primaryLight : Colors.transparent,
+        color: highlight ? context.posBrand.primaryLight : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: highlight ? PosColors.blue.withValues(alpha: 0.2) : PosColors.border,
+          color: highlight ? PosColors.blue.withValues(alpha: 0.2) : Theme.of(context).dividerColor,
         ),
       ),
       child: Column(
@@ -819,12 +817,12 @@ class _StaffRow extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: PosColors.productIconBg,
+                    backgroundColor: context.posSurface.productIconBg,
                     child: Text(
                       member.name.isNotEmpty
                           ? member.name[0].toUpperCase()
                           : '?',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         color: PosColors.blue,
                       ),
@@ -837,11 +835,11 @@ class _StaffRow extends StatelessWidget {
                       child: CircleAvatar(
                         radius: 9,
                         backgroundColor:
-                            member.rank == 1 ? PosColors.blue : PosColors.textMuted,
+                            member.rank == 1 ? PosColors.blue : Theme.of(context).colorScheme.onSurfaceVariant,
                         child: Text(
                           '${member.rank}',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.surface,
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                           ),
@@ -850,23 +848,23 @@ class _StaffRow extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       member.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
                     ),
                     Text(
                       '${member.transactionCount} transactions',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: PosColors.textMuted,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -874,22 +872,22 @@ class _StaffRow extends StatelessWidget {
               ),
               Text(
                 formatPosMoney(member.totalSales),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
-                  color: PosColors.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: member.progress,
               minHeight: 6,
               backgroundColor: const Color(0xFFE5E9F2),
-              color: highlight ? PosColors.blue : PosColors.textMuted,
+              color: highlight ? PosColors.blue : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -914,9 +912,9 @@ class _DashboardPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -925,17 +923,17 @@ class _DashboardPanel extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
-                  color: PosColors.textPrimary,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const Spacer(),
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           child,
         ],
       ),

@@ -58,6 +58,7 @@ class SyncService {
     this.markReturnSynced,
     this.loadPendingExchanges,
     this.markExchangeSynced,
+    this.syncCashRegisters,
     this.terminalCode,
     this.userId,
     this.onSyncComplete,
@@ -75,6 +76,7 @@ class SyncService {
   final SaleSyncMarker? markReturnSynced;
   final PendingSaleLoader? loadPendingExchanges;
   final SaleSyncMarker? markExchangeSynced;
+  final Future<void> Function()? syncCashRegisters;
   final void Function()? onSyncComplete;
 
   Future<SyncPendingResult>? _activeSync;
@@ -84,7 +86,7 @@ class SyncService {
 
   bool get isSyncing => _activeSync != null;
 
-  Future<bool> probeOnline({bool force = false}) async {
+  Future<bool> probeOnline({bool force = false, bool quiet = false}) async {
     final now = DateTime.now();
     if (!force &&
         _lastHealthAt != null &&
@@ -94,7 +96,7 @@ class SyncService {
     }
 
     try {
-      final health = await _api.health();
+      final health = await _api.health(quiet: quiet);
       final online = health['online'];
       final result = online == true ||
           online == 1 ||
@@ -104,7 +106,9 @@ class SyncService {
       _lastHealthOnline = result;
       return result;
     } catch (e, stack) {
-      AppLogger.error('Sync', 'Health probe failed', e, stack);
+      if (!quiet) {
+        AppLogger.error('Sync', 'Health probe failed', e, stack);
+      }
       _lastHealthAt = now;
       _lastHealthOnline = false;
       return false;
@@ -160,6 +164,15 @@ class SyncService {
           wasOnline: true,
           errorMessage: msg,
         );
+      }
+
+      // Sync cash register open/close before sales so payloads have server ids.
+      if (syncCashRegisters != null) {
+        try {
+          await syncCashRegisters!();
+        } catch (e, stack) {
+          AppLogger.error('Sync', 'Cash register sync failed', e, stack);
+        }
       }
 
       // Pick up sales already processed by the queue worker.

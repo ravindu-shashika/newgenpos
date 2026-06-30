@@ -228,6 +228,8 @@ class LocalSales extends Table {
   IntColumn get serverSaleId => integer().nullable()();
   TextColumn get serverReferenceNo => text().nullable()();
   TextColumn get errorMessage => text().nullable()();
+  IntColumn get localCashRegisterId =>
+      integer().nullable().references(LocalCashRegisters, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 }
@@ -267,6 +269,26 @@ class LocalExchanges extends Table {
   TextColumn get serverReferenceNo => text().nullable()();
   TextColumn get errorMessage => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get syncedAt => dateTime().nullable()();
+}
+
+/// Offline cash register sessions — synced to server on day-end / push.
+class LocalCashRegisters extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get clientUuid => text().unique()();
+  IntColumn get serverRegisterId => integer().nullable()();
+  IntColumn get userId => integer()();
+  IntColumn get warehouseId => integer()();
+  RealColumn get cashInHand => real()();
+  RealColumn get closingBalance => real().nullable()();
+  RealColumn get actualCash => real().nullable()();
+  BoolColumn get isOpen => boolean().withDefault(const Constant(true))();
+  /// pending_open | synced | pending_close | closed
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('pending_open'))();
+  TextColumn get errorMessage => text().nullable()();
+  DateTimeColumn get openedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get closedAt => dateTime().nullable()();
   DateTimeColumn get syncedAt => dateTime().nullable()();
 }
 

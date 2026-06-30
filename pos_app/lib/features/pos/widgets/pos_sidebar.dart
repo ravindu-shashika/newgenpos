@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/services/pos_window_service.dart';
 import '../../../core/theme/pos_theme.dart';
 
 enum PosNavSection {
@@ -29,6 +28,9 @@ class PosSidebar extends StatelessWidget {
     required this.onLogout,
     this.onReturn,
     this.onExchange,
+    this.onPendingSync,
+    this.pendingSyncCount = 0,
+    this.syncingSales = false,
     this.busy = false,
     this.syncing = false,
   });
@@ -46,6 +48,9 @@ class PosSidebar extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback? onReturn;
   final VoidCallback? onExchange;
+  final VoidCallback? onPendingSync;
+  final int pendingSyncCount;
+  final bool syncingSales;
   final bool busy;
   final bool syncing;
 
@@ -58,12 +63,12 @@ class PosSidebar extends StatelessWidget {
       color: brand.sidebarBg,
       child: Container(
         width: 68,
-        decoration: const BoxDecoration(
-          border: Border(right: BorderSide(color: PosColors.border)),
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
         ),
         child: Column(
           children: [
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             Expanded(
               child: SingleChildScrollView(
                 physics: const ClampingScrollPhysics(),
@@ -102,6 +107,17 @@ class PosSidebar extends StatelessWidget {
                       active: activeSection == PosNavSection.history,
                       onTap: _enabled ? onHistory : null,
                       enabled: _enabled,
+                    ),
+                    _NavIcon(
+                      icon: syncingSales
+                          ? Icons.sync_rounded
+                          : Icons.cloud_upload_outlined,
+                      tooltip: pendingSyncCount > 0
+                          ? 'Pending sync ($pendingSyncCount)'
+                          : 'Pending sync',
+                      badgeCount: pendingSyncCount,
+                      onTap: _enabled && !syncingSales ? onPendingSync : null,
+                      enabled: _enabled && !syncingSales,
                     ),
                     if (onReturn != null)
                       _NavIcon(
@@ -142,12 +158,7 @@ class PosSidebar extends StatelessWidget {
             ),
             SafeArea(
               top: false,
-              minimum: EdgeInsets.only(
-                bottom: PosWindowService.isSupported &&
-                        PosWindowService.instance.isKioskActive
-                    ? 12
-                    : 8,
-              ),
+              minimum: const EdgeInsets.only(bottom: 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -183,6 +194,7 @@ class _NavIcon extends StatelessWidget {
     this.active = false,
     this.enabled = true,
     this.danger = false,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
@@ -192,13 +204,20 @@ class _NavIcon extends StatelessWidget {
   final bool active;
   final bool enabled;
   final bool danger;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
     final brand = context.posBrand;
+    final sidebarIsLight = brand.sidebarBg.computeLuminance() > 0.55;
     final inactiveColor = danger
-        ? const Color(0xFFE53935)
-        : PosColors.textMuted.withValues(alpha: enabled ? 0.85 : 0.35);
+        ? (sidebarIsLight ? const Color(0xFFE53935) : const Color(0xFFF87171))
+        : (sidebarIsLight
+            ? Theme.of(context)
+                .colorScheme
+                .onSurfaceVariant
+                .withValues(alpha: enabled ? 0.85 : 0.35)
+            : Colors.white.withValues(alpha: enabled ? 0.82 : 0.32));
 
     final Color bg = active ? brand.primary : Colors.transparent;
     final Color iconColor = active ? Colors.white : inactiveColor;
@@ -217,24 +236,60 @@ class _NavIcon extends StatelessWidget {
             child: SizedBox(
               width: 48,
               height: label == null ? 48 : 52,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
                 children: [
-                  Icon(icon, size: label == null ? 22 : 20, color: iconColor),
-                  if (label != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      label!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                        color: labelColor,
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: label == null ? 22 : 20, color: iconColor),
+                      if (label != null) ...[
+                        SizedBox(height: 2),
+                        Text(
+                          label!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.2,
+                            color: labelColor,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: 2,
+                      top: 0,
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDC2626),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: brand.sidebarBg,
+                            width: 1.5,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                        ),
                       ),
                     ),
-                  ],
                 ],
               ),
             ),

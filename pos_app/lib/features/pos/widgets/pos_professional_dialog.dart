@@ -39,7 +39,7 @@ class PosProfessionalWideDialogShell extends StatelessWidget {
       elevation: 20,
       shadowColor: Colors.black26,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: ConstrainedBox(
@@ -54,11 +54,11 @@ class PosProfessionalWideDialogShell extends StatelessWidget {
               icon: icon,
               onClose: onClose ?? () => Navigator.of(context).pop(),
             ),
-            const Divider(height: 1, color: PosColors.border),
+            Divider(height: 1, color: Theme.of(context).dividerColor),
             if (headerExtra != null) headerExtra!,
             Flexible(child: body),
             if (footer != null) ...[
-              const Divider(height: 1, color: PosColors.border),
+              Divider(height: 1, color: Theme.of(context).dividerColor),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
                 child: footer!,
@@ -100,7 +100,7 @@ class PosProfessionalDialogShell extends StatelessWidget {
       elevation: 20,
       shadowColor: Colors.black26,
       insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
@@ -114,7 +114,7 @@ class PosProfessionalDialogShell extends StatelessWidget {
               icon: icon,
               onClose: onClose ?? () => Navigator.of(context).pop(),
             ),
-            const Divider(height: 1, color: PosColors.border),
+            Divider(height: 1, color: Theme.of(context).dividerColor),
             Flexible(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 280),
@@ -127,7 +127,7 @@ class PosProfessionalDialogShell extends StatelessWidget {
               ),
             ),
             if (footer != null) ...[
-              const Divider(height: 1, color: PosColors.border),
+              Divider(height: 1, color: Theme.of(context).dividerColor),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
                 child: footer!,
@@ -156,6 +156,7 @@ class PosProfessionalDialogHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 12, 16),
       child: Row(
@@ -165,34 +166,25 @@ class PosProfessionalDialogHeader extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: PosColors.primaryLight,
+              color: s.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: PosColors.primary, size: 22),
+            child: Icon(icon, color: s.accent, size: 22),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.textPrimary,
-                    height: 1.2,
-                  ),
+                  style: s.titleLarge,
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: PosColors.textMuted,
-                    ),
+                    style: s.bodyMuted.copyWith(fontSize: 13),
                   ),
                 ],
               ],
@@ -202,7 +194,7 @@ class PosProfessionalDialogHeader extends StatelessWidget {
             onPressed: onClose,
             tooltip: 'Close',
             icon: const Icon(Icons.close, size: 20),
-            color: PosColors.textMuted,
+            color: s.textMuted,
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -252,17 +244,17 @@ class PosProfessionalDialogFooter extends StatelessWidget {
                   )
                 : null,
             child: primaryLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                     ),
                   )
                 : Text(
                     primaryLabel!,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
           ),
       ],
@@ -316,23 +308,23 @@ class PosProfessionalDialog extends StatelessWidget {
   }
 }
 
-InputDecoration posProfessionalSearchDecoration(String hint) {
+InputDecoration posProfessionalSearchDecoration(BuildContext context, String hint) {
   return InputDecoration(
     hintText: hint,
     filled: true,
-    fillColor: PosColors.searchFill,
-    prefixIcon: const Icon(Icons.search, color: PosColors.primary, size: 22),
+    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+    prefixIcon: Icon(Icons.search, color: context.posBrand.primary, size: 22),
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: PosColors.searchBorder),
+      borderSide: BorderSide(color: Theme.of(context).dividerColor),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: PosColors.searchBorder),
+      borderSide: BorderSide(color: Theme.of(context).dividerColor),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: PosColors.primary, width: 1.5),
+      borderSide: BorderSide(color: context.posBrand.primary, width: 1.5),
     ),
     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
   );
@@ -356,8 +348,8 @@ class PosProfessionalPickerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: selected
-          ? PosColors.primaryLight.withValues(alpha: 0.55)
-          : PosColors.pageBg,
+          ? context.posBrand.primaryLight.withValues(alpha: 0.55)
+          : Theme.of(context).scaffoldBackgroundColor,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -367,7 +359,7 @@ class PosProfessionalPickerTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? PosColors.primary : PosColors.border,
+              color: selected ? context.posBrand.primary : Theme.of(context).dividerColor,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -383,18 +375,18 @@ class PosProfessionalPickerTile extends StatelessWidget {
                         fontSize: 14,
                         fontWeight:
                             selected ? FontWeight.w800 : FontWeight.w600,
-                        color: PosColors.textPrimary,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 3),
+                      SizedBox(height: 3),
                       Text(
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: PosColors.textMuted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -406,10 +398,10 @@ class PosProfessionalPickerTile extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: PosColors.primary,
+                    color: context.posBrand.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.check, size: 16, color: Colors.white),
+                  child: Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.surface),
                 ),
             ],
           ),
@@ -435,15 +427,15 @@ class PosProfessionalEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 40, color: PosColors.textMuted.withValues(alpha: 0.6)),
-          const SizedBox(height: 12),
+          Icon(icon, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+          SizedBox(height: 12),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -474,10 +466,10 @@ Future<bool?> showPosConfirmDialog({
           ? const SizedBox.shrink()
           : Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: PosColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
       footer: PosProfessionalDialogFooter(
@@ -511,10 +503,10 @@ Future<void> showPosInfoDialog({
       maxBodyHeight: 120,
       body: Text(
         message,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           height: 1.5,
-          color: PosColors.textPrimary,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     ),
@@ -554,33 +546,33 @@ class _RecentTransactionsEmpty extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: PosColors.primaryLight.withValues(alpha: 0.65),
+              color: context.posBrand.primaryLight.withValues(alpha: 0.65),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.point_of_sale_outlined,
               size: 36,
-              color: PosColors.primary.withValues(alpha: 0.75),
+              color: context.posBrand.primary.withValues(alpha: 0.75),
             ),
           ),
-          const SizedBox(height: 18),
-          const Text(
+          SizedBox(height: 18),
+          Text(
             'No sales recorded today yet',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: PosColors.textPrimary,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Completed transactions will appear here once you finish a sale.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
               height: 1.45,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -607,9 +599,9 @@ class _RecentTransactionsList extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: PosColors.pageBg,
+            color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Row(
             children: [
@@ -617,16 +609,16 @@ class _RecentTransactionsList extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: PosColors.primaryLight,
+                  color: context.posBrand.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   t.paymentIcon,
-                  style: const TextStyle(fontSize: 18),
+                  style: TextStyle(fontSize: 18),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -635,43 +627,43 @@ class _RecentTransactionsList extends StatelessWidget {
                       t.orderId,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: PosColors.textPrimary,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Row(
                       children: [
                         Text(
                           t.paymentLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: PosColors.textMuted,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        const Text(
+                        Text(
                           ' · ',
-                          style: TextStyle(color: PosColors.textMuted),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                         ),
                         Text(
                           timeFmt.format(t.createdAt),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: PosColors.textMuted,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                         if (t.itemCount > 0) ...[
-                          const Text(
+                          Text(
                             ' · ',
-                            style: TextStyle(color: PosColors.textMuted),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                           ),
                           Text(
                             '${t.itemCount} item${t.itemCount == 1 ? '' : 's'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: PosColors.textMuted,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -680,13 +672,13 @@ class _RecentTransactionsList extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 formatPosMoney(t.total),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
-                  color: PosColors.primary,
+                  color: context.posBrand.primary,
                 ),
               ),
             ],

@@ -61,7 +61,9 @@ class PosSidebarActions {
     final session = ref.read(sessionServiceProvider);
     final userId = session.userId;
     final service = ref.read(cashRegisterServiceProvider);
-    final registerId = await service.getCachedRegisterId();
+    final registerId = userId == null
+        ? null
+        : await service.getOpenRegisterId(userId: userId);
 
     if (userId == null || registerId == null) {
       if (context.mounted) {
@@ -71,17 +73,6 @@ class PosSidebarActions {
           type: PosToastType.error,
         );
       }
-      return;
-    }
-
-    final online = await ref.read(syncServiceProvider).probeOnline();
-    if (!context.mounted) return;
-    if (!online) {
-      PosToast.show(
-        context,
-        'Connect to internet for cash register',
-        type: PosToastType.error,
-      );
       return;
     }
 

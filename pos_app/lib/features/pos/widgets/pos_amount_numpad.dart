@@ -7,6 +7,15 @@ enum PosQuickCashLayout { wrap, grid }
 
 enum PosNumpadKeyOrder { phone, calculator }
 
+/// Visual style for amount entry keypads.
+enum PosAmountNumpadStyle {
+  /// Default POS dialogs (discount, coupon, etc.).
+  standard,
+
+  /// Payment modal — dark navy keys, white digits, red destructive keys.
+  payment,
+}
+
 /// Quick denomination buttons (50, 100, 500, …) for cash entry.
 class PosQuickCashBar extends StatelessWidget {
   const PosQuickCashBar({
@@ -139,6 +148,10 @@ class PosAmountNumpad extends StatefulWidget {
     this.keyOrder = PosNumpadKeyOrder.phone,
     this.lightKeys = false,
     this.showClearButton = false,
+    this.clearButtonLabel = 'Clear Amount Tendered',
+    this.style = PosAmountNumpadStyle.standard,
+    this.allowDecimal = true,
+    this.maxLength,
   });
 
   final TextEditingController controller;
@@ -152,6 +165,10 @@ class PosAmountNumpad extends StatefulWidget {
   final PosNumpadKeyOrder keyOrder;
   final bool lightKeys;
   final bool showClearButton;
+  final String clearButtonLabel;
+  final PosAmountNumpadStyle style;
+  final bool allowDecimal;
+  final int? maxLength;
 
   @override
   State<PosAmountNumpad> createState() => _PosAmountNumpadState();
@@ -174,9 +191,21 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
     '.', '0', '⌫',
   ];
 
-  List<String> get _keys => widget.keyOrder == PosNumpadKeyOrder.calculator
-      ? _keysCalculator
-      : _keysPhone;
+  static const _keysInteger = [
+    '1', '2', '3',
+    '4', '5', '6',
+    '7', '8', '9',
+    '', '0', '⌫',
+  ];
+
+  List<String> get _keys {
+    if (!widget.allowDecimal) return _keysInteger;
+    return widget.keyOrder == PosNumpadKeyOrder.calculator
+        ? _keysCalculator
+        : _keysPhone;
+  }
+
+  bool get _paymentStyle => widget.style == PosAmountNumpadStyle.payment;
 
   @override
   void didUpdateWidget(covariant PosAmountNumpad oldWidget) {
@@ -201,6 +230,11 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
   }
 
   void _append(String key) {
+    if (widget.maxLength != null &&
+        widget.controller.text.length >= widget.maxLength!) {
+      return;
+    }
+
     var text = widget.controller.text;
     if (_firstKey) {
       text = key == '.' ? '0.' : key;
@@ -274,12 +308,15 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
         childAspectRatio: aspectRatio,
         children: [
           for (final key in _keys)
-            _NumpadKey(
-              label: key,
-              largeTouch: widget.largeTouch,
-              lightKeys: widget.lightKeys,
-              onPressed: () => _onKey(key),
-            ),
+            key.isEmpty
+                ? const _NumpadKeyPlaceholder()
+                : _NumpadKey(
+                    label: key,
+                    largeTouch: widget.largeTouch,
+                    lightKeys: widget.lightKeys,
+                    style: widget.style,
+                    onPressed: () => _onKey(key),
+                  ),
         ],
       );
     }
@@ -297,28 +334,32 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
   }
 
   Widget _buildClearButton() {
+    final danger = context.posStyles.danger;
+    final clearHeight = widget.largeTouch
+        ? (_paymentStyle ? 56.0 : 52.0)
+        : 48.0;
     return Material(
-      color: PosColors.red.withValues(alpha: 0.08),
+      color: danger.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: _clearAll,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          height: widget.largeTouch ? 52 : 48,
+          height: clearHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PosColors.red.withValues(alpha: 0.25)),
+            border: Border.all(color: danger.withValues(alpha: 0.3)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.delete_outline, color: PosColors.red, size: 18),
-              SizedBox(width: 8),
+              Icon(Icons.delete_outline, color: danger, size: 18),
+              const SizedBox(width: 8),
               Text(
-                'Clear Amount Tendered',
+                widget.clearButtonLabel,
                 style: TextStyle(
-                  color: PosColors.red,
+                  color: danger,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -345,17 +386,62 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
               widget.onQuickCashUsed?.call();
             },
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
         ],
         if (widget.fillHeight)
           Expanded(child: _buildGrid())
         else
           _buildGrid(),
         if (widget.showClearButton) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _buildClearButton(),
         ],
       ],
+    );
+  }
+}
+
+/// Shared payment-modal numpad — cash, card digits, split amounts.
+class PosPaymentNumpad extends StatelessWidget {
+  const PosPaymentNumpad({
+    super.key,
+    required this.controller,
+    this.onChanged,
+    this.fillHeight = true,
+    this.showClearButton = true,
+    this.clearButtonLabel = 'Clear Amount Tendered',
+    this.allowDecimal = true,
+    this.maxLength,
+    this.onQuickCashUsed,
+    this.quickCashInitial = true,
+  });
+
+  final TextEditingController controller;
+  final VoidCallback? onChanged;
+  final bool fillHeight;
+  final bool showClearButton;
+  final String clearButtonLabel;
+  final bool allowDecimal;
+  final int? maxLength;
+  final VoidCallback? onQuickCashUsed;
+  final bool quickCashInitial;
+
+  @override
+  Widget build(BuildContext context) {
+    return PosAmountNumpad(
+      controller: controller,
+      onChanged: onChanged,
+      showQuickCash: false,
+      fillHeight: fillHeight,
+      largeTouch: true,
+      quickCashInitial: quickCashInitial,
+      onQuickCashUsed: onQuickCashUsed,
+      keyOrder: PosNumpadKeyOrder.calculator,
+      showClearButton: showClearButton,
+      clearButtonLabel: clearButtonLabel,
+      style: PosAmountNumpadStyle.payment,
+      allowDecimal: allowDecimal,
+      maxLength: maxLength,
     );
   }
 }
@@ -422,17 +508,17 @@ class _PosAmountFieldState extends State<PosAmountField> {
           InputDecoration(
             isDense: true,
             filled: true,
-            fillColor: PosColors.primaryLight.withValues(alpha: 0.35),
+            fillColor: context.posBrand.primaryLight.withValues(alpha: 0.35),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(
-                color: focused ? PosColors.primary : PosColors.border,
+                color: focused ? context.posBrand.primary : Theme.of(context).dividerColor,
                 width: focused ? 2 : 1,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: PosColors.primary, width: 2),
+              borderSide: BorderSide(color: context.posBrand.primary, width: 2),
             ),
           ),
     );
@@ -457,7 +543,7 @@ class _QuickCashButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final button = Material(
-      color: isDanger ? PosColors.red.withValues(alpha: 0.12) : PosColors.primary,
+      color: isDanger ? PosColors.red.withValues(alpha: 0.12) : context.posBrand.primary,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onPressed,
@@ -493,28 +579,76 @@ class _QuickCashButton extends StatelessWidget {
   }
 }
 
+class _NumpadKeyPlaceholder extends StatelessWidget {
+  const _NumpadKeyPlaceholder();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+}
+
 class _NumpadKey extends StatelessWidget {
   const _NumpadKey({
     required this.label,
     required this.onPressed,
     this.largeTouch = false,
     this.lightKeys = false,
+    this.style = PosAmountNumpadStyle.standard,
   });
 
   final String label;
   final VoidCallback onPressed;
   final bool largeTouch;
   final bool lightKeys;
+  final PosAmountNumpadStyle style;
 
   @override
   Widget build(BuildContext context) {
     final isBackspace = label == '⌫';
-    final bg = isBackspace
-        ? PosColors.red.withValues(alpha: 0.1)
-        : (lightKeys ? PosColors.primaryLight : Colors.white);
+    final payment = style == PosAmountNumpadStyle.payment;
+    final brand = context.posBrand;
+
+    final Color bg;
+    final Color borderColor;
+    final Color fg;
+
+    if (isBackspace) {
+      bg = context.posStyles.danger.withValues(alpha: 0.12);
+      borderColor = context.posStyles.danger.withValues(alpha: 0.35);
+      fg = context.posStyles.danger;
+    } else if (payment) {
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      if (dark) {
+        bg = Theme.of(context).colorScheme.surfaceContainerHighest;
+        borderColor = Theme.of(context).dividerColor;
+        fg = Theme.of(context).colorScheme.onSurface;
+      } else {
+        bg = Color.alphaBlend(
+          brand.primary.withValues(alpha: 0.55),
+          Theme.of(context).colorScheme.surfaceContainerHighest,
+        );
+        borderColor = brand.primary.withValues(alpha: 0.35);
+        fg = Colors.white;
+      }
+    } else if (lightKeys) {
+      bg = brand.primaryLight;
+      borderColor = brand.primary.withValues(alpha: 0.12);
+      fg = Theme.of(context).colorScheme.onSurface;
+    } else {
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      if (dark) {
+        bg = Theme.of(context).colorScheme.surfaceContainerHighest;
+        borderColor = Theme.of(context).dividerColor;
+        fg = Theme.of(context).colorScheme.onSurface;
+      } else {
+        bg = Colors.white;
+        borderColor = Theme.of(context).dividerColor;
+        fg = Theme.of(context).colorScheme.onSurface;
+      }
+    }
+
     return Material(
       color: bg,
-      elevation: isBackspace || lightKeys ? 0 : 1,
+      elevation: isBackspace || lightKeys || payment ? 0 : 1,
       shadowColor: Colors.black12,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
@@ -524,26 +658,16 @@ class _NumpadKey extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isBackspace
-                  ? PosColors.red.withValues(alpha: 0.35)
-                  : (lightKeys
-                      ? PosColors.primary.withValues(alpha: 0.12)
-                      : PosColors.border),
-            ),
+            border: Border.all(color: borderColor),
           ),
           child: isBackspace
-              ? const Icon(
-                  Icons.backspace_outlined,
-                  color: PosColors.red,
-                  size: 22,
-                )
+              ? Icon(Icons.backspace_outlined, color: fg, size: 26)
               : Text(
                   label,
                   style: TextStyle(
-                    fontSize: largeTouch ? 32 : 22,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.textPrimary,
+                    fontSize: largeTouch ? (payment ? 36 : 32) : 22,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
                   ),
                 ),
         ),

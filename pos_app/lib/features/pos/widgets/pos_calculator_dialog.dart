@@ -93,21 +93,21 @@ class _PosCalculatorDialogState extends State<_PosCalculatorDialog> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: PosColors.pageBg,
+              color: Theme.of(context).scaffoldBackgroundColor,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: PosColors.border),
+              border: Border.all(color: Theme.of(context).dividerColor),
             ),
             alignment: Alignment.centerRight,
             child: Text(
               _display,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
-                color: PosColors.textPrimary,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -118,8 +118,8 @@ class _PosCalculatorDialogState extends State<_PosCalculatorDialog> {
               return FilledButton.tonal(
                 onPressed: () => _tap(k),
                 style: FilledButton.styleFrom(
-                  backgroundColor: PosColors.primaryLight,
-                  foregroundColor: PosColors.primary,
+                  backgroundColor: context.posBrand.primaryLight,
+                  foregroundColor: context.posBrand.primary,
                 ),
                 child: Text(k),
               );

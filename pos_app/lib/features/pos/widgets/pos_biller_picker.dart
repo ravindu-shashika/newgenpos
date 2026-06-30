@@ -69,11 +69,11 @@ class PosBillerPicker extends StatelessWidget {
       onTap: () => _open(context),
       borderRadius: BorderRadius.circular(8),
       child: InputDecorator(
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Biller',
           isDense: true,
           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          suffixIcon: Icon(Icons.search, color: PosColors.primary),
+          suffixIcon: Icon(Icons.search, color: context.posBrand.primary),
           border: OutlineInputBorder(),
         ),
         child: Text(
@@ -83,7 +83,7 @@ class PosBillerPicker extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             color:
-                selected == null ? PosColors.textMuted : PosColors.textPrimary,
+                selected == null ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ),
@@ -107,13 +107,13 @@ class PosHeaderSelectChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand = context.posBrand;
+    final styles = context.posStyles;
 
     return Material(
-      color: Colors.white,
+      color: styles.elevatedBg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(kPosButtonRadius),
-        side: const BorderSide(color: PosColors.border),
+        side: BorderSide(color: styles.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -122,36 +122,36 @@ class PosHeaderSelectChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           child: Row(
             children: [
-              Icon(icon, size: 15, color: brand.primary),
-              const SizedBox(width: 6),
+              Icon(icon, size: 15, color: styles.accent),
+              SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.2,
-                  color: brand.primary,
+                  color: styles.accent,
                 ),
               ),
               Container(
                 width: 1,
                 height: 14,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: PosColors.border,
+                color: styles.border,
               ),
               Expanded(
                 child: Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: PosColors.textPrimary,
+                    color: styles.text,
                   ),
                 ),
               ),
-              const Icon(Icons.expand_more, size: 18, color: PosColors.textMuted),
+              Icon(Icons.expand_more, size: 18, color: styles.textMuted),
             ],
           ),
         ),
@@ -221,19 +221,19 @@ class _BillerSearchDialogState extends State<_BillerSearchDialog> {
           PosTouchTextField(
             controller: _searchCtrl,
             focusNode: _searchFocus,
-            decoration: posProfessionalSearchDecoration('Search biller…'),
+            decoration: posProfessionalSearchDecoration(context, 'Search biller…'),
             onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Text(
             '${results.length} biller${results.length == 1 ? '' : 's'} found',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           Expanded(
             child: results.isEmpty
                 ? const PosProfessionalEmptyState(

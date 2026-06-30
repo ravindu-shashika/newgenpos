@@ -19,14 +19,14 @@ class SlidingSegment extends StatefulWidget {
     required this.segments,
     required this.selectedIndex,
     required this.onChanged,
-    this.color = PosColors.primary,
+    this.color,
     this.largeTouch = false,
   });
 
   final List<SlidingSegmentOption> segments;
   final int selectedIndex;
   final ValueChanged<int> onChanged;
-  final Color color;
+  final Color? color;
   final bool largeTouch;
 
   @override
@@ -110,6 +110,7 @@ class _SlidingSegmentState extends State<SlidingSegment> {
       builder: (context, constraints) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _updateIndicator());
 
+        final accentColor = widget.color ?? context.posBrand.primary;
         final barHeight = widget.largeTouch ? 56.0 : 44.0;
         final inset = widget.largeTouch ? 4.0 : 3.0;
         final iconSize = widget.largeTouch ? 22.0 : 18.0;
@@ -120,9 +121,9 @@ class _SlidingSegmentState extends State<SlidingSegment> {
         return Container(
           height: barHeight,
           decoration: BoxDecoration(
-            color: PosColors.pageBg,
+            color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: BorderRadius.circular(widget.largeTouch ? 12 : 10),
-            border: Border.all(color: PosColors.border),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Stack(
             clipBehavior: Clip.none,
@@ -136,11 +137,11 @@ class _SlidingSegmentState extends State<SlidingSegment> {
                 bottom: inset,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: widget.color,
+                    color: accentColor,
                     borderRadius: BorderRadius.circular(widget.largeTouch ? 10 : 8),
                     boxShadow: [
                       BoxShadow(
-                        color: widget.color.withValues(alpha: 0.28),
+                        color: accentColor.withValues(alpha: 0.28),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -182,7 +183,7 @@ class _SlidingSegmentState extends State<SlidingSegment> {
                                     size: iconSize,
                                     color: selected
                                         ? Colors.white
-                                        : PosColors.textMuted,
+                                        : Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                   SizedBox(width: widget.largeTouch ? 8 : 6),
                                 ],
@@ -193,7 +194,7 @@ class _SlidingSegmentState extends State<SlidingSegment> {
                                     fontSize: fontSize,
                                     color: selected
                                         ? Colors.white
-                                        : PosColors.textPrimary,
+                                        : Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
                               ],

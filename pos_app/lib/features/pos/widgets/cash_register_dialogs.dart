@@ -47,35 +47,35 @@ Future<bool> showOpenCashRegisterDialog({
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
+            Text(
               'Open the day before making sales. Enter cash in hand to start.',
-              style: TextStyle(fontSize: 13, height: 1.45, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 13, height: 1.45, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
             if (warehouseName != null && warehouseName.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: PosColors.pageBg,
+                  color: Theme.of(context).scaffoldBackgroundColor,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: PosColors.border),
+                  border: Border.all(color: Theme.of(context).dividerColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Warehouse',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: PosColors.textMuted,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       warehouseName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
@@ -92,7 +92,7 @@ Future<bool> showOpenCashRegisterDialog({
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
               ],
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Cash in hand *',
                 border: OutlineInputBorder(),
                 hintText: '0',
@@ -111,8 +111,8 @@ Future<bool> showOpenCashRegisterDialog({
                       ),
             ),
             if (submitting) ...[
-              const SizedBox(height: 16),
-              const Center(child: CircularProgressIndicator()),
+              SizedBox(height: 16),
+              Center(child: CircularProgressIndicator()),
             ],
           ],
         ),
@@ -325,11 +325,11 @@ Future<bool> showCashRegisterDetailsDialog({
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'Please review transactions and payments.',
-                style: TextStyle(fontSize: 13, color: PosColors.textMuted),
+                style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               row('Cash in hand', details!.cashInHand),
               row('Total sale amount', details.totalSaleAmount),
               row('Total payment', details.totalPayment),
@@ -344,10 +344,10 @@ Future<bool> showCashRegisterDetailsDialog({
               row('Total sale return', details.totalSaleReturn),
               row('Total expense', details.totalExpense),
               row('Total supplier payment', details.totalSupplierPayment),
-              const Divider(height: 24),
+              Divider(height: 24),
               row('Total cash', details.totalCash, bold: true),
               if (showCloseFields) ...[
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 TextField(
                   controller: actualCtrl,
                   focusNode: actualCashFocus,
@@ -359,7 +359,7 @@ Future<bool> showCashRegisterDetailsDialog({
                       RegExp(r'^\d*\.?\d{0,2}'),
                     ),
                   ],
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Actual cash *',
                     border: OutlineInputBorder(),
                   ),

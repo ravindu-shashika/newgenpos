@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/pos_app_styles.dart';
 import '../../../core/theme/pos_theme.dart';
 import '../pos_currency.dart';
 
@@ -30,12 +31,15 @@ class PosCheckoutSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final styles = context.posStyles;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: PosColors.primaryLight.withValues(alpha: 0.45),
+        color: styles.isDark
+            ? styles.brand.primary.withValues(alpha: 0.18)
+            : styles.brand.primaryLight.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: styles.border),
       ),
       child: Row(
         children: [
@@ -43,51 +47,42 @@ class PosCheckoutSummaryBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Grand total',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: PosColors.textMuted,
-                  ),
-                ),
+                Text('Grand total', style: styles.caption),
                 Text(
                   formatPosMoney(grandTotal),
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: PosColors.primary,
-                    height: 1.1,
-                  ),
+                  style: styles.moneyLarge.copyWith(fontSize: 28),
                 ),
               ],
             ),
           ),
           _chip(
+            context,
             'Discount',
             discountAmount,
-            PosColors.primary,
+            styles.accent,
             onTap: onDiscountTap,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
           _chip(
+            context,
             'Coupon',
             couponAmount,
-            PosColors.primaryDark,
+            styles.accentStrong,
             onTap: onCouponTap,
           ),
           if (returnCredit > 0 || onReturnCreditTap != null) ...[
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             _chip(
+              context,
               'Return',
               returnCredit,
-              PosColors.primaryDark,
+              styles.accentStrong,
               onTap: onReturnCreditTap,
             ),
           ],
           if (showChange && change != null) ...[
-            const SizedBox(width: 8),
-            _chip('Change', change!, PosColors.primary),
+            SizedBox(width: 8),
+            _chip(context, 'Change', change!, styles.accent),
           ],
         ],
       ),
@@ -95,6 +90,7 @@ class PosCheckoutSummaryBar extends StatelessWidget {
   }
 
   Widget _chip(
+    BuildContext context,
     String label,
     double value,
     Color color, {
@@ -104,7 +100,7 @@ class PosCheckoutSummaryBar extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 88),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.posStyles.cardBg,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),

@@ -4,6 +4,7 @@ import '../pos_http/pos_api_client.dart';
 import '../config/app_config.dart';
 import '../database/app_database.dart';
 import '../repositories/local_auth_repository.dart';
+import '../repositories/local_cash_register_repository.dart';
 import '../repositories/local_exchange_repository.dart';
 import '../repositories/local_return_repository.dart';
 import '../repositories/local_sale_repository.dart';
@@ -31,6 +32,9 @@ final sessionRevisionProvider = StateProvider<int>((ref) => 0);
 /// Bump after background or manual sales sync so pending/online providers refresh.
 final syncRevisionProvider = StateProvider<int>((ref) => 0);
 
+/// True while sidebar / dialog is uploading pending sales.
+final salesSyncInProgressProvider = StateProvider<bool>((ref) => false);
+
 void bumpSessionState(WidgetRef ref) {
   ref.read(sessionRevisionProvider.notifier).state++;
   ref.invalidate(apiClientProvider);
@@ -44,8 +48,16 @@ final apiClientProvider = Provider<PosApiClient>((ref) {
   );
 });
 
+final localCashRegisterRepositoryProvider =
+    Provider<LocalCashRegisterRepository>((ref) {
+  return LocalCashRegisterRepository(ref.watch(appDatabaseProvider));
+});
+
 final cashRegisterServiceProvider = Provider<CashRegisterService>((ref) {
-  return CashRegisterService(ref.watch(apiClientProvider));
+  return CashRegisterService(
+    ref.watch(apiClientProvider),
+    ref.watch(localCashRegisterRepositoryProvider),
+  );
 });
 
 /// Increment to re-run [isOnlineProvider] (manual refresh / periodic poll).
@@ -99,6 +111,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   final sales = ref.watch(localSaleRepositoryProvider);
   final returns = ref.watch(localReturnRepositoryProvider);
   final exchanges = ref.watch(localExchangeRepositoryProvider);
+  final cashRegisters = ref.watch(localCashRegisterRepositoryProvider);
 
   return SyncService(
     api: api,
@@ -140,6 +153,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
         error: error,
       );
     },
+    syncCashRegisters: () => cashRegisters.syncPendingRegisters(api),
     onSyncComplete: () {
       ref.read(syncRevisionProvider.notifier).state++;
     },
@@ -182,5 +196,5 @@ final isOnlineProvider = FutureProvider<bool>((ref) async {
   ref.watch(syncRevisionProvider);
   ref.watch(onlineRefreshTickProvider);
   final sync = ref.watch(syncServiceProvider);
-  return sync.probeOnline();
+  return sync.probeOnline(quiet: true);
 });

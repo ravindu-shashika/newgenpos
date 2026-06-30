@@ -33,6 +33,7 @@ Future<DiscountEntryResult?> showDiscountEntryDialog({
   List<LocalCouponRow> coupons = const [],
   String initialCouponCode = '',
   double grandTotalBeforeCoupon = 0,
+  int initialTabIndex = 0,
 }) {
   return showPosDialog<DiscountEntryResult>(
     context: context,
@@ -46,6 +47,7 @@ Future<DiscountEntryResult?> showDiscountEntryDialog({
       grandTotalBeforeCoupon: grandTotalBeforeCoupon > 0
           ? grandTotalBeforeCoupon
           : (displaySubtotal ?? subtotal),
+      initialTabIndex: initialTabIndex,
     ),
   );
 }
@@ -59,6 +61,7 @@ class _AddDiscountDialog extends StatefulWidget {
     required this.coupons,
     required this.initialCouponCode,
     required this.grandTotalBeforeCoupon,
+    this.initialTabIndex = 0,
   });
 
   final double subtotal;
@@ -68,6 +71,7 @@ class _AddDiscountDialog extends StatefulWidget {
   final List<LocalCouponRow> coupons;
   final String initialCouponCode;
   final double grandTotalBeforeCoupon;
+  final int initialTabIndex;
 
   @override
   State<_AddDiscountDialog> createState() => _AddDiscountDialogState();
@@ -87,7 +91,7 @@ class _AddDiscountDialogState extends State<_AddDiscountDialog> {
   @override
   void initState() {
     super.initState();
-    _tabIndex = 0;
+    _tabIndex = widget.initialTabIndex.clamp(0, 1);
     _discountType = widget.initialDiscountType;
     _discountCtrl = TextEditingController(
       text: _formatDiscountValue(widget.initialDiscountValue),
@@ -267,7 +271,7 @@ class _DialogTabBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: PosColors.chipInactive,
+        color: context.posBrand.chipInactive,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -305,8 +309,9 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return Material(
-      color: selected ? Colors.white : Colors.transparent,
+      color: selected ? s.cardBg : Colors.transparent,
       borderRadius: BorderRadius.circular(20),
       elevation: selected ? 1 : 0,
       shadowColor: Colors.black12,
@@ -321,7 +326,7 @@ class _TabButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: selected ? PosColors.textPrimary : PosColors.textMuted,
+                color: selected ? s.text : s.textMuted,
               ),
             ),
           ),

@@ -35,8 +35,6 @@ class _PosStaffScreenState extends ConsumerState<PosStaffScreen> {
   int _page = 0;
   static const _pageSize = 6;
 
-  static const _pageBg = Color(0xFFF8F9FC);
-
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -85,7 +83,7 @@ class _PosStaffScreenState extends ConsumerState<PosStaffScreen> {
     final overviewAsync = ref.watch(billerOverviewProvider);
 
     return Scaffold(
-      backgroundColor: _pageBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: overviewAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load: $e')),
@@ -108,24 +106,24 @@ class _PosStaffScreenState extends ConsumerState<PosStaffScreen> {
 
           return RefreshIndicator(
             onRefresh: _refresh,
-            color: PosColors.primary,
+            color: context.posBrand.primary,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
               children: [
-                const Text(
+                Text(
                   'Billers',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: PosColors.textPrimary,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
+                SizedBox(height: 4),
+                Text(
                   'Sales and transaction counts by biller',
-                  style: TextStyle(fontSize: 13, color: PosColors.textMuted),
+                  style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 _StaffSearchBar(
                   controller: _searchCtrl,
                   onChanged: (v) => setState(() {
@@ -133,9 +131,9 @@ class _PosStaffScreenState extends ConsumerState<PosStaffScreen> {
                     _page = 0;
                   }),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 _SummaryRow(overview: overview),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 _BillerTable(
                   rows: pageRows,
                   totalCount: filtered.length,
@@ -171,18 +169,18 @@ class _StaffSearchBar extends StatelessWidget {
         hintText: 'Search biller name or ID...',
         prefixIcon: const Icon(Icons.search, size: 20),
         filled: true,
-        fillColor: PosColors.searchFill,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.searchBorder),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.searchBorder),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: PosColors.primary, width: 1.5),
+          borderSide: BorderSide(color: context.posBrand.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 0),
         isDense: true,
@@ -264,37 +262,37 @@ class _StatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
-              color: valueColor ?? PosColors.textPrimary,
+              color: valueColor ?? Theme.of(context).colorScheme.onSurface,
               height: 1,
             ),
           ),
           if (subtext != null) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(
               subtext!,
-              style: const TextStyle(fontSize: 12, color: PosColors.textMuted),
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         ],
@@ -317,36 +315,36 @@ class _PeriodStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: PosColors.textMuted,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text(
             formatPosMoney(stats.sales),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w800,
               color: PosColors.blue,
               height: 1,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             '${stats.transactions} transaction${stats.transactions == 1 ? '' : 's'}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Color(0xFF2E7D32),
@@ -383,9 +381,9 @@ class _BillerTable extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PosColors.border),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -393,7 +391,7 @@ class _BillerTable extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             decoration: BoxDecoration(
-              color: PosColors.primaryLight.withValues(alpha: 0.5),
+              color: context.posBrand.primaryLight.withValues(alpha: 0.5),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(11),
               ),
@@ -408,12 +406,12 @@ class _BillerTable extends StatelessWidget {
             ),
           ),
           if (rows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(40),
               child: Text(
                 'No billers synced yet. Run a full POS data download.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: PosColors.textMuted),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           else
@@ -427,9 +425,9 @@ class _BillerTable extends StatelessWidget {
                   totalCount == 0
                       ? 'No billers'
                       : 'Showing $start-$end of $totalCount billers',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: PosColors.textMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const Spacer(),
@@ -456,11 +454,11 @@ class _HeaderCell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.5,
-        color: PosColors.textMuted,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -480,8 +478,8 @@ class _BillerTableRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: PosColors.border)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,19 +491,19 @@ class _BillerTableRow extends StatelessWidget {
                 CircleAvatar(
                   radius: 20,
                   backgroundColor: row.isActive
-                      ? PosColors.primaryLight
-                      : PosColors.productIconBg,
+                      ? context.posBrand.primaryLight
+                      : context.posSurface.productIconBg,
                   child: Text(
                     row.name.isNotEmpty ? row.name[0].toUpperCase() : '?',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: row.isActive
-                          ? PosColors.primary
-                          : PosColors.textMuted,
+                          ? context.posBrand.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,29 +513,29 @@ class _BillerTableRow extends StatelessWidget {
                           Flexible(
                             child: Text(
                               row.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                               ),
                             ),
                           ),
                           if (row.isActive) ...[
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: PosColors.primaryLight,
+                                color: context.posBrand.primaryLight,
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'Active',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: PosColors.primary,
+                                  color: context.posBrand.primary,
                                 ),
                               ),
                             ),
@@ -547,17 +545,17 @@ class _BillerTableRow extends StatelessWidget {
                       if (row.companyName?.trim().isNotEmpty == true)
                         Text(
                           row.companyName!.trim(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: PosColors.textMuted,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         )
                       else
                         Text(
                           'ID ${row.id}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: PosColors.textMuted,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -616,7 +614,7 @@ class _PeriodCell extends StatelessWidget {
             children: [
               Text(
                 formatPosMoney(stats.sales),
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 14,
                   color: PosColors.blue,
@@ -624,7 +622,7 @@ class _PeriodCell extends StatelessWidget {
               ),
               Text(
                 '${stats.transactions} txn${stats.transactions == 1 ? '' : 's'}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF2E7D32),
@@ -677,9 +675,9 @@ class _BillerTransactionsDialog extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: PosColors.pageBg,
+                    color: Theme.of(context).scaffoldBackgroundColor,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: PosColors.border),
+                    border: Border.all(color: Theme.of(context).dividerColor),
                   ),
                   child: Row(
                     children: [
@@ -689,17 +687,17 @@ class _BillerTransactionsDialog extends StatelessWidget {
                           children: [
                             Text(
                               txn.referenceLabel,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 14,
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: 4),
                             Text(
                               timeFmt.format(txn.createdAt),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: PosColors.textMuted,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -710,16 +708,16 @@ class _BillerTransactionsDialog extends StatelessWidget {
                         children: [
                           Text(
                             formatPosMoney(txn.grandTotal),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: PosColors.blue,
                             ),
                           ),
                           Text(
                             '${txn.itemCount} item${txn.itemCount == 1 ? '' : 's'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: PosColors.textMuted,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -750,15 +748,17 @@ class _Pagination extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _pageBtn(
+          context,
           icon: Icons.chevron_left,
           onTap: page > 0 ? () => onChanged(page - 1) : null,
         ),
         for (var i = 0; i < pageCount && i < 5; i++) ...[
-          const SizedBox(width: 4),
-          _pageNum(i, active: i == page),
+          SizedBox(width: 4),
+          _pageNum(context, i, active: i == page),
         ],
-        const SizedBox(width: 4),
+        SizedBox(width: 4),
         _pageBtn(
+          context,
           icon: Icons.chevron_right,
           onTap: page < pageCount - 1 ? () => onChanged(page + 1) : null,
         ),
@@ -766,9 +766,9 @@ class _Pagination extends StatelessWidget {
     );
   }
 
-  Widget _pageNum(int index, {required bool active}) {
+  Widget _pageNum(BuildContext context, int index, {required bool active}) {
     return Material(
-      color: active ? PosColors.primary : Colors.transparent,
+      color: active ? context.posBrand.primary : Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () => onChanged(index),
@@ -781,7 +781,7 @@ class _Pagination extends StatelessWidget {
               '${index + 1}',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: active ? Colors.white : PosColors.textMuted,
+                color: active ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -790,7 +790,7 @@ class _Pagination extends StatelessWidget {
     );
   }
 
-  Widget _pageBtn({required IconData icon, VoidCallback? onTap}) {
+  Widget _pageBtn(BuildContext context, {required IconData icon, VoidCallback? onTap}) {
     return Material(
       color: const Color(0xFFF3F4F6),
       borderRadius: BorderRadius.circular(6),
@@ -800,7 +800,7 @@ class _Pagination extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 32,
-          child: Icon(icon, size: 18, color: PosColors.textMuted),
+          child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
     );

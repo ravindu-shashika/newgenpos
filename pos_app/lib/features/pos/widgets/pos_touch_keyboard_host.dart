@@ -110,10 +110,11 @@ class _NumericKeyboardPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.posStyles;
     return SafeArea(
       top: false,
       child: Container(
-        color: Colors.white,
+        color: s.cardBg,
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -126,13 +127,14 @@ class _NumericKeyboardPanel extends StatelessWidget {
               quickCashInitial: quickCashInitial,
               onQuickCashUsed: onQuickCashUsed,
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton(
                 onPressed: onDone,
                 style: FilledButton.styleFrom(
-                  backgroundColor: PosColors.primary,
+                  backgroundColor: context.posBrand.buttonPrimary,
+                  foregroundColor: Colors.white,
                 ),
                 child: const Text('Done'),
               ),

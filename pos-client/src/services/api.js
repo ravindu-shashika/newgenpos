@@ -40,7 +40,7 @@ const DEFAULT_PATH =
   env.VITE_APP_DEFAULT_PATH ||
   env.REACT_APP_DEFAULT_PATH ||
   (typeof process !== 'undefined' ? process.env.REACT_APP_DEFAULT_PATH : '') ||
-  'http://192.168.1.3:8000';
+  'http://127.0.0.1:8000';
 
 const normalizedBase = String(DEFAULT_PATH).trim().replace(/\/$/, '');
 export const defaultPath = `${normalizedBase}/api`;
