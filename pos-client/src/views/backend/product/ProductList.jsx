@@ -14,34 +14,37 @@ import {
     Pagination,
 } from '../../../components/ui';
 import { api } from '../../../services';
-import usePermissions from '../../../stores/usePermissions';
-import authStore from '../../../stores/authStore';
-import { permissionsBypassed } from '../../../config/permissions';
+import usePermissions, { usePermissionNames } from '../../../stores/usePermissions';
+import { hasPermission as checkPermission } from '../../../config/permissions';
 
-function hasPermission(name) {
-    if (permissionsBypassed()) return true;
-    const perms = authStore.getPermissions();
-    return Array.isArray(perms) && perms.includes(name);
-}
-
-function stripHtml(html) {
-    if (!html || typeof html !== 'string') return html ?? '';
-    return html.replace(/<[^>]*>/g, '').trim();
+function productCode(row) {
+    if (Array.isArray(row.product) && row.product[2]) {
+        return String(row.product[2]).replace(/^[\s"']+|[\s"']+$/g, '').trim();
+    }
+    return stripHtml(row.code) || String(row.code ?? '').trim();
 }
 
 function productDisplayName(row) {
     if (Array.isArray(row.product) && row.product[1]) {
-        return String(row.product[1]).replace(/^[\s"]+|[\s"]+$/g, '');
+        return String(row.product[1]).replace(/^[\s"']+|[\s"']+$/g, '').trim();
     }
     return stripHtml(row.name) || row.code || '';
 }
 
 function printBarcodePath(row) {
-    const label = `${row.code} (${productDisplayName(row)})`;
+    const code = productCode(row);
+    if (!code) return null;
+    const name = productDisplayName(row);
+    const label = `${code} (${name})`;
     return {
         pathname: '/products/print_barcode',
         search: `?data=${encodeURIComponent(label)}`,
     };
+}
+
+function stripHtml(html) {
+    if (!html || typeof html !== 'string') return html ?? '';
+    return html.replace(/<[^>]*>/g, '').trim();
 }
 
 function productHistoryPath(row) {
@@ -54,6 +57,7 @@ function productHistoryPath(row) {
 export default function ProductList() {
     const { showToast } = useToast();
     const perms = usePermissions('products');
+    const permissionNames = usePermissionNames();
     const canAdd = perms.canAdd;
     const canImport = perms.canImport;
     const canEdit = perms.canEdit;
@@ -156,8 +160,8 @@ export default function ProductList() {
         }
     };
 
-    const canPrintBarcode = hasPermission('print_barcode');
-    const canProductHistory = hasPermission('product_history');
+    const canPrintBarcode = checkPermission('print_barcode', permissionNames);
+    const canProductHistory = checkPermission('product_history', permissionNames);
 
     const stripHtmlCell = stripHtml;
 
@@ -183,26 +187,27 @@ export default function ProductList() {
             label: 'Action',
             key: 'action',
             render: (row) => {
+                const barcodeTo = printBarcodePath(row);
                 const items = [
                     {
-                        label: '👁 View',
+                        label: 'View',
                         onClick: () => setViewRow(row),
                     },
                     canEdit && row.id != null && {
-                        label: '✎ Edit',
+                        label: 'Edit',
                         to: `/products/${row.id}/edit`,
                     },
+                    canPrintBarcode && barcodeTo && {
+                        label: 'Print Barcode',
+                        to: barcodeTo,
+                    },
                     canProductHistory && row.id != null && {
-                        label: '📋 Product History',
+                        label: 'Product History',
                         to: productHistoryPath(row),
                     },
-                    canPrintBarcode && row.code && {
-                        label: '🖨 Print Barcode',
-                        to: printBarcodePath(row),
-                    },
-                    (canEdit || canProductHistory || canPrintBarcode) && canDelete && { divider: true },
+                    (canEdit || canPrintBarcode || canProductHistory) && canDelete && { divider: true },
                     canDelete && {
-                        label: '🗑 Delete',
+                        label: 'Delete',
                         danger: true,
                         onClick: () => setDeleteId(row.id),
                     },

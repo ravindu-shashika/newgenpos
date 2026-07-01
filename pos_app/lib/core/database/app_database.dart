@@ -23,6 +23,7 @@ part 'app_database.g.dart';
   Billers,
   Products,
   ProductVariants,
+  ProductBatches,
   ProductStock,
   LocalSales,
   LocalSaleLines,
@@ -36,7 +37,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -87,12 +88,27 @@ class AppDatabase extends _$AppDatabase {
               localSales.localCashRegisterId,
             );
           }
+          if (from < 12) {
+            await m.createTable(productBatches);
+            await m.addColumn(products, products.altCode);
+            await m.addColumn(products, products.maxPrice);
+            await m.database.customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_products_alt_code ON products(alt_code)',
+            );
+            await m.database.customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_product_batches_product_id '
+              'ON product_batches(product_id)',
+            );
+          }
         },
       );
 
   static Future<void> _createProductLookupIndexes(Migrator m) async {
     await m.database.customStatement(
       'CREATE INDEX IF NOT EXISTS idx_products_code ON products(code)',
+    );
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_alt_code ON products(alt_code)',
     );
     await m.database.customStatement(
       'CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)',
@@ -108,6 +124,10 @@ class AppDatabase extends _$AppDatabase {
     await m.database.customStatement(
       'CREATE INDEX IF NOT EXISTS idx_product_stock_wh_lookup '
       'ON product_stock(warehouse_id, product_id, variant_id)',
+    );
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_batches_product_id '
+      'ON product_batches(product_id)',
     );
   }
 
@@ -177,6 +197,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(localExchanges).go();
       await delete(localUsers).go();
       await delete(productStock).go();
+      await delete(productBatches).go();
       await delete(productVariants).go();
       await delete(products).go();
       await delete(billers).go();

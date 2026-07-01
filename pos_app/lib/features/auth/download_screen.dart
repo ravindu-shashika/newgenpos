@@ -135,6 +135,7 @@ class _DownloadScreenState extends ConsumerState<DownloadScreen> {
   String _resourceLabel(String key) {
     return switch (key) {
       'product_stock' => 'Stock',
+      'product_batches' => 'Batches',
       'product_variants' => 'Variants',
       'products' => 'Products',
       'customers' => 'Customers',

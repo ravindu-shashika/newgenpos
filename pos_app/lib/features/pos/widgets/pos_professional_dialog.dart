@@ -213,6 +213,7 @@ class PosProfessionalDialogFooter extends StatelessWidget {
     this.primaryDestructive = false,
     this.primaryEnabled = true,
     this.primaryLoading = false,
+    this.buttonMinHeight,
   });
 
   final String? secondaryLabel;
@@ -222,14 +223,38 @@ class PosProfessionalDialogFooter extends StatelessWidget {
   final bool primaryDestructive;
   final bool primaryEnabled;
   final bool primaryLoading;
+  final double? buttonMinHeight;
+
+  ButtonStyle? _tallButtonStyle() {
+    final height = buttonMinHeight;
+    if (height == null) return null;
+    return ButtonStyle(
+      minimumSize: WidgetStatePropertyAll(Size(0, height)),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+      ),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final tallStyle = _tallButtonStyle();
+    final destructiveStyle = primaryDestructive
+        ? FilledButton.styleFrom(
+            backgroundColor: PosColors.red,
+            foregroundColor: Colors.white,
+          )
+        : null;
+
     return Row(
       children: [
         if (secondaryLabel != null)
           OutlinedButton(
             onPressed: onSecondary ?? () => Navigator.of(context).pop(),
+            style: tallStyle,
             child: Text(secondaryLabel!),
           ),
         const Spacer(),
@@ -237,12 +262,7 @@ class PosProfessionalDialogFooter extends StatelessWidget {
           FilledButton(
             onPressed:
                 primaryEnabled && !primaryLoading ? onPrimary : null,
-            style: primaryDestructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: PosColors.red,
-                    foregroundColor: Colors.white,
-                  )
-                : null,
+            style: destructiveStyle?.merge(tallStyle) ?? tallStyle,
             child: primaryLoading
                 ? SizedBox(
                     width: 22,

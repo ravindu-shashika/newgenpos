@@ -194,6 +194,231 @@ class AdjustmentController extends Controller
         ];
     }
 
+    protected function adjustmentLineKey(int $productId, ?int $variantId, ?int $productBatchId): string
+    {
+        return implode('_', [
+            $productId,
+            $variantId ?? 0,
+            $productBatchId ?? 0,
+        ]);
+    }
+
+    /**
+     * @return array{variant_id: ?int, product_batch_id: ?int}
+     */
+    protected function resolveSubmittedAdjustmentLineMeta(
+        int $productId,
+        string $productCode,
+        string $action,
+        ?string $batchNo,
+        ?int $productBatchId
+    ): array {
+        $product = Product::find($productId);
+        if (!$product) {
+            return ['variant_id' => null, 'product_batch_id' => null];
+        }
+
+        if ($product->is_variant) {
+            $variant = ProductVariant::select('variant_id')
+                ->FindExactProductWithCode($productId, $productCode)
+                ->first();
+
+            return [
+                'variant_id' => $variant?->variant_id,
+                'product_batch_id' => null,
+            ];
+        }
+
+        if (!$product->is_batch) {
+            return ['variant_id' => null, 'product_batch_id' => null];
+        }
+
+        if ($action === '-' && $productBatchId) {
+            return ['variant_id' => null, 'product_batch_id' => $productBatchId];
+        }
+
+        if ($action === '+' && $batchNo !== null && trim($batchNo) !== '') {
+            $batch = ProductBatch::where('product_id', $productId)
+                ->where('batch_no', trim($batchNo))
+                ->first();
+
+            return ['variant_id' => null, 'product_batch_id' => $batch?->id];
+        }
+
+        return ['variant_id' => null, 'product_batch_id' => null];
+    }
+
+    protected function reverseProductAdjustmentLine(ProductAdjustment $line, int $warehouseId): void
+    {
+        $product = Product::find($line->product_id);
+        if (!$product) {
+            return;
+        }
+
+        $this->applyAdjustmentStockEffect(
+            $product,
+            $warehouseId,
+            $line->variant_id,
+            $this->adjustmentStoresBatchId() ? $line->product_batch_id : null,
+            $line->action,
+            (float) $line->qty,
+            reverse: true
+        );
+    }
+
+    protected function applyAdjustmentStockEffect(
+        Product $product,
+        int $warehouseId,
+        ?int $variantId,
+        ?int $productBatchId,
+        string $action,
+        float $qty,
+        bool $reverse = false
+    ): void {
+        if ($qty == 0.0) {
+            return;
+        }
+
+        $delta = $action === '+' ? $qty : -$qty;
+        if ($reverse) {
+            $delta *= -1;
+        }
+
+        $product->qty += $delta;
+        $product->save();
+
+        $warehouse = null;
+
+        if ($variantId) {
+            $variant = ProductVariant::select('id', 'qty')
+                ->FindExactProduct($product->id, $variantId)
+                ->first();
+            if ($variant) {
+                $variant->qty += $delta;
+                $variant->save();
+            }
+            $warehouse = Product_Warehouse::where([
+                ['product_id', $product->id],
+                ['variant_id', $variantId],
+                ['warehouse_id', $warehouseId],
+            ])->first();
+        } elseif ($product->is_batch && $productBatchId) {
+            $batch = ProductBatch::find($productBatchId);
+            if ($batch) {
+                $batch->qty += $delta;
+                $batch->save();
+            }
+            $warehouse = Product_Warehouse::where([
+                ['product_id', $product->id],
+                ['warehouse_id', $warehouseId],
+                ['product_batch_id', $productBatchId],
+            ])->first();
+        } else {
+            $warehouse = $this->resolveStandardWarehouseRow($product->id, $warehouseId);
+        }
+
+        if ($warehouse) {
+            $warehouse->qty += $delta;
+            $warehouse->save();
+        }
+    }
+
+    /**
+     * @return array{variant_id: ?int, product_batch_id: ?int}
+     */
+    protected function applyAdjustmentLineStock(
+        Product $product,
+        int $warehouseId,
+        string $productCode,
+        float $qty,
+        string $action,
+        ?string $batchNo = null,
+        ?string $expiredDate = null,
+        ?int $productBatchId = null
+    ): array {
+        $variantId = null;
+        $lineBatchId = null;
+
+        if ($product->is_variant) {
+            $variant = ProductVariant::select('id', 'variant_id', 'qty')
+                ->FindExactProductWithCode($product->id, $productCode)
+                ->first();
+            Product_Warehouse::firstOrCreate(
+                [
+                    'product_id' => $product->id,
+                    'variant_id' => $variant->variant_id,
+                    'warehouse_id' => $warehouseId,
+                ],
+                ['qty' => 0]
+            );
+            if ($action === '-') {
+                $variant->qty -= $qty;
+            } else {
+                $variant->qty += $qty;
+            }
+            $variant->save();
+            $variantId = $variant->variant_id;
+            $warehouse = Product_Warehouse::where([
+                ['product_id', $product->id],
+                ['variant_id', $variantId],
+                ['warehouse_id', $warehouseId],
+            ])->first();
+        } else {
+            $resolved = $this->resolveAdjustmentWarehouseRow(
+                $product,
+                $warehouseId,
+                $action,
+                $qty,
+                $batchNo,
+                $expiredDate,
+                $productBatchId
+            );
+            $warehouse = $resolved['warehouse'];
+            $lineBatchId = $resolved['product_batch_id'];
+        }
+
+        if ($action === '-') {
+            $product->qty -= $qty;
+            $warehouse->qty -= $qty;
+        } else {
+            $product->qty += $qty;
+            $warehouse->qty += $qty;
+        }
+        $product->save();
+        $warehouse->save();
+
+        return [
+            'variant_id' => $variantId,
+            'product_batch_id' => $lineBatchId,
+        ];
+    }
+
+    protected function findProductAdjustmentLine(
+        int $adjustmentId,
+        int $productId,
+        ?int $variantId,
+        ?int $productBatchId
+    ): ?ProductAdjustment {
+        $query = ProductAdjustment::where('adjustment_id', $adjustmentId)
+            ->where('product_id', $productId);
+
+        if ($variantId) {
+            $query->where('variant_id', $variantId);
+        } else {
+            $query->whereNull('variant_id');
+        }
+
+        if ($this->adjustmentStoresBatchId()) {
+            if ($productBatchId) {
+                $query->where('product_batch_id', $productBatchId);
+            } else {
+                $query->whereNull('product_batch_id');
+            }
+        }
+
+        return $query->first();
+    }
+
     public function index(Request $request)
     {
         if (!$this->userCanAccessAdjustment()) {
@@ -606,62 +831,29 @@ class AdjustmentController extends Controller
 
             foreach ($product_id as $key => $pro_id) {
                 $lims_product_data = Product::find($pro_id);
-                $lineBatchId = null;
-                if($lims_product_data->is_variant) {
-                    $lims_product_variant_data = ProductVariant::select('id', 'variant_id', 'qty')->FindExactProductWithCode($pro_id, $product_code[$key])->first();
-                    $lims_product_warehouse_data = Product_Warehouse::firstOrCreate(
-                        [
-                            'product_id' => $pro_id,
-                            'variant_id' => $lims_product_variant_data->variant_id,
-                            'warehouse_id' => $data['warehouse_id'],
-                        ],
-                        ['qty' => 0]
-                    );
+                $lineMeta = $this->applyAdjustmentLineStock(
+                    $lims_product_data,
+                    (int) $data['warehouse_id'],
+                    $product_code[$key],
+                    (float) $qty[$key],
+                    $action[$key],
+                    $batch_no[$key] ?? null,
+                    $expired_date[$key] ?? null,
+                    !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
+                );
 
-                    if($action[$key] == '-'){
-                        $lims_product_variant_data->qty -= $qty[$key];
-                    }
-                    elseif($action[$key] == '+'){
-                        $lims_product_variant_data->qty += $qty[$key];
-                    }
-                    $lims_product_variant_data->save();
-                    $variant_id = $lims_product_variant_data->variant_id;
-                }
-                else {
-                    $resolved = $this->resolveAdjustmentWarehouseRow(
-                        $lims_product_data,
-                        (int) $data['warehouse_id'],
-                        $action[$key],
-                        (float) $qty[$key],
-                        $batch_no[$key] ?? null,
-                        $expired_date[$key] ?? null,
-                        !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
-                    );
-                    $lims_product_warehouse_data = $resolved['warehouse'];
-                    $lineBatchId = $resolved['product_batch_id'];
-                    $variant_id = null;
-                }
-
-                if($action[$key] == '-') {
-                    $lims_product_data->qty -= $qty[$key];
-                    $lims_product_warehouse_data->qty -= $qty[$key];
-                }
-                elseif($action[$key] == '+') {
-                    $lims_product_data->qty += $qty[$key];
-                    $lims_product_warehouse_data->qty += $qty[$key];
-                }
-                $lims_product_data->save();
-                $lims_product_warehouse_data->save();
-
-                $product_adjustment['product_id'] = $pro_id;
-                $product_adjustment['variant_id'] = $variant_id;
-                $product_adjustment['adjustment_id'] = $lims_adjustment_data->id;
-                $product_adjustment['qty'] = $qty[$key];
-                if(isset($data['unit_cost']))
+                $product_adjustment = [
+                    'product_id' => $pro_id,
+                    'variant_id' => $lineMeta['variant_id'],
+                    'adjustment_id' => $lims_adjustment_data->id,
+                    'qty' => $qty[$key],
+                    'action' => $action[$key],
+                ];
+                if (isset($data['unit_cost'])) {
                     $product_adjustment['unit_cost'] = $unit_cost[$key];
-                $product_adjustment['action'] = $action[$key];
+                }
                 if ($this->adjustmentStoresBatchId()) {
-                    $product_adjustment['product_batch_id'] = $lineBatchId;
+                    $product_adjustment['product_batch_id'] = $lineMeta['product_batch_id'];
                 }
                 ProductAdjustment::create($product_adjustment);
             }
@@ -801,7 +993,19 @@ class AdjustmentController extends Controller
 
         try{
             DB::beginTransaction();
-            $data = $request->except('document');
+            $data = $request->except([
+                'document',
+                'product_id',
+                'product_variant_id',
+                'product_code',
+                'qty',
+                'unit_cost',
+                'action',
+                'batch_no',
+                'expired_date',
+                'product_batch_id',
+                '_method',
+            ]);
                 $lims_adjustment_data = Adjustment::find($id);
 
                 $document = $request->document;
@@ -816,162 +1020,123 @@ class AdjustmentController extends Controller
                 $lims_adjustment_data = Adjustment::find($id);
                 $lims_product_adjustment_data = ProductAdjustment::where('adjustment_id', $id)->get();
 
+                $product_id = $request->input('product_id', []);
+                $product_variant_id = $request->input('product_variant_id', []);
+                $product_code = $request->input('product_code', []);
+                $qty = $request->input('qty', []);
+                $unit_cost = $request->input('unit_cost', []);
+                $action = $request->input('action', []);
+                $batch_no = $request->input('batch_no', []);
+                $expired_date = $request->input('expired_date', []);
+                $product_batch_id = $request->input('product_batch_id', []);
 
-                $product_id = $data['product_id'];
-                $product_variant_id = $data['product_variant_id'];
-                $product_code = $data['product_code'];
-                $qty = $data['qty'];
-                $unit_cost = $data['unit_cost'];
-                $action = $data['action'];
-                $batch_no = $data['batch_no'] ?? [];
-                $expired_date = $data['expired_date'] ?? [];
-                $product_batch_id = $data['product_batch_id'] ?? [];
-                $old_product_variant_id = [];
-                foreach ($lims_product_adjustment_data as $key => $product_adjustment_data) {
+                if (!is_array($product_id) || $product_id === []) {
+                    throw new \InvalidArgumentException('product_id is required');
+                }
 
-                    $old_product_id[] = $product_adjustment_data->product_id;
-                    $lims_product_data = Product::find($product_adjustment_data->product_id);
-                    if($product_adjustment_data->variant_id) {
-                        $lims_product_variant_data = ProductVariant::where([
-                            ['product_id', $product_adjustment_data->product_id],
-                            ['variant_id', $product_adjustment_data->variant_id]
-                        ])->first();
-                        $old_product_variant_id[$key] = $lims_product_variant_data->id;
-                        if($product_adjustment_data->action == '-') {
-                            $lims_product_variant_data->qty -= $product_adjustment_data->qty;
-                        }
-                        elseif($product_adjustment_data->action == '+') {
-                            $lims_product_variant_data->qty += $product_adjustment_data->qty;
-                        }
-                        $lims_product_variant_data->save();
-                        $lims_product_warehouse_data = Product_Warehouse::where([
-                            ['product_id', $product_adjustment_data->product_id],
-                            ['variant_id', $product_adjustment_data->variant_id],
-                            ['warehouse_id', $lims_adjustment_data->warehouse_id]
-                        ])->first();
+                $warehouseId = (int) $data['warehouse_id'];
+                $submittedKeys = [];
+                foreach ($product_id as $key => $pro_id) {
+                    $meta = $this->resolveSubmittedAdjustmentLineMeta(
+                        (int) $pro_id,
+                        (string) ($product_code[$key] ?? ''),
+                        (string) ($action[$key] ?? '-'),
+                        $batch_no[$key] ?? null,
+                        !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
+                    );
+                    $submittedKeys[$this->adjustmentLineKey(
+                        (int) $pro_id,
+                        $meta['variant_id'],
+                        $meta['product_batch_id']
+                    )] = $key;
+                }
+
+                foreach ($lims_product_adjustment_data as $product_adjustment_data) {
+                    $lineKey = $this->adjustmentLineKey(
+                        (int) $product_adjustment_data->product_id,
+                        $product_adjustment_data->variant_id,
+                        $this->adjustmentStoresBatchId()
+                            ? $product_adjustment_data->product_batch_id
+                            : null
+                    );
+
+                    if (!isset($submittedKeys[$lineKey])) {
+                        $this->reverseProductAdjustmentLine(
+                            $product_adjustment_data,
+                            $warehouseId
+                        );
+                        $product_adjustment_data->markDeleted();
                     }
-                    else {
-                        $warehouseQuery = Product_Warehouse::where([
-                            ['product_id', $product_adjustment_data->product_id],
-                            ['warehouse_id', $lims_adjustment_data->warehouse_id],
-                        ]);
-                        if (
-                            $this->adjustmentStoresBatchId()
-                            && $product_adjustment_data->product_batch_id
-                        ) {
-                            $warehouseQuery->where('product_batch_id', $product_adjustment_data->product_batch_id);
-                        }
-                        $lims_product_warehouse_data = $warehouseQuery->first();
-                    }
-                    // if($product_adjustment_data->action == '-'){
-                    //     $lims_product_data->qty -= $qty[$key];
-                    //     $lims_product_warehouse_data->qty -= $qty[$key];
-                    // }
-                    // elseif($product_adjustment_data->action == '+'){
-                    //     $lims_product_data->qty += $qty[$key];
-                    //     $lims_product_warehouse_data->qty += $qty[$key];
-                    // }
-
-                    // $lims_product_data->save();
-                    // $lims_product_warehouse_data->save();
-
-                    if($product_adjustment_data->variant_id && !(in_array($old_product_variant_id[$key], $product_variant_id)) ){
-                        $product_adjustment_data->delete();
-                    }
-                    elseif( !(in_array($old_product_id[$key], $product_id)) )
-                        $product_adjustment_data->delete();
                 }
 
                 foreach ($product_id as $key => $pro_id) {
-
+                    $delta = (float) ($qty[$key] ?? 0);
+                    $lineAction = (string) ($action[$key] ?? '-');
                     $lims_product_data = Product::find($pro_id);
-                    $lineBatchId = null;
-                    if($lims_product_data->is_variant) {
-                        $lims_product_variant_data = ProductVariant::select('id', 'variant_id', 'qty')->FindExactProductWithCode($pro_id, $product_code[$key])->first();
-                        $lims_product_warehouse_data = Product_Warehouse::where([
-                            ['product_id', $pro_id],
-                            ['variant_id', $lims_product_variant_data->variant_id ],
-                            ['warehouse_id', $data['warehouse_id'] ],
-                        ])->first();
-
-                        if($action[$key] == '-'){
-                            $lims_product_variant_data->qty -= $qty[$key];
-                        }
-                        elseif($action[$key] == '+'){
-                            $lims_product_variant_data->qty += $qty[$key];
-                        }
-                        $lims_product_variant_data->save();
-                        $variant_id = $lims_product_variant_data->variant_id;
+                    if (!$lims_product_data) {
+                        continue;
                     }
-                    else {
-                        $resolved = $this->resolveAdjustmentWarehouseRow(
+
+                    $submittedMeta = $this->resolveSubmittedAdjustmentLineMeta(
+                        (int) $pro_id,
+                        (string) ($product_code[$key] ?? ''),
+                        $lineAction,
+                        $batch_no[$key] ?? null,
+                        !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
+                    );
+
+                    $lineMeta = $submittedMeta;
+                    if ($delta != 0.0) {
+                        $lineMeta = $this->applyAdjustmentLineStock(
                             $lims_product_data,
-                            (int) $data['warehouse_id'],
-                            $action[$key],
-                            (float) $qty[$key],
+                            $warehouseId,
+                            (string) ($product_code[$key] ?? ''),
+                            $delta,
+                            $lineAction,
                             $batch_no[$key] ?? null,
                             $expired_date[$key] ?? null,
                             !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
                         );
-                        $lims_product_warehouse_data = $resolved['warehouse'];
-                        $lineBatchId = $resolved['product_batch_id'];
-                        $variant_id = null;
                     }
 
+                    $existing = $this->findProductAdjustmentLine(
+                        (int) $id,
+                        (int) $pro_id,
+                        $lineMeta['variant_id'],
+                        $lineMeta['product_batch_id']
+                    );
 
-                    if($action[$key] == '-'){
-                        $lims_product_data->qty -= $qty[$key];
-                        $lims_product_warehouse_data->qty -= $qty[$key];
+                    if ($existing) {
+                        if ($delta != 0.0) {
+                            $existing->qty = (float) $existing->qty + $delta;
+                        }
+                        $existing->unit_cost = $unit_cost[$key] ?? $existing->unit_cost;
+                        $existing->action = $lineAction;
+                        if ($this->adjustmentStoresBatchId()) {
+                            $existing->product_batch_id = $lineMeta['product_batch_id'];
+                        }
+                        $existing->save();
+                        continue;
                     }
-                    elseif($action[$key] == '+'){
-                        $lims_product_data->qty += $qty[$key];
-                        $lims_product_warehouse_data->qty += $qty[$key];
-                    }
-                    $lims_product_data->save();
-                    $lims_product_warehouse_data->save();
 
-                    $product_adjustment['product_id'] = $pro_id;
-                    $product_adjustment['variant_id'] = $variant_id;
-                    $product_adjustment['adjustment_id'] = $id;
-                    $product_adjustment['unit_cost'] = $unit_cost[$key];
-                    $product_adjustment['action'] = $action[$key];
+                    if ($delta == 0.0) {
+                        continue;
+                    }
+
+                    $product_adjustment = [
+                        'product_id' => $pro_id,
+                        'variant_id' => $lineMeta['variant_id'],
+                        'adjustment_id' => $id,
+                        'qty' => $delta,
+                        'unit_cost' => $unit_cost[$key] ?? 0,
+                        'action' => $lineAction,
+                    ];
                     if ($this->adjustmentStoresBatchId()) {
-                        $product_adjustment['product_batch_id'] = $lineBatchId;
+                        $product_adjustment['product_batch_id'] = $lineMeta['product_batch_id'];
                     }
-
-
-                    if($product_adjustment['variant_id'] && in_array($product_variant_id[$key], $old_product_variant_id)) {
-                       $adjustment = ProductAdjustment::where([
-                            ['product_id', $pro_id],
-                            ['variant_id', $product_adjustment['variant_id']],
-                            ['adjustment_id', $id]
-                        ])->first();
-                        if($action[$key] == '-'){
-                            $product_adjustment['qty'] = $adjustment->qty - $qty[$key];
-                        }
-                        elseif($action[$key] == '+'){
-                            $product_adjustment['qty'] = $adjustment->qty + $qty[$key];
-                        }
-                        $adjustment->update($product_adjustment);
-                    }
-                    elseif( $product_adjustment['variant_id'] === null && in_array($pro_id, $old_product_id) ){
-                       $adjustment =  ProductAdjustment::where([
-                        ['adjustment_id', $id],
-                        ['product_id', $pro_id]
-                        ])->first();
-                        if($action[$key] == '-'){
-                            $product_adjustment['qty'] = $adjustment->qty - $qty[$key];
-                        }
-                        elseif($action[$key] == '+'){
-                            $product_adjustment['qty'] = $adjustment->qty + $qty[$key];
-                        }
-                        $adjustment->update($product_adjustment);
-                    }
-                    else{
-                        $product_adjustment['qty'] = $qty[$key];
-                        ProductAdjustment::create($product_adjustment);
-                    }
+                    ProductAdjustment::create($product_adjustment);
                 }
+
                 $lims_adjustment_data->update($data);
              DB::commit();
 
@@ -1005,40 +1170,12 @@ class AdjustmentController extends Controller
             $this->fileDelete(public_path('documents/adjustment/'), $lims_adjustment_data->document);
 
             $lims_product_adjustment_data = ProductAdjustment::where('adjustment_id', $id)->get();
-            foreach ($lims_product_adjustment_data as $key => $product_adjustment_data) {
-                $lims_product_data = Product::find($product_adjustment_data->product_id);
-                if($product_adjustment_data->variant_id) {
-                    $lims_product_variant_data = ProductVariant::select('id', 'qty')->FindExactProduct($product_adjustment_data->product_id, $product_adjustment_data->variant_id)->first();
-                    $lims_product_warehouse_data = Product_Warehouse::where([
-                            ['product_id', $product_adjustment_data->product_id],
-                            ['variant_id', $product_adjustment_data->variant_id],
-                            ['warehouse_id', $lims_adjustment_data->warehouse_id]
-                        ])->first();
-                    if($product_adjustment_data->action == '-'){
-                        $lims_product_variant_data->qty += $product_adjustment_data->qty;
-                    }
-                    elseif($product_adjustment_data->action == '+'){
-                        $lims_product_variant_data->qty -= $product_adjustment_data->qty;
-                    }
-                    $lims_product_variant_data->save();
-                }
-                else {
-                    $lims_product_warehouse_data = Product_Warehouse::where([
-                            ['product_id', $product_adjustment_data->product_id],
-                            ['warehouse_id', $lims_adjustment_data->warehouse_id]
-                        ])->first();
-                }
-                if($product_adjustment_data->action == '-'){
-                    $lims_product_data->qty += $product_adjustment_data->qty;
-                    $lims_product_warehouse_data->qty += $product_adjustment_data->qty;
-                }
-                elseif($product_adjustment_data->action == '+'){
-                    $lims_product_data->qty -= $product_adjustment_data->qty;
-                    $lims_product_warehouse_data->qty -= $product_adjustment_data->qty;
-                }
-                $lims_product_data->save();
-                $lims_product_warehouse_data->save();
-                $product_adjustment_data->delete();
+            foreach ($lims_product_adjustment_data as $product_adjustment_data) {
+                $this->reverseProductAdjustmentLine(
+                    $product_adjustment_data,
+                    (int) $lims_adjustment_data->warehouse_id
+                );
+                $product_adjustment_data->markDeleted();
             }
             $lims_adjustment_data->delete();
         }
@@ -1054,40 +1191,12 @@ class AdjustmentController extends Controller
     {
         $lims_adjustment_data = Adjustment::find($id);
         $lims_product_adjustment_data = ProductAdjustment::where('adjustment_id', $id)->get();
-        foreach ($lims_product_adjustment_data as $key => $product_adjustment_data) {
-            $lims_product_data = Product::find($product_adjustment_data->product_id);
-            if($product_adjustment_data->variant_id) {
-                $lims_product_variant_data = ProductVariant::select('id', 'qty')->FindExactProduct($product_adjustment_data->product_id, $product_adjustment_data->variant_id)->first();
-                $lims_product_warehouse_data = Product_Warehouse::where([
-                        ['product_id', $product_adjustment_data->product_id],
-                        ['variant_id', $product_adjustment_data->variant_id],
-                        ['warehouse_id', $lims_adjustment_data->warehouse_id]
-                    ])->first();
-                if($product_adjustment_data->action == '-'){
-                    $lims_product_variant_data->qty += $product_adjustment_data->qty;
-                }
-                elseif($product_adjustment_data->action == '+'){
-                    $lims_product_variant_data->qty -= $product_adjustment_data->qty;
-                }
-                $lims_product_variant_data->save();
-            }
-            else {
-                $lims_product_warehouse_data = Product_Warehouse::where([
-                        ['product_id', $product_adjustment_data->product_id],
-                        ['warehouse_id', $lims_adjustment_data->warehouse_id]
-                    ])->first();
-            }
-            if($product_adjustment_data->action == '-'){
-                $lims_product_data->qty += $product_adjustment_data->qty;
-                $lims_product_warehouse_data->qty += $product_adjustment_data->qty;
-            }
-            elseif($product_adjustment_data->action == '+'){
-                $lims_product_data->qty -= $product_adjustment_data->qty;
-                $lims_product_warehouse_data->qty -= $product_adjustment_data->qty;
-            }
-            $lims_product_data->save();
-            $lims_product_warehouse_data->save();
-            $product_adjustment_data->delete();
+        foreach ($lims_product_adjustment_data as $product_adjustment_data) {
+            $this->reverseProductAdjustmentLine(
+                $product_adjustment_data,
+                (int) $lims_adjustment_data->warehouse_id
+            );
+            $product_adjustment_data->markDeleted();
         }
         $lims_adjustment_data->delete();
         $this->fileDelete(public_path('documents/adjustment/'), $lims_adjustment_data->document);

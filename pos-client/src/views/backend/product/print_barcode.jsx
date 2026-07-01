@@ -12,7 +12,9 @@ import {
     useToast
 } from '../../../components/ui';
 import { api } from '../../../services';
-import { getToken } from '../../../services/tokenStorage';
+import generalSettingStore from '../../../stores/generalSettingStore';
+import { expandProductsToLabels, createLabelPrintWindow, renderLabelPrintWindow } from '../../../utils/barcodeLabelPrinter';
+import { DEFAULT_BARCODE_PRINT_OPTIONS, normalizeBarcodePrintOptions } from '../../../utils/barcodeTemplateDefaults';
 import SafeFontAwesomeIcon from '../../../components/SafeFontAwesomeIcon';
 import { faBarcode, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 
@@ -37,56 +39,14 @@ function mapApiRowToProduct(row) {
             }))
             : [],
         selected_price: row[14] === true ? '' : row[2],
+        barcode_symbology: row[17] || 'C128',
+        alt_code: row[18] || '',
     };
 }
 
 function formatSettingLabel(setting) {
     const base = setting.description ? `${setting.name}, ${setting.description}` : setting.name;
     return setting.is_continuous ? `${base} (Continuous roll)` : base;
-}
-
-function appendPrintParams(params, printOptions) {
-    const toggles = [
-        ['name', 'name_size'],
-        ['price', 'price_size'],
-        ['promo_price', 'promo_price_size'],
-        ['business_name', 'business_name_size'],
-        ['brand_name', 'brand_name_size'],
-    ];
-
-    toggles.forEach(([key, sizeKey]) => {
-        if (printOptions[key]) {
-            params.append(`print[${key}]`, '1');
-            params.append(`print[${sizeKey}]`, String(printOptions[sizeKey]));
-        }
-    });
-
-    params.append('print[variations]', '1');
-    params.append('print[variations_size]', '17');
-    params.append('print[packing_date]', '1');
-    params.append('print[packing_date_size]', '12');
-}
-
-function buildPrintQuery(products, printOptions, barcodeSettingId) {
-    const params = new URLSearchParams();
-    params.append('barcode_setting', barcodeSettingId);
-    appendPrintParams(params, printOptions);
-
-    products.forEach((product, index) => {
-        const price = product.diff_price ? product.selected_price : product.price;
-        params.append(`products[${index}][quantity]`, String(product.quantity || 1));
-        params.append(`products[${index}][product_id]`, String(product.id));
-        params.append(`products[${index}][product_name]`, product.name);
-        params.append(`products[${index}][sub_sku]`, product.code);
-        params.append(`products[${index}][product_price]`, String(price));
-        params.append(`products[${index}][default_price]`, String(product.default_price ?? product.price));
-        params.append(`products[${index}][product_promo_price]`, product.promo_price ?? '');
-        params.append(`products[${index}][currency]`, product.currency ?? '');
-        params.append(`products[${index}][currency_position]`, product.currency_position ?? '');
-        params.append(`products[${index}][brand_name]`, product.brand ?? 'N/A');
-    });
-
-    return params.toString();
 }
 
 export default function BackendProductPrintBarcode() {
@@ -102,22 +62,21 @@ export default function BackendProductPrintBarcode() {
     const [selectedSettingId, setSelectedSettingId] = useState('');
     const [productCatalog, setProductCatalog] = useState([]);
 
-    const [printOptions, setPrintOptions] = useState({
-        name: true,
-        name_size: 13,
-        price: true,
-        price_size: 13,
-        promo_price: false,
-        promo_price_size: 15,
-        business_name: true,
-        business_name_size: 14,
-        brand_name: false,
-        brand_name_size: 15,
-    });
+    const [printOptions, setPrintOptions] = useState({ ...DEFAULT_BARCODE_PRINT_OPTIONS });
 
     useEffect(() => {
         fetchInitialData();
+        if (!generalSettingStore.getSetting()) {
+            generalSettingStore.fetchSetting().catch(() => {});
+        }
     }, [location.search]);
+
+    useEffect(() => {
+        const setting = barcodeSettings.find((s) => String(s.id) === String(selectedSettingId));
+        if (setting?.print_options) {
+            setPrintOptions(normalizeBarcodePrintOptions(setting.print_options));
+        }
+    }, [selectedSettingId, barcodeSettings]);
 
     const fetchInitialData = async () => {
         try {
@@ -236,18 +195,41 @@ export default function BackendProductPrintBarcode() {
             return;
         }
 
-        const query = buildPrintQuery(selectedProducts, printOptions, selectedSettingId);
-        const token = getToken();
-        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-        const printUrl = `${api.defaultPath}/labels/print?${query}${tokenParam}`;
+        const selectedSetting = barcodeSettings.find(
+            (s) => String(s.id) === String(selectedSettingId)
+        );
+        if (!selectedSetting) {
+            showToast('Selected paper size is invalid', 'error');
+            return;
+        }
 
         setSubmitting(true);
+
+        const printWindow = createLabelPrintWindow();
+        if (!printWindow) {
+            showToast('Please allow pop-ups to open the print preview', 'warning');
+            setSubmitting(false);
+            return;
+        }
+
         try {
-            const printWindow = window.open(printUrl, 'printBarcode');
-            if (!printWindow) {
-                showToast('Please allow pop-ups to open the print preview', 'warning');
+            let businessName = generalSettingStore.getSetting()?.company_name;
+            if (!businessName) {
+                await generalSettingStore.fetchSetting();
+                businessName = generalSettingStore.getSetting()?.company_name || '';
             }
+
+            const labels = expandProductsToLabels(selectedProducts, printOptions);
+            renderLabelPrintWindow(printWindow, {
+                labels,
+                barcodeDetails: selectedSetting,
+                printOptions,
+                businessName,
+            });
         } catch (error) {
+            if (printWindow && !printWindow.closed) {
+                printWindow.close();
+            }
             console.error('Label preview failed:', error);
             showToast(error?.message || 'Failed to generate labels', 'error');
         } finally {
@@ -280,7 +262,7 @@ export default function BackendProductPrintBarcode() {
 
             <FormSection>
                 <p className="text-muted mb-4" style={{ fontSize: '0.85rem' }}>
-                    The field labels marked with * are required input fields.
+                    Select a saved barcode template for paper size and layout. Label content options below can be adjusted per print run.
                 </p>
 
                 <div className="mb-4">
@@ -465,16 +447,18 @@ export default function BackendProductPrintBarcode() {
 
                 <hr className="my-4" />
 
+                <h6 className="ui-section-divider mb-4">Barcode template *</h6>
                 <FormRow cols={2}>
-                    <FormField label="Paper Size *">
+                    <FormField label="Label template">
                         <SelectInput
                             value={selectedSettingId}
                             onChange={(e) => setSelectedSettingId(e.target.value)}
                         >
-                            <option value="">Select Paper Size</option>
+                            <option value="">Select template</option>
                             {barcodeSettings.map((s) => (
                                 <option key={s.id} value={s.id}>
                                     {formatSettingLabel(s)}
+                                    {s.is_default ? ' (default)' : ''}
                                 </option>
                             ))}
                         </SelectInput>
@@ -511,11 +495,11 @@ export default function BackendProductPrintBarcode() {
                         disabled={submitting}
                         style={{ minWidth: '160px' }}
                     >
-                        {submitting ? 'Generating...' : 'Submit'}
+                        {submitting ? 'Generating...' : 'Print labels'}
                     </button>
                     <Link to="/barcodes" className="ui-btn info">
                         <SafeFontAwesomeIcon icon={faPlus} className="me-2" />
-                        Add New Setting
+                        Manage templates
                     </Link>
                 </div>
             </FormSection>

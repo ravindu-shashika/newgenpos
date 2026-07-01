@@ -7,6 +7,7 @@ class PosUiSettings {
     this.enableTax = true,
     this.enableWhatsapp = false,
     this.enableKeyboard = false,
+    this.enableAddItemModal = false,
     this.enableReturn = true,
     this.enableExchange = false,
     this.enablePointsPayment = false,
@@ -27,6 +28,7 @@ class PosUiSettings {
   final bool enableTax;
   final bool enableWhatsapp;
   final bool enableKeyboard;
+  final bool enableAddItemModal;
   final bool enableReturn;
   final bool enableExchange;
   final bool enablePointsPayment;
@@ -73,6 +75,7 @@ class PosUiSettings {
     bool? enableTax,
     bool? enableWhatsapp,
     bool? enableKeyboard,
+    bool? enableAddItemModal,
     bool? enableReturn,
     bool? enableExchange,
     bool? enablePointsPayment,
@@ -98,6 +101,7 @@ class PosUiSettings {
       enableTax: enableTax ?? this.enableTax,
       enableWhatsapp: enableWhatsapp ?? this.enableWhatsapp,
       enableKeyboard: enableKeyboard ?? this.enableKeyboard,
+      enableAddItemModal: enableAddItemModal ?? this.enableAddItemModal,
       enableReturn: enableReturn ?? this.enableReturn,
       enableExchange: enableExchange ?? this.enableExchange,
       enablePointsPayment: enablePointsPayment ?? this.enablePointsPayment,
@@ -133,6 +137,8 @@ class PosUiSettings {
       enableTax: _bool(json['enable_tax'], fallback: true),
       enableWhatsapp: _bool(json['enable_whatsapp'], fallback: false),
       enableKeyboard: _bool(json['enable_keyboard'], fallback: false),
+      enableAddItemModal:
+          _bool(json['enable_add_item_modal'], fallback: false),
       enableReturn: _bool(json['enable_return'], fallback: true),
       enableExchange: _bool(json['enable_exchange'], fallback: false),
       enablePointsPayment:
@@ -164,6 +170,7 @@ class PosUiSettings {
         'enable_tax': enableTax,
         'enable_whatsapp': enableWhatsapp,
         'enable_keyboard': enableKeyboard,
+        'enable_add_item_modal': enableAddItemModal,
         'enable_return': enableReturn,
         'enable_exchange': enableExchange,
         'enable_points_payment': enablePointsPayment,

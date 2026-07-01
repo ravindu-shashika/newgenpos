@@ -95,6 +95,8 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
       if (widget.suppressNativeKeyboard) {
         _hideNativeKeyboard();
         deferPosTouchKeyboardDetach(ref);
+      } else if (_focusNode.hasFocus) {
+        _activateInputKeyboard();
       }
     }
   }
@@ -158,6 +160,10 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
 
   void _onFocusChange() {
     if (!_focusNode.hasFocus) return;
+    _activateInputKeyboard();
+  }
+
+  void _activateInputKeyboard() {
     Future<void>.microtask(() {
       if (!mounted || !_focusNode.hasFocus) return;
       if (widget.suppressNativeKeyboard) {
@@ -169,17 +175,21 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
         return;
       }
       final enabled = ref.read(posUiSettingsProvider).enableKeyboard;
-      if (!enabled) return;
-      ref.read(posTouchKeyboardControllerProvider).attach(
-            PosTouchKeyboardSession(
-              controller: widget.controller,
-              focusNode: _focusNode,
-              kind: widget.kind,
-              showQuickCash: widget.showQuickCash,
-              onChanged: () => widget.onChanged?.call(widget.controller.text),
-              maxLines: widget.maxLines,
-            ),
-          );
+      if (enabled) {
+        ref.read(posTouchKeyboardControllerProvider).attach(
+              PosTouchKeyboardSession(
+                controller: widget.controller,
+                focusNode: _focusNode,
+                kind: widget.kind,
+                showQuickCash: widget.showQuickCash,
+                onChanged: () => widget.onChanged?.call(widget.controller.text),
+                maxLines: widget.maxLines,
+              ),
+            );
+        return;
+      }
+      // Native OS keyboard — ensure TextInput is connected after barcode mode.
+      _focusNode.requestFocus();
     });
   }
 
@@ -211,6 +221,8 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
       onTap: () {
         if (scannerOnly) {
           _hideNativeKeyboard();
+        } else {
+          _activateInputKeyboard();
         }
         widget.onTap?.call();
         if (touchKeyboard) _focusNode.requestFocus();

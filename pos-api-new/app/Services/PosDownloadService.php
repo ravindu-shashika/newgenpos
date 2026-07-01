@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\GeneralSetting;
 use App\Models\PosSetting;
 use App\Models\Product;
+use App\Models\ProductBatch;
 use App\Models\ProductVariant;
 use App\Models\Product_Warehouse;
 use App\Models\Tax;
@@ -45,6 +46,7 @@ class PosDownloadService
             'coupons',
             'products',
             'product_variants',
+            'product_batches',
             'product_stock',
             'settings',
         ];
@@ -111,6 +113,7 @@ class PosDownloadService
             'coupons' => $this->chunkCoupons($page, $perPage, $options),
             'products' => $this->chunkProducts($page, $perPage, $options),
             'product_variants' => $this->chunkProductVariants($page, $perPage, $options),
+            'product_batches' => $this->chunkProductBatches($page, $perPage, $options),
             'product_stock' => $this->chunkProductStock($page, $perPage, $options),
             'settings' => $this->chunkSettings($page, $perPage, $options),
             default => ['data' => []],
@@ -147,6 +150,7 @@ class PosDownloadService
             'coupons' => $this->applySince(Coupon::where('is_active', true), $since)->count(),
             'products' => $this->productsQuery($warehouseId, $since)->count(),
             'product_variants' => $this->productVariantsQuery($warehouseId, $since)->count(),
+            'product_batches' => $this->productBatchesQuery($warehouseId, $since)->count(),
             'product_stock' => $this->applySince(
                 Product_Warehouse::where('warehouse_id', $warehouseId),
                 $since
@@ -173,6 +177,16 @@ class PosDownloadService
 
         return $this->applySince(
             ProductVariant::whereIn('product_id', $ids),
+            $since
+        );
+    }
+
+    private function productBatchesQuery(int $warehouseId, ?string $since): Builder
+    {
+        $ids = $this->productIdsForWarehouse($warehouseId);
+
+        return $this->applySince(
+            ProductBatch::whereIn('product_id', $ids),
             $since
         );
     }
@@ -302,8 +316,8 @@ class PosDownloadService
             ->orderBy('id')
             ->forPage($page, $perPage)
             ->get([
-                'id', 'name', 'code', 'type', 'brand_id', 'category_id', 'unit_id', 'sale_unit_id',
-                'cost', 'price', 'wholesale_price', 'tax_id', 'tax_method', 'image', 'is_variant', 'is_batch', 'is_imei',
+                'id', 'name', 'code', 'alt_code', 'type', 'brand_id', 'category_id', 'unit_id', 'sale_unit_id',
+                'cost', 'price', 'max_price', 'wholesale_price', 'tax_id', 'tax_method', 'image', 'is_variant', 'is_batch', 'is_imei',
                 'is_embeded', 'featured', 'updated_at',
             ]);
 
@@ -318,6 +332,18 @@ class PosDownloadService
             ->orderBy('id')
             ->forPage($page, $perPage)
             ->get(['id', 'product_id', 'variant_id', 'item_code', 'additional_price', 'updated_at']);
+
+        return ['data' => $rows];
+    }
+
+    private function chunkProductBatches(int $page, int $perPage, array $opts): array
+    {
+        $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
+
+        $rows = $this->productBatchesQuery($warehouseId, $opts['since'] ?? null)
+            ->orderBy('id')
+            ->forPage($page, $perPage)
+            ->get(['id', 'product_id', 'batch_no', 'expired_date', 'qty', 'updated_at']);
 
         return ['data' => $rows];
     }

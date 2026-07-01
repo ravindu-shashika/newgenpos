@@ -327,14 +327,11 @@ export default function AdjustmentCreate() {
         setSubmitting(true);
         try {
             if (isEditMode) {
-                await api.put(`qty_adjustment/${adjustmentId}`, data, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                });
+                data.append('_method', 'PUT');
+                await api.post(`qty_adjustment/${adjustmentId}`, data);
                 showToast('Adjustment updated successfully.', 'success');
             } else {
-                await api.post('qty_adjustment', data, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                });
+                await api.post('qty_adjustment', data);
                 showToast('Adjustment saved successfully.', 'success');
             }
             navigate('/qty_adjustment');

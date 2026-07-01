@@ -9,6 +9,8 @@ class CartLine {
     required this.taxRate,
     required this.taxMethod,
     this.variantId,
+    this.productBatchId,
+    this.batchNo,
     this.qty = 1,
     this.discount = 0,
     this.stockQty,
@@ -17,6 +19,8 @@ class CartLine {
 
   final int productId;
   final int? variantId;
+  final int? productBatchId;
+  final String? batchNo;
   final String code;
   final String name;
   double qty;
@@ -41,7 +45,7 @@ class CartLine {
   double get subtotal => netUnitPrice * qty + lineTax;
 
   String get lineKey =>
-      '$productId-${variantId ?? 0}-${code.hashCode}';
+      '$productId-${variantId ?? 0}-${productBatchId ?? 0}-${code.hashCode}';
 
   CartLine copyWith({
     double? qty,
@@ -51,10 +55,14 @@ class CartLine {
     double? taxRate,
     int? taxMethod,
     String? saleUnit,
+    int? productBatchId,
+    String? batchNo,
   }) {
     return CartLine(
       productId: productId,
       variantId: variantId,
+      productBatchId: productBatchId ?? this.productBatchId,
+      batchNo: batchNo ?? this.batchNo,
       code: code,
       name: name,
       netUnitPrice: netUnitPrice ?? this.netUnitPrice,
@@ -71,6 +79,7 @@ class CartLine {
     return {
       'product_id': productId,
       'variant_id': variantId,
+      if (productBatchId != null) 'product_batch_id': productBatchId,
       'code': code,
       'name': name,
       'qty': qty,

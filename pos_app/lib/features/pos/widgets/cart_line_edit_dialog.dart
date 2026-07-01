@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart' show Taxe;
 import '../../../core/theme/pos_theme.dart';
@@ -7,8 +7,13 @@ import '../cart_line_calc.dart';
 import '../models/cart_line.dart';
 import '../models/cart_line_edit_context.dart';
 import '../pos_currency.dart';
+import 'payment_processing_layout.dart';
+import 'pos_amount_numpad.dart';
 import 'pos_professional_dialog.dart';
+import 'pos_touch_keyboard_controller.dart';
 import 'show_pos_dialog.dart';
+
+enum _CartEditField { qty, unitDiscount, unitPrice }
 
 Future<CartLine?> showCartLineEditDialog({
   required BuildContext context,
@@ -26,7 +31,7 @@ Future<CartLine?> showCartLineEditDialog({
   );
 }
 
-class _CartLineEditDialog extends StatefulWidget {
+class _CartLineEditDialog extends ConsumerStatefulWidget {
   const _CartLineEditDialog({
     required this.line,
     required this.editContext,
@@ -38,17 +43,21 @@ class _CartLineEditDialog extends StatefulWidget {
   final List<Taxe> taxes;
 
   @override
-  State<_CartLineEditDialog> createState() => _CartLineEditDialogState();
+  ConsumerState<_CartLineEditDialog> createState() => _CartLineEditDialogState();
 }
 
-class _CartLineEditDialogState extends State<_CartLineEditDialog> {
+class _CartLineEditDialogState extends ConsumerState<_CartLineEditDialog> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _unitDiscountCtrl;
   late final TextEditingController _unitPriceCtrl;
+  late final FocusNode _qtyFocus;
+  late final FocusNode _discountFocus;
+  late final FocusNode _priceFocus;
 
   late int _unitIndex;
   late int _priceOptionIndex;
   late int _taxIndex;
+  _CartEditField _activeField = _CartEditField.qty;
 
   @override
   void initState() {
@@ -80,7 +89,10 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
     _taxIndex = _taxIndexForRate(line.taxRate);
 
     _qtyCtrl = TextEditingController(
-      text: _formatNumber(line.qty, decimals: line.qty == line.qty.roundToDouble() ? 0 : 2),
+      text: _formatNumber(
+        line.qty,
+        decimals: line.qty == line.qty.roundToDouble() ? 0 : 2,
+      ),
     );
     _unitDiscountCtrl = TextEditingController(
       text: _formatNumber(unitDiscountForLine(line)),
@@ -88,14 +100,49 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
     _unitPriceCtrl = TextEditingController(
       text: _formatNumber(rowPrice),
     );
+    _qtyFocus = FocusNode();
+    _discountFocus = FocusNode();
+    _priceFocus = FocusNode();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(posTouchKeyboardControllerProvider).detach();
+      _selectField(_CartEditField.qty);
+    });
   }
 
   @override
   void dispose() {
+    ref.read(posTouchKeyboardControllerProvider).detach();
     _qtyCtrl.dispose();
     _unitDiscountCtrl.dispose();
     _unitPriceCtrl.dispose();
+    _qtyFocus.dispose();
+    _discountFocus.dispose();
+    _priceFocus.dispose();
     super.dispose();
+  }
+
+  TextEditingController get _activeCtrl {
+    switch (_activeField) {
+      case _CartEditField.qty:
+        return _qtyCtrl;
+      case _CartEditField.unitDiscount:
+        return _unitDiscountCtrl;
+      case _CartEditField.unitPrice:
+        return _unitPriceCtrl;
+    }
+  }
+
+  void _selectField(_CartEditField field) {
+    setState(() => _activeField = field);
+    ref.read(posTouchKeyboardControllerProvider).detach();
+    final node = switch (field) {
+      _CartEditField.qty => _qtyFocus,
+      _CartEditField.unitDiscount => _discountFocus,
+      _CartEditField.unitPrice => _priceFocus,
+    };
+    node.requestFocus();
   }
 
   int _taxIndexForRate(double rate) {
@@ -190,199 +237,192 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
       title: widget.line.name,
       subtitle: widget.line.code,
       icon: Icons.edit_outlined,
-      maxWidth: 720,
-      maxHeightFactor: 0.72,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final cols = constraints.maxWidth >= 640 ? 3 : 2;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _FieldGrid(
-                  columns: cols,
+      maxWidth: 920,
+      maxHeightFactor: 0.88,
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 3,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _EditField(
-                      label: 'Quantity',
-                      child: TextField(
-                        controller: _qtyCtrl,
-                        autofocus: true,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d{0,4}'),
+                    _FieldGrid(
+                      columns: 2,
+                      children: [
+                        _EditField(
+                          label: 'Quantity',
+                          child: PosAmountField(
+                            controller: _qtyCtrl,
+                            focusNode: _qtyFocus,
+                            onTap: () => _selectField(_CartEditField.qty),
                           ),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: '1',
                         ),
-                      ),
-                    ),
-                    _EditField(
-                      label: 'Unit discount',
-                      child: TextField(
-                        controller: _unitDiscountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d{0,2}'),
+                        _EditField(
+                          label: 'Unit discount',
+                          child: PosAmountField(
+                            controller: _unitDiscountCtrl,
+                            focusNode: _discountFocus,
+                            onTap: () =>
+                                _selectField(_CartEditField.unitDiscount),
                           ),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: '0.00',
                         ),
-                      ),
-                    ),
-                    if (widget.editContext.priceOptions.length > 1)
-                      _EditField(
-                        label: 'Price option',
-                        child: DropdownButtonFormField<int>(
-                          value: _priceOptionIndex,
-                          decoration: InputDecoration(
-                            isDense: true,
-                          ),
-                          items: [
-                            for (var i = 0;
-                                i < widget.editContext.priceOptions.length;
-                                i++)
-                              DropdownMenuItem(
-                                value: i,
-                                child: Text(
-                                  formatPosMoney(
-                                    rowPriceFromBase(
-                                      widget.editContext.priceOptions[i].basePrice,
-                                      _selectedUnit,
+                        if (widget.editContext.priceOptions.length > 1)
+                          _EditField(
+                            label: 'Price option',
+                            child: DropdownButtonFormField<int>(
+                              value: _priceOptionIndex,
+                              decoration: const InputDecoration(isDense: true),
+                              items: [
+                                for (var i = 0;
+                                    i < widget.editContext.priceOptions.length;
+                                    i++)
+                                  DropdownMenuItem(
+                                    value: i,
+                                    child: Text(
+                                      formatPosMoney(
+                                        rowPriceFromBase(
+                                          widget.editContext.priceOptions[i]
+                                              .basePrice,
+                                          _selectedUnit,
+                                        ),
+                                      ),
                                     ),
                                   ),
+                              ],
+                              onChanged: (v) {
+                                if (v == null) return;
+                                _applyPriceOption(v);
+                              },
+                            ),
+                          )
+                        else
+                          _EditField(
+                            label: 'Price option',
+                            child: InputDecorator(
+                              decoration: const InputDecoration(isDense: true),
+                              child: Text(
+                                formatPosMoney(
+                                  widget.editContext.priceOptions.first.basePrice,
+                                ),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            _applyPriceOption(v);
-                          },
-                        ),
-                      )
-                    else
-                      _EditField(
-                        label: 'Price option',
-                        child: InputDecorator(
-                          decoration: InputDecoration(
-                            isDense: true,
-                          ),
-                          child: Text(
-                            formatPosMoney(
-                              widget.editContext.priceOptions.first.basePrice,
-                            ),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
-                        ),
-                      ),
-                    _EditField(
-                      label: 'Unit price',
-                      child: TextField(
-                        controller: _unitPriceCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                            RegExp(r'^\d*\.?\d{0,2}'),
+                        _EditField(
+                          label: 'Unit price',
+                          child: PosAmountField(
+                            controller: _unitPriceCtrl,
+                            focusNode: _priceFocus,
+                            onTap: () => _selectField(_CartEditField.unitPrice),
                           ),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: '0.00',
                         ),
-                      ),
+                        _EditField(
+                          label: 'Tax rate',
+                          child: DropdownButtonFormField<int>(
+                            value: _taxIndex,
+                            decoration: const InputDecoration(isDense: true),
+                            items: [
+                              for (var i = 0; i < _taxOptions.length; i++)
+                                DropdownMenuItem(
+                                  value: i,
+                                  child: Text(_taxOptions[i].name),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() => _taxIndex = v);
+                            },
+                          ),
+                        ),
+                        if (showUnits)
+                          _EditField(
+                            label: 'Product unit',
+                            child: DropdownButtonFormField<int>(
+                              value: _unitIndex,
+                              decoration: const InputDecoration(isDense: true),
+                              items: [
+                                for (var i = 0;
+                                    i < widget.editContext.units.length;
+                                    i++)
+                                  DropdownMenuItem(
+                                    value: i,
+                                    child: Text(
+                                      widget.editContext.units[i].name,
+                                    ),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v == null) return;
+                                _applyUnit(v);
+                              },
+                            ),
+                          ),
+                      ],
                     ),
-                    _EditField(
-                      label: 'Tax rate',
-                      child: DropdownButtonFormField<int>(
-                        value: _taxIndex,
-                        decoration: InputDecoration(
-                          isDense: true,
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        borderRadius:
+                            BorderRadius.circular(kPosButtonRadius),
+                        border: Border.all(
+                          color: Theme.of(context).dividerColor,
                         ),
-                        items: [
-                          for (var i = 0; i < _taxOptions.length; i++)
-                            DropdownMenuItem(
-                              value: i,
-                              child: Text(_taxOptions[i].name),
-                            ),
-                        ],
-                        onChanged: (v) {
-                          if (v == null) return;
-                          setState(() => _taxIndex = v);
-                        },
                       ),
-                    ),
-                    if (showUnits)
-                      _EditField(
-                        label: 'Product unit',
-                        child: DropdownButtonFormField<int>(
-                          value: _unitIndex,
-                          decoration: InputDecoration(
-                            isDense: true,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
-                          items: [
-                            for (var i = 0; i < widget.editContext.units.length; i++)
-                              DropdownMenuItem(
-                                value: i,
-                                child: Text(widget.editContext.units[i].name),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Line total preview: '
+                              '${formatPosMoney(_previewLineTotal())}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    Theme.of(context).colorScheme.onSurface,
                               ),
-                          ],
-                          onChanged: (v) {
-                            if (v == null) return;
-                            _applyUnit(v);
-                          },
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
-                SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    borderRadius: BorderRadius.circular(kPosButtonRadius),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Line total preview: ${formatPosMoney(_previewLineTotal())}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              flex: 2,
+              child: PaymentKeypadColumn(
+                controller: _activeCtrl,
+                onChanged: () => setState(() {}),
+                clearButtonLabel: 'Clear',
+              ),
+            ),
+          ],
         ),
       ),
       footer: PosProfessionalDialogFooter(
         secondaryLabel: 'Cancel',
         primaryLabel: 'Update',
+        buttonMinHeight: 52,
         onSecondary: () => Navigator.pop(context),
         onPrimary: _submit,
       ),
@@ -392,7 +432,8 @@ class _CartLineEditDialogState extends State<_CartLineEditDialog> {
   double _previewLineTotal() {
     final qty = _parse(_qtyCtrl.text) ?? widget.line.qty;
     final unitDiscount = _parse(_unitDiscountCtrl.text) ?? 0;
-    final unitPrice = _parse(_unitPriceCtrl.text) ?? rowUnitPriceForLine(widget.line);
+    final unitPrice =
+        _parse(_unitPriceCtrl.text) ?? rowUnitPriceForLine(widget.line);
     if (qty <= 0) return 0;
     final tax = _taxOptions[_taxIndex];
     return applyCartLineEdit(
@@ -467,7 +508,7 @@ class _EditField extends StatelessWidget {
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        SizedBox(height: 6),
+        const SizedBox(height: 6),
         child,
       ],
     );

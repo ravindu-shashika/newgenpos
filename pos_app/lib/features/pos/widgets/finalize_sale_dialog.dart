@@ -61,6 +61,7 @@ Future<FinalizeSaleResult?> showFinalizeSaleDialog({
   return showPosDialog<FinalizeSaleResult>(
     context: context,
     builder: (ctx) => PosTouchKeyboardHost(
+      expand: false,
       child: _FinalizeSaleDialog(
         grandTotal: grandTotal,
         paymentLabel: paymentLabel,

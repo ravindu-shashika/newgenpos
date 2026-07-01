@@ -270,6 +270,7 @@ export default function ProductCreate() {
         type: 'standard',
         name: '',
         code: '',
+        alt_code: '',
         barcode_symbology: 'C128',
         brand_id: '',
         category_id: '',
@@ -280,6 +281,7 @@ export default function ProductCreate() {
         profit_margin_type: 'percentage',
         profit_margin: '0',
         price: '',
+        max_price: '',
         wholesale_price: '',
         daily_sale_objective: '',
         alert_quantity: '',
@@ -397,6 +399,7 @@ export default function ProductCreate() {
             type: p.type || 'standard',
             name: p.name || '',
             code: p.code || '',
+            alt_code: p.alt_code ?? '',
             barcode_symbology: p.barcode_symbology || 'C128',
             brand_id: p.brand_id ?? '',
             category_id: p.category_id ?? '',
@@ -407,6 +410,7 @@ export default function ProductCreate() {
             profit_margin_type: p.profit_margin_type || (data.margin_type == 1 ? 'flat' : 'percentage'),
             profit_margin: p.profit_margin ?? '0',
             price: p.price ?? '',
+            max_price: p.max_price ?? '',
             wholesale_price: p.wholesale_price ?? '',
             daily_sale_objective: p.daily_sale_objective ?? '',
             alert_quantity: p.alert_quantity ?? '',
@@ -744,6 +748,12 @@ export default function ProductCreate() {
             showToast('Please define at least one variant combination.', 'error');
             return false;
         }
+        const maxPrice = parseFloat(formData.max_price);
+        const salePrice = parseFloat(formData.price);
+        if (formData.max_price !== '' && !Number.isNaN(maxPrice) && !Number.isNaN(salePrice) && maxPrice < salePrice) {
+            showToast('Max price cannot be lower than product price.', 'error');
+            return false;
+        }
         if (hasRestaurant && !formData.is_addon && (!formData.menu_type?.length)) {
             showToast('Please select at least one menu type.', 'error');
             return false;
@@ -823,7 +833,7 @@ export default function ProductCreate() {
     /** Always append these keys (even when empty) so update/store never misses optional columns */
     const ALWAYS_SEND_FIELDS = new Set([
         'product_details', 'meta_title', 'meta_description', 'tags',
-        'wholesale_price', 'daily_sale_objective', 'alert_quantity',
+        'alt_code', 'wholesale_price', 'max_price', 'daily_sale_objective', 'alert_quantity',
         'promotion_price', 'starting_date', 'last_date',
         'warranty', 'guarantee',
     ]);
@@ -1001,6 +1011,17 @@ export default function ProductCreate() {
                     </FormRow>
 
                     <FormRow cols={3}>
+                        <FormField label="Alternate code">
+                            <TextInput
+                                name="alt_code"
+                                value={formData.alt_code}
+                                onChange={handleChange}
+                                placeholder="Optional secondary barcode or SKU"
+                            />
+                        </FormField>
+                    </FormRow>
+
+                    <FormRow cols={3}>
                         <FormField label="Barcode symbology" required>
                             <SelectInput name="barcode_symbology" value={formData.barcode_symbology} onChange={handleChange} required>
                                 <option value="C128">Code 128</option>
@@ -1082,6 +1103,14 @@ export default function ProductCreate() {
                         )}
                         <FormField label="Product Price" required>
                             <NumberInput name="price" value={formData.price} onChange={handlePriceChange} required />
+                        </FormField>
+                        <FormField label="Max price">
+                            <NumberInput
+                                name="max_price"
+                                value={formData.max_price}
+                                onChange={handleChange}
+                                placeholder="Optional ceiling price"
+                            />
                         </FormField>
                     </FormRow>
 

@@ -3,13 +3,8 @@ import { Link } from 'react-router-dom';
 import { Modal } from '../../../components/ui';
 import { api } from '../../../services';
 import authStore from '../../../stores/authStore';
-import { permissionsBypassed } from '../../../config/permissions';
-
-function canPrintBarcode() {
-    if (permissionsBypassed()) return true;
-    const perms = authStore.getPermissions();
-    return Array.isArray(perms) && perms.includes('print_barcode');
-}
+import { hasPermission } from '../../../config/permissions';
+import { usePermissionNames } from '../../../stores/usePermissions';
 
 function printBarcodePath(row, name, code) {
     const label = `${code} (${name})`;
@@ -146,6 +141,8 @@ function DetailTable({ columns, rows, emptyText = 'No records.' }) {
 
 export default function ProductViewModal({ row, onClose }) {
     const details = useMemo(() => resolveProductDetails(row), [row]);
+    const permissionNames = usePermissionNames();
+    const canPrintBarcode = hasPermission('print_barcode', permissionNames);
     const roleId = Number(authStore.getUser()?.role_id ?? 99);
     const showCost = roleId <= 2;
 
@@ -277,13 +274,13 @@ export default function ProductViewModal({ row, onClose }) {
             size="lg"
             hideHint
             headerExtra={
-                canPrintBarcode() ? (
+                canPrintBarcode && details.code ? (
                     <Link
                         to={printBarcodePath(row, details.name, details.code)}
                         className="ui-btn sm secondary"
                         onClick={onClose}
                     >
-                        Print
+                        Print Barcode
                     </Link>
                 ) : null
             }

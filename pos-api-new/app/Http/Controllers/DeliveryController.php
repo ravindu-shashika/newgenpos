@@ -123,7 +123,7 @@ class DeliveryController extends Controller
 
 
 
-            $barcode = \DNS2D::getBarcodePNG($delivery->reference_no, 'QRCODE');
+            $barcode = \Milon\Barcode\Facades\DNS2DFacade::getBarcodePNG($delivery->reference_no, 'QRCODE');
 
             $nestedData = [];
 

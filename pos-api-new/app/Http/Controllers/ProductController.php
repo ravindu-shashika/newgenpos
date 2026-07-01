@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use File;
-use DNS1D;
 use Exception;
 use Keygen\Keygen;
 use App\Models\Tax;
@@ -786,10 +785,25 @@ class ProductController extends Controller
                     Rule::unique('products')->where(function ($query) {
                     return $query->where('is_active', 1);
                 }),
-            ]
+            ],
+            'alt_code' => [
+                'nullable',
+                'max:191',
+                Rule::unique('products')->where(function ($query) {
+                    return $query->where('is_active', 1);
+                }),
+            ],
+            'max_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $data = $request->except('image', 'file', 'products', 'extras');
+
+        if (array_key_exists('alt_code', $data) && trim((string) $data['alt_code']) === '') {
+            $data['alt_code'] = null;
+        }
+        if (array_key_exists('max_price', $data) && $data['max_price'] === '') {
+            $data['max_price'] = null;
+        }
 
         // handle warranty and guarantee
         if (!isset($data['warranty'])) {
@@ -1576,6 +1590,9 @@ class ProductController extends Controller
         $rows = DB::table('adjustments as a')
             ->join('product_adjustments as pa', 'pa.adjustment_id', '=', 'a.id')
             ->where('pa.product_id', $product_id)
+            ->when(\Schema::hasColumn('product_adjustments', 'is_delete'), function ($q) {
+                $q->where('pa.is_delete', false);
+            })
             ->whereBetween(DB::raw('DATE(a.created_at)'), [
                 $request->starting_date,
                 $request->ending_date
@@ -1790,11 +1807,25 @@ class ProductController extends Controller
                     Rule::unique('products')->ignore($request->input('id'))->where(function ($query) {
                         return $query->where('is_active', 1);
                     }),
-                ]
+                ],
+                'alt_code' => [
+                    'nullable',
+                    'max:191',
+                    Rule::unique('products')->ignore($request->input('id'))->where(function ($query) {
+                        return $query->where('is_active', 1);
+                    }),
+                ],
+                'max_price' => ['nullable', 'numeric', 'min:0'],
             ]);
 
             $lims_product_data = Product::findOrFail($request->input('id'));
             $data = $request->except('image', 'file', 'prev_img', 'products', 'extras');
+            if (array_key_exists('alt_code', $data) && trim((string) $data['alt_code']) === '') {
+                $data['alt_code'] = null;
+            }
+            if (array_key_exists('max_price', $data) && $data['max_price'] === '') {
+                $data['max_price'] = null;
+            }
             $data['name'] = htmlspecialchars(trim($data['name'] ?? ''), ENT_QUOTES);
             $data['profit_margin_type'] = $request->input('profit_margin_type', 'percentage');
             $data['profit_margin'] = $request->input('profit_margin', 0);
@@ -2270,6 +2301,12 @@ class ProductController extends Controller
                         : null,
                     'is_default' => (bool) $row->is_default,
                     'is_continuous' => (bool) $row->is_continuous,
+                    'print_options' => array_merge(
+                        Barcode::defaultPrintOptions(),
+                        is_array($row->print_options)
+                            ? $row->print_options
+                            : (json_decode((string) $row->print_options, true) ?: [])
+                    ),
                 ];
             })->values();
 
@@ -2404,7 +2441,7 @@ class ProductController extends Controller
             }
 
             $product[] = $lims_product_data->price + $additional_price;
-            $product[] = DNS1D::getBarcodePNG($product[1], $lims_product_data->barcode_symbology);
+            $product[] = null;
             $product[] = $lims_product_data->promotion_price;
             $product[] = config('currency');
             $product[] = config('currency_position');
@@ -2428,6 +2465,8 @@ class ProductController extends Controller
             ';
             $product[] = $diff_price ?? 'N/A';
             $product[] = $warehouse_product ?? 'N/A';
+            $product[] = $lims_product_data->barcode_symbology ?? 'C128';
+            $product[] = $lims_product_data->alt_code;
             $products[] = $product;
 
         }

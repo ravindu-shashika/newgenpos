@@ -141,6 +141,7 @@ class PosAmountNumpad extends StatefulWidget {
     this.onChanged,
     this.showQuickCash = true,
     this.fillHeight = false,
+    this.compact = false,
     this.largeTouch = false,
     this.quickAmounts = kPosQuickCashAmounts,
     this.quickCashInitial = true,
@@ -158,6 +159,7 @@ class PosAmountNumpad extends StatefulWidget {
   final VoidCallback? onChanged;
   final bool showQuickCash;
   final bool fillHeight;
+  final bool compact;
   final bool largeTouch;
   final List<int> quickAmounts;
   final bool quickCashInitial;
@@ -287,11 +289,11 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
   Widget _buildGrid() {
     const crossCount = 3;
     const rowCount = 4;
-    const mainSpacing = 8.0;
-    const crossSpacing = 8.0;
+    final mainSpacing = widget.compact ? 4.0 : 8.0;
+    final crossSpacing = widget.compact ? 4.0 : 8.0;
 
     Widget grid(double width, double height) {
-      var aspectRatio = 1.65;
+      var aspectRatio = widget.compact ? 2.4 : 1.65;
       if (widget.fillHeight && height > 0 && width > 0) {
         final cellHeight = (height - mainSpacing * (rowCount - 1)) / rowCount;
         final cellWidth =
@@ -313,6 +315,7 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
                 : _NumpadKey(
                     label: key,
                     largeTouch: widget.largeTouch,
+                    compact: widget.compact,
                     lightKeys: widget.lightKeys,
                     style: widget.style,
                     onPressed: () => _onKey(key),
@@ -591,6 +594,7 @@ class _NumpadKey extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.largeTouch = false,
+    this.compact = false,
     this.lightKeys = false,
     this.style = PosAmountNumpadStyle.standard,
   });
@@ -598,6 +602,7 @@ class _NumpadKey extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
   final bool largeTouch;
+  final bool compact;
   final bool lightKeys;
   final PosAmountNumpadStyle style;
 
@@ -661,11 +666,17 @@ class _NumpadKey extends StatelessWidget {
             border: Border.all(color: borderColor),
           ),
           child: isBackspace
-              ? Icon(Icons.backspace_outlined, color: fg, size: 26)
+              ? Icon(
+                  Icons.backspace_outlined,
+                  color: fg,
+                  size: compact ? 18 : (largeTouch ? 28 : 26),
+                )
               : Text(
                   label,
                   style: TextStyle(
-                    fontSize: largeTouch ? (payment ? 36 : 32) : 22,
+                    fontSize: compact
+                        ? 15
+                        : (largeTouch ? (payment ? 36 : 32) : 22),
                     fontWeight: FontWeight.w700,
                     color: fg,
                   ),

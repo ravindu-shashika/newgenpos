@@ -67,7 +67,7 @@ class PosCatalogEntryBar extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: isBarcode
                       ? 'Scan barcode…'
-                      : 'Search name or code…',
+                      : 'Search name, code or alt code…',
                   prefixIcon: Icon(
                     isBarcode ? Icons.qr_code_scanner : Icons.search,
                     color: isBarcode ? styles.accent : styles.textMuted,

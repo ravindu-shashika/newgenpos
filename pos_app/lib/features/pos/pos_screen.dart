@@ -24,6 +24,7 @@ import 'models/return_models.dart';
 import 'models/scanned_product.dart';
 import 'pos_checkout_defaults.dart';
 import 'pos_checkout_state.dart';
+import 'cart_line_calc.dart';
 import 'pos_helpers.dart';
 import 'sale_reference.dart';
 import 'pos_totals.dart';
@@ -47,6 +48,7 @@ import '../../core/providers/local_print_settings_provider.dart';
 import '../../core/providers/pos_ui_settings_provider.dart';
 import 'widgets/finalize_sale_dialog.dart';
 import 'widgets/coupon_entry_dialog.dart';
+import 'widgets/add_item_entry_dialog.dart';
 import 'widgets/discount_entry_dialog.dart';
 import 'widgets/payment_carousel_dialog.dart';
 import 'widgets/transaction_success_dialog.dart';
@@ -63,6 +65,7 @@ import 'widgets/pos_touch_keyboard_controller.dart';
 import 'widgets/pos_touch_keyboard_host.dart';
 import 'widgets/pos_customer_picker.dart';
 import 'widgets/pos_touch_text_field.dart';
+import 'widgets/pos_batch_picker_dialog.dart';
 import 'widgets/pos_catalog_entry_bar.dart';
 import 'widgets/pos_ui_widgets.dart';
 
@@ -534,34 +537,128 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
   }
 
-  bool _tryAddToCart(ScannedProduct product, {double qty = 1}) {
+  Future<bool> _tryAddToCart(ScannedProduct product, {double qty = 1}) async {
+    final warehouseId = _warehouseId;
+    if (warehouseId == null) {
+      _showSnack('Warehouse not configured', error: true);
+      return false;
+    }
+
+    var resolved = product;
+    if (product.isBatch && product.productBatchId == null) {
+      final options = await ref
+          .read(productLookupRepositoryProvider)
+          .listBatchOptions(
+            productId: product.productId,
+            warehouseId: warehouseId,
+          );
+      if (options.isEmpty) {
+        _showSnack('No batch stock for "${product.name}"', error: true);
+        return false;
+      }
+      if (options.length > 1) {
+        if (!mounted) return false;
+        final picked = await showBatchPickerDialog(
+          context: context,
+          productName: product.name,
+          options: options,
+        );
+        if (picked == null) return false;
+        resolved = product.copyWith(
+          productBatchId: picked.batchId,
+          batchNo: picked.batchNo,
+          warehouseQty: picked.qty,
+        );
+      } else {
+        final only = options.first;
+        resolved = product.copyWith(
+          productBatchId: only.batchId,
+          batchNo: only.batchNo,
+          warehouseQty: only.qty,
+        );
+      }
+    }
+
     final inCart = checkoutQtyForProduct(
       _checkout.lines,
-      productId: product.productId,
-      variantId: product.variantId,
+      productId: resolved.productId,
+      variantId: resolved.variantId,
+      productBatchId: resolved.productBatchId,
     );
+
+    var addQty = qty;
+    double unitDiscount = 0;
+
+    if (ref.read(posUiSettingsProvider).enableAddItemModal) {
+      if (!mounted) return false;
+
+      final entry = await showAddItemEntryDialog(
+        context: context,
+        product: resolved,
+        availableStock: resolved.warehouseQty,
+      );
+      if (entry == null) return false;
+      addQty = entry.qty;
+      unitDiscount = entry.unitDiscount;
+    }
+
     final message = stockLimitMessage(
-      productName: product.name,
-      available: product.warehouseQty,
-      requested: inCart + qty,
+      productName: resolved.name,
+      available: resolved.warehouseQty,
+      requested: inCart + addQty,
     );
     if (message != null) {
       _showSnack(message, error: true);
       return false;
     }
 
-    _setCheckout(_checkout.addProduct(CartLine(
-      productId: product.productId,
-      variantId: product.variantId,
-      code: product.code,
-      name: product.name,
-      netUnitPrice: product.price,
-      taxRate: product.taxRate,
-      taxMethod: product.taxMethod,
-      qty: qty,
-      stockQty: product.warehouseQty,
-    )));
+    final draft = CartLine(
+      productId: resolved.productId,
+      variantId: resolved.variantId,
+      productBatchId: resolved.productBatchId,
+      batchNo: resolved.batchNo,
+      code: resolved.code,
+      name: resolved.name,
+      netUnitPrice: resolved.price,
+      taxRate: resolved.taxRate,
+      taxMethod: resolved.taxMethod,
+      qty: addQty,
+      stockQty: resolved.warehouseQty,
+    );
+
+    final line = unitDiscount > 0
+        ? applyCartLineEdit(
+            line: draft,
+            qty: addQty,
+            unitDiscount: unitDiscount,
+            rowUnitPrice: resolved.price,
+            taxRate: resolved.taxRate,
+            taxMethod: resolved.taxMethod,
+            saleUnit: draft.saleUnit,
+          )
+        : draft;
+
+    _setCheckout(_checkout.addProduct(line));
     return true;
+  }
+
+  void _applyDiscountEntryResult(DiscountEntryResult result) {
+    var next = _checkout.copyWith(
+      orderDiscountType: result.orderDiscountType,
+      orderDiscountValue: result.orderDiscountValue,
+    );
+
+    if (result.couponCleared) {
+      next = next.copyWith(clearCoupon: true);
+    } else if (result.couponCode != null && result.couponCode!.isNotEmpty) {
+      next = next.copyWith(
+        couponCode: result.couponCode,
+        couponId: result.couponId,
+        couponDiscount: result.couponDiscount,
+      );
+    }
+
+    _setCheckout(next);
   }
 
   Future<void> _updateCartLine(
@@ -583,6 +680,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
           warehouseId: warehouseId,
           productId: updated.productId,
           variantId: updated.variantId,
+          productBatchId: updated.productBatchId,
         );
     if (!mounted) return;
 
@@ -590,6 +688,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       checkout.lines,
       productId: updated.productId,
       variantId: updated.variantId,
+      productBatchId: updated.productBatchId,
       excludeLineKey: updated.lineKey,
     );
     final message = stockLimitMessage(
@@ -669,6 +768,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
           warehouseId: warehouseId,
           productId: line.productId,
           variantId: line.variantId,
+          productBatchId: line.productBatchId,
         );
     if (!mounted) return;
 
@@ -676,6 +776,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       checkout.lines,
       productId: line.productId,
       variantId: line.variantId,
+      productBatchId: line.productBatchId,
       excludeLineKey: line.lineKey,
     );
     final message = stockLimitMessage(
@@ -704,29 +805,24 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
   Future<String?> _validateCheckoutStock(int warehouseId) async {
     final repo = ref.read(productLookupRepositoryProvider);
-    final totals = <String, ({int productId, int? variantId, String name, double qty})>{};
 
     for (final line in _checkout.lines) {
-      final key = '${line.productId}_${line.variantId ?? 0}';
-      final existing = totals[key];
-      totals[key] = (
-        productId: line.productId,
-        variantId: line.variantId,
-        name: line.name,
-        qty: (existing?.qty ?? 0) + line.qty,
-      );
-    }
-
-    for (final entry in totals.values) {
       final available = await repo.getWarehouseQty(
         warehouseId: warehouseId,
-        productId: entry.productId,
-        variantId: entry.variantId,
+        productId: line.productId,
+        variantId: line.variantId,
+        productBatchId: line.productBatchId,
+      );
+      final inCart = checkoutQtyForProduct(
+        _checkout.lines,
+        productId: line.productId,
+        variantId: line.variantId,
+        productBatchId: line.productBatchId,
       );
       final message = stockLimitMessage(
-        productName: entry.name,
+        productName: line.name,
         available: available,
-        requested: entry.qty,
+        requested: inCart,
       );
       if (message != null) return message;
     }
@@ -738,10 +834,19 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
   void _focusEntryField() {
     if (!mounted) return;
-    _searchFocus.requestFocus();
-    if (ref.read(posCatalogEntryModeProvider) == PosCatalogEntryMode.barcode) {
+    final isSearch =
+        ref.read(posCatalogEntryModeProvider) == PosCatalogEntryMode.search;
+    if (!isSearch) {
+      _searchFocus.requestFocus();
       SystemChannels.textInput.invokeMethod('TextInput.hide');
+      return;
     }
+    // Refocus so PosTouchTextField re-attaches keyboard after leaving barcode mode.
+    _searchFocus.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _searchFocus.requestFocus();
+    });
   }
 
   void _clearEntryField({bool refocus = true}) {
@@ -766,6 +871,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
       SystemChannels.textInput.invokeMethod('TextInput.hide');
     }
     _clearEntryField();
+    if (next == PosCatalogEntryMode.search) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusEntryField();
+      });
+    }
   }
 
   void _onEntryChanged(String value) {
@@ -821,8 +931,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
   }
 
   void _pickSearchResult(ScannedProduct product) {
-    if (!_tryAddToCart(product)) return;
-    _clearEntryField();
+    unawaited(_tryAddToCart(product).then((added) {
+      if (added && mounted) _clearEntryField();
+    }));
   }
 
   Future<void> _handleBarcodeSubmit([String? codeOverride]) async {
@@ -856,7 +967,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         return;
       }
 
-      if (_tryAddToCart(product)) {
+      if (await _tryAddToCart(product)) {
         _clearEntryField();
       }
     } catch (e) {
@@ -1082,6 +1193,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
     try {
       await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
             resource: 'product_stock',
+            deviceId: session.deviceId,
+            warehouseId: warehouseId,
+          );
+      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
+            resource: 'product_batches',
             deviceId: session.deviceId,
             warehouseId: warehouseId,
           );
@@ -1545,22 +1661,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
     if (result == null || !mounted) return;
 
-    var next = _checkout.copyWith(
-      orderDiscountType: result.orderDiscountType,
-      orderDiscountValue: result.orderDiscountValue,
-    );
-
-    if (result.couponCleared) {
-      next = next.copyWith(clearCoupon: true);
-    } else if (result.couponCode != null && result.couponCode!.isNotEmpty) {
-      next = next.copyWith(
-        couponCode: result.couponCode,
-        couponId: result.couponId,
-        couponDiscount: result.couponDiscount,
-      );
-    }
-
-    _setCheckout(next);
+    _applyDiscountEntryResult(result);
   }
 
   Future<void> _showCouponModal() async {
@@ -1609,6 +1710,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     await showPosDialog<void>(
       context: context,
       builder: (ctx) => PosTouchKeyboardHost(
+        expand: false,
         child: PosProfessionalDialogShell(
           title: 'Shipping cost',
           subtitle: 'Add delivery charge to this sale',
@@ -1921,8 +2023,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final host = PosTouchKeyboardHost(
       child: CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyS, shift: true): () =>
-            _searchFocus.requestFocus(),
+        const SingleActivator(LogicalKeyboardKey.keyS, shift: true): () {
+            _setEntryMode(PosCatalogEntryMode.search);
+            _focusEntryField();
+          },
         const SingleActivator(LogicalKeyboardKey.keyC, shift: true): () {
             unawaited(_pickCustomer());
           },
@@ -2055,7 +2159,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                                   delegate: SliverChildBuilderDelegate(
                                     (context, i) => PosProductCard(
                                       product: products[i],
-                                      onTap: () => _tryAddToCart(products[i]),
+                                      onTap: () => unawaited(_tryAddToCart(products[i])),
                                     ),
                                     childCount: products.length,
                                     addAutomaticKeepAlives: false,
@@ -2170,11 +2274,19 @@ class _PosScreenState extends ConsumerState<PosScreen>
                     TextButton.icon(
                       onPressed:
                           checkout.isEmpty || _busy ? null : _clearCart,
-                      icon: const Icon(Icons.delete_outline, size: 18),
+                      icon: const Icon(Icons.delete_outline, size: 20),
                       label: const Text('Clear'),
                       style: TextButton.styleFrom(
                         foregroundColor: PosColors.red,
-                        textStyle: TextStyle(fontWeight: FontWeight.w700),
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],

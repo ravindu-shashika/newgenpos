@@ -70,6 +70,11 @@ class PosPendingSyncActions {
             deviceId: session.deviceId,
             warehouseId: warehouseId,
           );
+      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
+            resource: 'product_batches',
+            deviceId: session.deviceId,
+            warehouseId: warehouseId,
+          );
       reloadProductGrid(ref);
     } catch (_) {}
   }

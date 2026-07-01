@@ -154,6 +154,7 @@ class Products extends Table {
   IntColumn get id => integer()();
   TextColumn get name => text()();
   TextColumn get code => text()();
+  TextColumn get altCode => text().nullable()();
   TextColumn get type => text().withDefault(const Constant('standard'))();
   IntColumn get brandId => integer().nullable()();
   IntColumn get categoryId => integer().nullable()();
@@ -161,6 +162,7 @@ class Products extends Table {
   IntColumn get saleUnitId => integer().nullable()();
   RealColumn get cost => real().withDefault(const Constant(0))();
   RealColumn get price => real().withDefault(const Constant(0))();
+  RealColumn get maxPrice => real().nullable()();
   RealColumn get wholesalePrice => real().withDefault(const Constant(0))();
   IntColumn get taxId => integer().nullable()();
   IntColumn get taxMethod => integer().withDefault(const Constant(1))();
@@ -182,6 +184,18 @@ class ProductVariants extends Table {
   IntColumn get variantId => integer().nullable()();
   TextColumn get itemCode => text()();
   RealColumn get additionalPrice => real().withDefault(const Constant(0))();
+  TextColumn get updatedAt => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class ProductBatches extends Table {
+  IntColumn get id => integer()();
+  IntColumn get productId => integer()();
+  TextColumn get batchNo => text()();
+  TextColumn get expiredDate => text().nullable()();
+  RealColumn get qty => real().withDefault(const Constant(0))();
   TextColumn get updatedAt => text().nullable()();
 
   @override

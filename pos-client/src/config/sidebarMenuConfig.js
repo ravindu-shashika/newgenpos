@@ -236,7 +236,7 @@ export const SIDEBAR_MENU = [
       { label: 'POS Settings', path: '/setting/pos_setting', permission: 'pos_setting', controller: 'pos-settings' },
       { label: 'POS Terminals', path: '/terminals', permission: 'terminals-index', controller: 'terminals' },
       { label: 'HRM Setting', path: '/setting/hrm_setting', permission: 'hrm_setting', controller: 'hrm-settings' },
-      { label: 'Barcode Settings', path: '/barcodes', permission: 'barcode_setting', controller: 'barcode-settings' },
+      { label: 'Barcode Templates', path: '/barcodes', permission: 'barcode_setting', controller: 'barcode-settings' },
       { label: 'Languages', path: '/languages', permission: 'language_setting', controller: 'languages' },
     ],
   },

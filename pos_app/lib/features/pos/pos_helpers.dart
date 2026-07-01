@@ -72,6 +72,7 @@ double checkoutQtyForProduct(
   List<CartLine> lines, {
   required int productId,
   int? variantId,
+  int? productBatchId,
   String? excludeLineKey,
 }) {
   return lines
@@ -79,6 +80,7 @@ double checkoutQtyForProduct(
         (l) =>
             l.productId == productId &&
             l.variantId == variantId &&
+            (productBatchId == null || l.productBatchId == productBatchId) &&
             l.lineKey != excludeLineKey,
       )
       .fold<double>(0, (sum, l) => sum + l.qty);

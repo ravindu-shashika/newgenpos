@@ -112,6 +112,7 @@ class LocalSaleRepository {
               localSaleId: saleId,
               productId: line.productId,
               variantId: Value(line.variantId),
+              productBatchId: Value(line.productBatchId),
               code: Value(line.code),
               name: Value(line.name),
               qty: line.qty,
@@ -143,11 +144,12 @@ class LocalSaleRepository {
             s.productId.equals(line.productId))
         ..orderBy([(s) => OrderingTerm.asc(s.id)]);
 
-      if (line.variantId != null) {
+      if (line.productBatchId != null) {
+        query.where((s) => s.productBatchId.equals(line.productBatchId!));
+      } else if (line.variantId != null) {
         query.where((s) => s.variantId.equals(line.variantId!));
       }
 
-      // Legacy Product_Warehouse::FindProductWithoutVariant uses first row for product+warehouse.
       final stock = await (query..limit(1)).getSingleOrNull();
       if (stock == null) continue;
 

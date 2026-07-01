@@ -15,5 +15,23 @@ class Barcode extends Model
         'is_continuous' => 'boolean',
         'is_default' => 'boolean',
         'is_custom' => 'boolean',
+        'print_options' => 'array',
     ];
+
+    public static function defaultPrintOptions(): array
+    {
+        return [
+            'layout' => 'zebra',
+            'business_name' => true,
+            'business_name_size' => 13,
+            'name' => true,
+            'name_size' => 12,
+            'brand_name' => false,
+            'brand_name_size' => 12,
+            'price' => true,
+            'price_size' => 12,
+            'promo_price' => false,
+            'promo_price_size' => 15,
+        ];
+    }
 }

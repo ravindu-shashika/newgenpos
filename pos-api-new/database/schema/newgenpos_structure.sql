@@ -109,6 +109,7 @@ CREATE TABLE `barcodes` (
   `is_continuous` tinyint(1) NOT NULL DEFAULT '0',
   `stickers_in_one_sheet` int DEFAULT NULL,
   `is_custom` int DEFAULT NULL,
+  `print_options` json DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
@@ -1500,6 +1501,7 @@ CREATE TABLE `product_adjustments` (
   `unit_cost` double DEFAULT NULL,
   `qty` double NOT NULL,
   `action` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_delete` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`)
@@ -1818,6 +1820,7 @@ CREATE TABLE `products` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `code` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `alt_code` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `type` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `barcode_symbology` varchar(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `brand_id` int DEFAULT NULL,
@@ -1827,6 +1830,7 @@ CREATE TABLE `products` (
   `sale_unit_id` int NOT NULL,
   `cost` double NOT NULL,
   `price` double NOT NULL,
+  `max_price` double DEFAULT NULL,
   `profit_margin` decimal(8,2) NOT NULL DEFAULT '0.00',
   `profit_margin_type` enum('flat','percentage') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'percentage',
   `wholesale_price` double DEFAULT NULL,

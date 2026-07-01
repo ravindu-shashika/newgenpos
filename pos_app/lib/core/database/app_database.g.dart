@@ -4415,6 +4415,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> code = GeneratedColumn<String>(
       'code', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _altCodeMeta =
+      const VerificationMeta('altCode');
+  @override
+  late final GeneratedColumn<String> altCode = GeneratedColumn<String>(
+      'alt_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
   late final GeneratedColumn<String> type = GeneratedColumn<String>(
@@ -4459,6 +4465,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       type: DriftSqlType.double,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _maxPriceMeta =
+      const VerificationMeta('maxPrice');
+  @override
+  late final GeneratedColumn<double> maxPrice = GeneratedColumn<double>(
+      'max_price', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _wholesalePriceMeta =
       const VerificationMeta('wholesalePrice');
   @override
@@ -4543,6 +4555,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         id,
         name,
         code,
+        altCode,
         type,
         brandId,
         categoryId,
@@ -4550,6 +4563,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         saleUnitId,
         cost,
         price,
+        maxPrice,
         wholesalePrice,
         taxId,
         taxMethod,
@@ -4586,6 +4600,10 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     } else if (isInserting) {
       context.missing(_codeMeta);
     }
+    if (data.containsKey('alt_code')) {
+      context.handle(_altCodeMeta,
+          altCode.isAcceptableOrUnknown(data['alt_code']!, _altCodeMeta));
+    }
     if (data.containsKey('type')) {
       context.handle(
           _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
@@ -4617,6 +4635,10 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     if (data.containsKey('price')) {
       context.handle(
           _priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));
+    }
+    if (data.containsKey('max_price')) {
+      context.handle(_maxPriceMeta,
+          maxPrice.isAcceptableOrUnknown(data['max_price']!, _maxPriceMeta));
     }
     if (data.containsKey('wholesale_price')) {
       context.handle(
@@ -4675,6 +4697,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
       code: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}code'])!,
+      altCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}alt_code']),
       type: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
       brandId: attachedDatabase.typeMapping
@@ -4689,6 +4713,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.double, data['${effectivePrefix}cost'])!,
       price: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}price'])!,
+      maxPrice: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}max_price']),
       wholesalePrice: attachedDatabase.typeMapping.read(
           DriftSqlType.double, data['${effectivePrefix}wholesale_price'])!,
       taxId: attachedDatabase.typeMapping
@@ -4722,6 +4748,7 @@ class Product extends DataClass implements Insertable<Product> {
   final int id;
   final String name;
   final String code;
+  final String? altCode;
   final String type;
   final int? brandId;
   final int? categoryId;
@@ -4729,6 +4756,7 @@ class Product extends DataClass implements Insertable<Product> {
   final int? saleUnitId;
   final double cost;
   final double price;
+  final double? maxPrice;
   final double wholesalePrice;
   final int? taxId;
   final int taxMethod;
@@ -4743,6 +4771,7 @@ class Product extends DataClass implements Insertable<Product> {
       {required this.id,
       required this.name,
       required this.code,
+      this.altCode,
       required this.type,
       this.brandId,
       this.categoryId,
@@ -4750,6 +4779,7 @@ class Product extends DataClass implements Insertable<Product> {
       this.saleUnitId,
       required this.cost,
       required this.price,
+      this.maxPrice,
       required this.wholesalePrice,
       this.taxId,
       required this.taxMethod,
@@ -4766,6 +4796,9 @@ class Product extends DataClass implements Insertable<Product> {
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
     map['code'] = Variable<String>(code);
+    if (!nullToAbsent || altCode != null) {
+      map['alt_code'] = Variable<String>(altCode);
+    }
     map['type'] = Variable<String>(type);
     if (!nullToAbsent || brandId != null) {
       map['brand_id'] = Variable<int>(brandId);
@@ -4781,6 +4814,9 @@ class Product extends DataClass implements Insertable<Product> {
     }
     map['cost'] = Variable<double>(cost);
     map['price'] = Variable<double>(price);
+    if (!nullToAbsent || maxPrice != null) {
+      map['max_price'] = Variable<double>(maxPrice);
+    }
     map['wholesale_price'] = Variable<double>(wholesalePrice);
     if (!nullToAbsent || taxId != null) {
       map['tax_id'] = Variable<int>(taxId);
@@ -4805,6 +4841,9 @@ class Product extends DataClass implements Insertable<Product> {
       id: Value(id),
       name: Value(name),
       code: Value(code),
+      altCode: altCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(altCode),
       type: Value(type),
       brandId: brandId == null && nullToAbsent
           ? const Value.absent()
@@ -4819,6 +4858,9 @@ class Product extends DataClass implements Insertable<Product> {
           : Value(saleUnitId),
       cost: Value(cost),
       price: Value(price),
+      maxPrice: maxPrice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxPrice),
       wholesalePrice: Value(wholesalePrice),
       taxId:
           taxId == null && nullToAbsent ? const Value.absent() : Value(taxId),
@@ -4843,6 +4885,7 @@ class Product extends DataClass implements Insertable<Product> {
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       code: serializer.fromJson<String>(json['code']),
+      altCode: serializer.fromJson<String?>(json['altCode']),
       type: serializer.fromJson<String>(json['type']),
       brandId: serializer.fromJson<int?>(json['brandId']),
       categoryId: serializer.fromJson<int?>(json['categoryId']),
@@ -4850,6 +4893,7 @@ class Product extends DataClass implements Insertable<Product> {
       saleUnitId: serializer.fromJson<int?>(json['saleUnitId']),
       cost: serializer.fromJson<double>(json['cost']),
       price: serializer.fromJson<double>(json['price']),
+      maxPrice: serializer.fromJson<double?>(json['maxPrice']),
       wholesalePrice: serializer.fromJson<double>(json['wholesalePrice']),
       taxId: serializer.fromJson<int?>(json['taxId']),
       taxMethod: serializer.fromJson<int>(json['taxMethod']),
@@ -4869,6 +4913,7 @@ class Product extends DataClass implements Insertable<Product> {
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
       'code': serializer.toJson<String>(code),
+      'altCode': serializer.toJson<String?>(altCode),
       'type': serializer.toJson<String>(type),
       'brandId': serializer.toJson<int?>(brandId),
       'categoryId': serializer.toJson<int?>(categoryId),
@@ -4876,6 +4921,7 @@ class Product extends DataClass implements Insertable<Product> {
       'saleUnitId': serializer.toJson<int?>(saleUnitId),
       'cost': serializer.toJson<double>(cost),
       'price': serializer.toJson<double>(price),
+      'maxPrice': serializer.toJson<double?>(maxPrice),
       'wholesalePrice': serializer.toJson<double>(wholesalePrice),
       'taxId': serializer.toJson<int?>(taxId),
       'taxMethod': serializer.toJson<int>(taxMethod),
@@ -4893,6 +4939,7 @@ class Product extends DataClass implements Insertable<Product> {
           {int? id,
           String? name,
           String? code,
+          Value<String?> altCode = const Value.absent(),
           String? type,
           Value<int?> brandId = const Value.absent(),
           Value<int?> categoryId = const Value.absent(),
@@ -4900,6 +4947,7 @@ class Product extends DataClass implements Insertable<Product> {
           Value<int?> saleUnitId = const Value.absent(),
           double? cost,
           double? price,
+          Value<double?> maxPrice = const Value.absent(),
           double? wholesalePrice,
           Value<int?> taxId = const Value.absent(),
           int? taxMethod,
@@ -4914,6 +4962,7 @@ class Product extends DataClass implements Insertable<Product> {
         id: id ?? this.id,
         name: name ?? this.name,
         code: code ?? this.code,
+        altCode: altCode.present ? altCode.value : this.altCode,
         type: type ?? this.type,
         brandId: brandId.present ? brandId.value : this.brandId,
         categoryId: categoryId.present ? categoryId.value : this.categoryId,
@@ -4921,6 +4970,7 @@ class Product extends DataClass implements Insertable<Product> {
         saleUnitId: saleUnitId.present ? saleUnitId.value : this.saleUnitId,
         cost: cost ?? this.cost,
         price: price ?? this.price,
+        maxPrice: maxPrice.present ? maxPrice.value : this.maxPrice,
         wholesalePrice: wholesalePrice ?? this.wholesalePrice,
         taxId: taxId.present ? taxId.value : this.taxId,
         taxMethod: taxMethod ?? this.taxMethod,
@@ -4937,6 +4987,7 @@ class Product extends DataClass implements Insertable<Product> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       code: data.code.present ? data.code.value : this.code,
+      altCode: data.altCode.present ? data.altCode.value : this.altCode,
       type: data.type.present ? data.type.value : this.type,
       brandId: data.brandId.present ? data.brandId.value : this.brandId,
       categoryId:
@@ -4946,6 +4997,7 @@ class Product extends DataClass implements Insertable<Product> {
           data.saleUnitId.present ? data.saleUnitId.value : this.saleUnitId,
       cost: data.cost.present ? data.cost.value : this.cost,
       price: data.price.present ? data.price.value : this.price,
+      maxPrice: data.maxPrice.present ? data.maxPrice.value : this.maxPrice,
       wholesalePrice: data.wholesalePrice.present
           ? data.wholesalePrice.value
           : this.wholesalePrice,
@@ -4967,6 +5019,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('code: $code, ')
+          ..write('altCode: $altCode, ')
           ..write('type: $type, ')
           ..write('brandId: $brandId, ')
           ..write('categoryId: $categoryId, ')
@@ -4974,6 +5027,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('saleUnitId: $saleUnitId, ')
           ..write('cost: $cost, ')
           ..write('price: $price, ')
+          ..write('maxPrice: $maxPrice, ')
           ..write('wholesalePrice: $wholesalePrice, ')
           ..write('taxId: $taxId, ')
           ..write('taxMethod: $taxMethod, ')
@@ -4989,27 +5043,30 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      name,
-      code,
-      type,
-      brandId,
-      categoryId,
-      unitId,
-      saleUnitId,
-      cost,
-      price,
-      wholesalePrice,
-      taxId,
-      taxMethod,
-      image,
-      isVariant,
-      isBatch,
-      isImei,
-      isEmbeded,
-      featured,
-      updatedAt);
+  int get hashCode => Object.hashAll([
+        id,
+        name,
+        code,
+        altCode,
+        type,
+        brandId,
+        categoryId,
+        unitId,
+        saleUnitId,
+        cost,
+        price,
+        maxPrice,
+        wholesalePrice,
+        taxId,
+        taxMethod,
+        image,
+        isVariant,
+        isBatch,
+        isImei,
+        isEmbeded,
+        featured,
+        updatedAt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5017,6 +5074,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.id == this.id &&
           other.name == this.name &&
           other.code == this.code &&
+          other.altCode == this.altCode &&
           other.type == this.type &&
           other.brandId == this.brandId &&
           other.categoryId == this.categoryId &&
@@ -5024,6 +5082,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.saleUnitId == this.saleUnitId &&
           other.cost == this.cost &&
           other.price == this.price &&
+          other.maxPrice == this.maxPrice &&
           other.wholesalePrice == this.wholesalePrice &&
           other.taxId == this.taxId &&
           other.taxMethod == this.taxMethod &&
@@ -5040,6 +5099,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int> id;
   final Value<String> name;
   final Value<String> code;
+  final Value<String?> altCode;
   final Value<String> type;
   final Value<int?> brandId;
   final Value<int?> categoryId;
@@ -5047,6 +5107,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<int?> saleUnitId;
   final Value<double> cost;
   final Value<double> price;
+  final Value<double?> maxPrice;
   final Value<double> wholesalePrice;
   final Value<int?> taxId;
   final Value<int> taxMethod;
@@ -5061,6 +5122,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.code = const Value.absent(),
+    this.altCode = const Value.absent(),
     this.type = const Value.absent(),
     this.brandId = const Value.absent(),
     this.categoryId = const Value.absent(),
@@ -5068,6 +5130,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.saleUnitId = const Value.absent(),
     this.cost = const Value.absent(),
     this.price = const Value.absent(),
+    this.maxPrice = const Value.absent(),
     this.wholesalePrice = const Value.absent(),
     this.taxId = const Value.absent(),
     this.taxMethod = const Value.absent(),
@@ -5083,6 +5146,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.id = const Value.absent(),
     required String name,
     required String code,
+    this.altCode = const Value.absent(),
     this.type = const Value.absent(),
     this.brandId = const Value.absent(),
     this.categoryId = const Value.absent(),
@@ -5090,6 +5154,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.saleUnitId = const Value.absent(),
     this.cost = const Value.absent(),
     this.price = const Value.absent(),
+    this.maxPrice = const Value.absent(),
     this.wholesalePrice = const Value.absent(),
     this.taxId = const Value.absent(),
     this.taxMethod = const Value.absent(),
@@ -5106,6 +5171,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? id,
     Expression<String>? name,
     Expression<String>? code,
+    Expression<String>? altCode,
     Expression<String>? type,
     Expression<int>? brandId,
     Expression<int>? categoryId,
@@ -5113,6 +5179,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? saleUnitId,
     Expression<double>? cost,
     Expression<double>? price,
+    Expression<double>? maxPrice,
     Expression<double>? wholesalePrice,
     Expression<int>? taxId,
     Expression<int>? taxMethod,
@@ -5128,6 +5195,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (code != null) 'code': code,
+      if (altCode != null) 'alt_code': altCode,
       if (type != null) 'type': type,
       if (brandId != null) 'brand_id': brandId,
       if (categoryId != null) 'category_id': categoryId,
@@ -5135,6 +5203,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (saleUnitId != null) 'sale_unit_id': saleUnitId,
       if (cost != null) 'cost': cost,
       if (price != null) 'price': price,
+      if (maxPrice != null) 'max_price': maxPrice,
       if (wholesalePrice != null) 'wholesale_price': wholesalePrice,
       if (taxId != null) 'tax_id': taxId,
       if (taxMethod != null) 'tax_method': taxMethod,
@@ -5152,6 +5221,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       {Value<int>? id,
       Value<String>? name,
       Value<String>? code,
+      Value<String?>? altCode,
       Value<String>? type,
       Value<int?>? brandId,
       Value<int?>? categoryId,
@@ -5159,6 +5229,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<int?>? saleUnitId,
       Value<double>? cost,
       Value<double>? price,
+      Value<double?>? maxPrice,
       Value<double>? wholesalePrice,
       Value<int?>? taxId,
       Value<int>? taxMethod,
@@ -5173,6 +5244,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       id: id ?? this.id,
       name: name ?? this.name,
       code: code ?? this.code,
+      altCode: altCode ?? this.altCode,
       type: type ?? this.type,
       brandId: brandId ?? this.brandId,
       categoryId: categoryId ?? this.categoryId,
@@ -5180,6 +5252,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       saleUnitId: saleUnitId ?? this.saleUnitId,
       cost: cost ?? this.cost,
       price: price ?? this.price,
+      maxPrice: maxPrice ?? this.maxPrice,
       wholesalePrice: wholesalePrice ?? this.wholesalePrice,
       taxId: taxId ?? this.taxId,
       taxMethod: taxMethod ?? this.taxMethod,
@@ -5205,6 +5278,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (code.present) {
       map['code'] = Variable<String>(code.value);
     }
+    if (altCode.present) {
+      map['alt_code'] = Variable<String>(altCode.value);
+    }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
     }
@@ -5225,6 +5301,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     }
     if (price.present) {
       map['price'] = Variable<double>(price.value);
+    }
+    if (maxPrice.present) {
+      map['max_price'] = Variable<double>(maxPrice.value);
     }
     if (wholesalePrice.present) {
       map['wholesale_price'] = Variable<double>(wholesalePrice.value);
@@ -5265,6 +5344,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('code: $code, ')
+          ..write('altCode: $altCode, ')
           ..write('type: $type, ')
           ..write('brandId: $brandId, ')
           ..write('categoryId: $categoryId, ')
@@ -5272,6 +5352,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('saleUnitId: $saleUnitId, ')
           ..write('cost: $cost, ')
           ..write('price: $price, ')
+          ..write('maxPrice: $maxPrice, ')
           ..write('wholesalePrice: $wholesalePrice, ')
           ..write('taxId: $taxId, ')
           ..write('taxMethod: $taxMethod, ')
@@ -5619,6 +5700,342 @@ class ProductVariantsCompanion extends UpdateCompanion<ProductVariant> {
           ..write('variantId: $variantId, ')
           ..write('itemCode: $itemCode, ')
           ..write('additionalPrice: $additionalPrice, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProductBatchesTable extends ProductBatches
+    with TableInfo<$ProductBatchesTable, ProductBatche> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductBatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _batchNoMeta =
+      const VerificationMeta('batchNo');
+  @override
+  late final GeneratedColumn<String> batchNo = GeneratedColumn<String>(
+      'batch_no', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _expiredDateMeta =
+      const VerificationMeta('expiredDate');
+  @override
+  late final GeneratedColumn<String> expiredDate = GeneratedColumn<String>(
+      'expired_date', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<double> qty = GeneratedColumn<double>(
+      'qty', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+      'updated_at', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, productId, batchNo, expiredDate, qty, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_batches';
+  @override
+  VerificationContext validateIntegrity(Insertable<ProductBatche> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('batch_no')) {
+      context.handle(_batchNoMeta,
+          batchNo.isAcceptableOrUnknown(data['batch_no']!, _batchNoMeta));
+    } else if (isInserting) {
+      context.missing(_batchNoMeta);
+    }
+    if (data.containsKey('expired_date')) {
+      context.handle(
+          _expiredDateMeta,
+          expiredDate.isAcceptableOrUnknown(
+              data['expired_date']!, _expiredDateMeta));
+    }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductBatche map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductBatche(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}product_id'])!,
+      batchNo: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}batch_no'])!,
+      expiredDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}expired_date']),
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}qty'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}updated_at']),
+    );
+  }
+
+  @override
+  $ProductBatchesTable createAlias(String alias) {
+    return $ProductBatchesTable(attachedDatabase, alias);
+  }
+}
+
+class ProductBatche extends DataClass implements Insertable<ProductBatche> {
+  final int id;
+  final int productId;
+  final String batchNo;
+  final String? expiredDate;
+  final double qty;
+  final String? updatedAt;
+  const ProductBatche(
+      {required this.id,
+      required this.productId,
+      required this.batchNo,
+      this.expiredDate,
+      required this.qty,
+      this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['product_id'] = Variable<int>(productId);
+    map['batch_no'] = Variable<String>(batchNo);
+    if (!nullToAbsent || expiredDate != null) {
+      map['expired_date'] = Variable<String>(expiredDate);
+    }
+    map['qty'] = Variable<double>(qty);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<String>(updatedAt);
+    }
+    return map;
+  }
+
+  ProductBatchesCompanion toCompanion(bool nullToAbsent) {
+    return ProductBatchesCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      batchNo: Value(batchNo),
+      expiredDate: expiredDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expiredDate),
+      qty: Value(qty),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+    );
+  }
+
+  factory ProductBatche.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductBatche(
+      id: serializer.fromJson<int>(json['id']),
+      productId: serializer.fromJson<int>(json['productId']),
+      batchNo: serializer.fromJson<String>(json['batchNo']),
+      expiredDate: serializer.fromJson<String?>(json['expiredDate']),
+      qty: serializer.fromJson<double>(json['qty']),
+      updatedAt: serializer.fromJson<String?>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'productId': serializer.toJson<int>(productId),
+      'batchNo': serializer.toJson<String>(batchNo),
+      'expiredDate': serializer.toJson<String?>(expiredDate),
+      'qty': serializer.toJson<double>(qty),
+      'updatedAt': serializer.toJson<String?>(updatedAt),
+    };
+  }
+
+  ProductBatche copyWith(
+          {int? id,
+          int? productId,
+          String? batchNo,
+          Value<String?> expiredDate = const Value.absent(),
+          double? qty,
+          Value<String?> updatedAt = const Value.absent()}) =>
+      ProductBatche(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        batchNo: batchNo ?? this.batchNo,
+        expiredDate: expiredDate.present ? expiredDate.value : this.expiredDate,
+        qty: qty ?? this.qty,
+        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+      );
+  ProductBatche copyWithCompanion(ProductBatchesCompanion data) {
+    return ProductBatche(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      batchNo: data.batchNo.present ? data.batchNo.value : this.batchNo,
+      expiredDate:
+          data.expiredDate.present ? data.expiredDate.value : this.expiredDate,
+      qty: data.qty.present ? data.qty.value : this.qty,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductBatche(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('batchNo: $batchNo, ')
+          ..write('expiredDate: $expiredDate, ')
+          ..write('qty: $qty, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, productId, batchNo, expiredDate, qty, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductBatche &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.batchNo == this.batchNo &&
+          other.expiredDate == this.expiredDate &&
+          other.qty == this.qty &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ProductBatchesCompanion extends UpdateCompanion<ProductBatche> {
+  final Value<int> id;
+  final Value<int> productId;
+  final Value<String> batchNo;
+  final Value<String?> expiredDate;
+  final Value<double> qty;
+  final Value<String?> updatedAt;
+  const ProductBatchesCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.batchNo = const Value.absent(),
+    this.expiredDate = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  ProductBatchesCompanion.insert({
+    this.id = const Value.absent(),
+    required int productId,
+    required String batchNo,
+    this.expiredDate = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : productId = Value(productId),
+        batchNo = Value(batchNo);
+  static Insertable<ProductBatche> custom({
+    Expression<int>? id,
+    Expression<int>? productId,
+    Expression<String>? batchNo,
+    Expression<String>? expiredDate,
+    Expression<double>? qty,
+    Expression<String>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (batchNo != null) 'batch_no': batchNo,
+      if (expiredDate != null) 'expired_date': expiredDate,
+      if (qty != null) 'qty': qty,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  ProductBatchesCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? productId,
+      Value<String>? batchNo,
+      Value<String?>? expiredDate,
+      Value<double>? qty,
+      Value<String?>? updatedAt}) {
+    return ProductBatchesCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      batchNo: batchNo ?? this.batchNo,
+      expiredDate: expiredDate ?? this.expiredDate,
+      qty: qty ?? this.qty,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (batchNo.present) {
+      map['batch_no'] = Variable<String>(batchNo.value);
+    }
+    if (expiredDate.present) {
+      map['expired_date'] = Variable<String>(expiredDate.value);
+    }
+    if (qty.present) {
+      map['qty'] = Variable<double>(qty.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<String>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductBatchesCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('batchNo: $batchNo, ')
+          ..write('expiredDate: $expiredDate, ')
+          ..write('qty: $qty, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -10336,6 +10753,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductsTable products = $ProductsTable(this);
   late final $ProductVariantsTable productVariants =
       $ProductVariantsTable(this);
+  late final $ProductBatchesTable productBatches = $ProductBatchesTable(this);
   late final $ProductStockTable productStock = $ProductStockTable(this);
   late final $LocalCashRegistersTable localCashRegisters =
       $LocalCashRegistersTable(this);
@@ -10361,6 +10779,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         billers,
         products,
         productVariants,
+        productBatches,
         productStock,
         localCashRegisters,
         localSales,
@@ -12551,6 +12970,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   required String name,
   required String code,
+  Value<String?> altCode,
   Value<String> type,
   Value<int?> brandId,
   Value<int?> categoryId,
@@ -12558,6 +12978,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<int?> saleUnitId,
   Value<double> cost,
   Value<double> price,
+  Value<double?> maxPrice,
   Value<double> wholesalePrice,
   Value<int?> taxId,
   Value<int> taxMethod,
@@ -12573,6 +12994,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<int> id,
   Value<String> name,
   Value<String> code,
+  Value<String?> altCode,
   Value<String> type,
   Value<int?> brandId,
   Value<int?> categoryId,
@@ -12580,6 +13002,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<int?> saleUnitId,
   Value<double> cost,
   Value<double> price,
+  Value<double?> maxPrice,
   Value<double> wholesalePrice,
   Value<int?> taxId,
   Value<int> taxMethod,
@@ -12610,6 +13033,9 @@ class $$ProductsTableFilterComposer
   ColumnFilters<String> get code => $composableBuilder(
       column: $table.code, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get altCode => $composableBuilder(
+      column: $table.altCode, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get type => $composableBuilder(
       column: $table.type, builder: (column) => ColumnFilters(column));
 
@@ -12630,6 +13056,9 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<double> get price => $composableBuilder(
       column: $table.price, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get maxPrice => $composableBuilder(
+      column: $table.maxPrice, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get wholesalePrice => $composableBuilder(
       column: $table.wholesalePrice,
@@ -12681,6 +13110,9 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get code => $composableBuilder(
       column: $table.code, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get altCode => $composableBuilder(
+      column: $table.altCode, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get type => $composableBuilder(
       column: $table.type, builder: (column) => ColumnOrderings(column));
 
@@ -12701,6 +13133,9 @@ class $$ProductsTableOrderingComposer
 
   ColumnOrderings<double> get price => $composableBuilder(
       column: $table.price, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get maxPrice => $composableBuilder(
+      column: $table.maxPrice, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get wholesalePrice => $composableBuilder(
       column: $table.wholesalePrice,
@@ -12752,6 +13187,9 @@ class $$ProductsTableAnnotationComposer
   GeneratedColumn<String> get code =>
       $composableBuilder(column: $table.code, builder: (column) => column);
 
+  GeneratedColumn<String> get altCode =>
+      $composableBuilder(column: $table.altCode, builder: (column) => column);
+
   GeneratedColumn<String> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
 
@@ -12772,6 +13210,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<double> get price =>
       $composableBuilder(column: $table.price, builder: (column) => column);
+
+  GeneratedColumn<double> get maxPrice =>
+      $composableBuilder(column: $table.maxPrice, builder: (column) => column);
 
   GeneratedColumn<double> get wholesalePrice => $composableBuilder(
       column: $table.wholesalePrice, builder: (column) => column);
@@ -12830,6 +13271,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<String> code = const Value.absent(),
+            Value<String?> altCode = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<int?> brandId = const Value.absent(),
             Value<int?> categoryId = const Value.absent(),
@@ -12837,6 +13279,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<int?> saleUnitId = const Value.absent(),
             Value<double> cost = const Value.absent(),
             Value<double> price = const Value.absent(),
+            Value<double?> maxPrice = const Value.absent(),
             Value<double> wholesalePrice = const Value.absent(),
             Value<int?> taxId = const Value.absent(),
             Value<int> taxMethod = const Value.absent(),
@@ -12852,6 +13295,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             id: id,
             name: name,
             code: code,
+            altCode: altCode,
             type: type,
             brandId: brandId,
             categoryId: categoryId,
@@ -12859,6 +13303,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             saleUnitId: saleUnitId,
             cost: cost,
             price: price,
+            maxPrice: maxPrice,
             wholesalePrice: wholesalePrice,
             taxId: taxId,
             taxMethod: taxMethod,
@@ -12874,6 +13319,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             required String name,
             required String code,
+            Value<String?> altCode = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<int?> brandId = const Value.absent(),
             Value<int?> categoryId = const Value.absent(),
@@ -12881,6 +13327,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<int?> saleUnitId = const Value.absent(),
             Value<double> cost = const Value.absent(),
             Value<double> price = const Value.absent(),
+            Value<double?> maxPrice = const Value.absent(),
             Value<double> wholesalePrice = const Value.absent(),
             Value<int?> taxId = const Value.absent(),
             Value<int> taxMethod = const Value.absent(),
@@ -12896,6 +13343,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             id: id,
             name: name,
             code: code,
+            altCode: altCode,
             type: type,
             brandId: brandId,
             categoryId: categoryId,
@@ -12903,6 +13351,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             saleUnitId: saleUnitId,
             cost: cost,
             price: price,
+            maxPrice: maxPrice,
             wholesalePrice: wholesalePrice,
             taxId: taxId,
             taxMethod: taxMethod,
@@ -13117,6 +13566,189 @@ typedef $$ProductVariantsTableProcessedTableManager = ProcessedTableManager<
       BaseReferences<_$AppDatabase, $ProductVariantsTable, ProductVariant>
     ),
     ProductVariant,
+    PrefetchHooks Function()>;
+typedef $$ProductBatchesTableCreateCompanionBuilder = ProductBatchesCompanion
+    Function({
+  Value<int> id,
+  required int productId,
+  required String batchNo,
+  Value<String?> expiredDate,
+  Value<double> qty,
+  Value<String?> updatedAt,
+});
+typedef $$ProductBatchesTableUpdateCompanionBuilder = ProductBatchesCompanion
+    Function({
+  Value<int> id,
+  Value<int> productId,
+  Value<String> batchNo,
+  Value<String?> expiredDate,
+  Value<double> qty,
+  Value<String?> updatedAt,
+});
+
+class $$ProductBatchesTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductBatchesTable> {
+  $$ProductBatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get batchNo => $composableBuilder(
+      column: $table.batchNo, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get expiredDate => $composableBuilder(
+      column: $table.expiredDate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ProductBatchesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductBatchesTable> {
+  $$ProductBatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get batchNo => $composableBuilder(
+      column: $table.batchNo, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get expiredDate => $composableBuilder(
+      column: $table.expiredDate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ProductBatchesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductBatchesTable> {
+  $$ProductBatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<String> get batchNo =>
+      $composableBuilder(column: $table.batchNo, builder: (column) => column);
+
+  GeneratedColumn<String> get expiredDate => $composableBuilder(
+      column: $table.expiredDate, builder: (column) => column);
+
+  GeneratedColumn<double> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
+
+  GeneratedColumn<String> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ProductBatchesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProductBatchesTable,
+    ProductBatche,
+    $$ProductBatchesTableFilterComposer,
+    $$ProductBatchesTableOrderingComposer,
+    $$ProductBatchesTableAnnotationComposer,
+    $$ProductBatchesTableCreateCompanionBuilder,
+    $$ProductBatchesTableUpdateCompanionBuilder,
+    (
+      ProductBatche,
+      BaseReferences<_$AppDatabase, $ProductBatchesTable, ProductBatche>
+    ),
+    ProductBatche,
+    PrefetchHooks Function()> {
+  $$ProductBatchesTableTableManager(
+      _$AppDatabase db, $ProductBatchesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductBatchesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductBatchesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductBatchesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> productId = const Value.absent(),
+            Value<String> batchNo = const Value.absent(),
+            Value<String?> expiredDate = const Value.absent(),
+            Value<double> qty = const Value.absent(),
+            Value<String?> updatedAt = const Value.absent(),
+          }) =>
+              ProductBatchesCompanion(
+            id: id,
+            productId: productId,
+            batchNo: batchNo,
+            expiredDate: expiredDate,
+            qty: qty,
+            updatedAt: updatedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int productId,
+            required String batchNo,
+            Value<String?> expiredDate = const Value.absent(),
+            Value<double> qty = const Value.absent(),
+            Value<String?> updatedAt = const Value.absent(),
+          }) =>
+              ProductBatchesCompanion.insert(
+            id: id,
+            productId: productId,
+            batchNo: batchNo,
+            expiredDate: expiredDate,
+            qty: qty,
+            updatedAt: updatedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ProductBatchesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ProductBatchesTable,
+    ProductBatche,
+    $$ProductBatchesTableFilterComposer,
+    $$ProductBatchesTableOrderingComposer,
+    $$ProductBatchesTableAnnotationComposer,
+    $$ProductBatchesTableCreateCompanionBuilder,
+    $$ProductBatchesTableUpdateCompanionBuilder,
+    (
+      ProductBatche,
+      BaseReferences<_$AppDatabase, $ProductBatchesTable, ProductBatche>
+    ),
+    ProductBatche,
     PrefetchHooks Function()>;
 typedef $$ProductStockTableCreateCompanionBuilder = ProductStockCompanion
     Function({
@@ -15560,6 +16192,8 @@ class $AppDatabaseManager {
       $$ProductsTableTableManager(_db, _db.products);
   $$ProductVariantsTableTableManager get productVariants =>
       $$ProductVariantsTableTableManager(_db, _db.productVariants);
+  $$ProductBatchesTableTableManager get productBatches =>
+      $$ProductBatchesTableTableManager(_db, _db.productBatches);
   $$ProductStockTableTableManager get productStock =>
       $$ProductStockTableTableManager(_db, _db.productStock);
   $$LocalCashRegistersTableTableManager get localCashRegisters =>

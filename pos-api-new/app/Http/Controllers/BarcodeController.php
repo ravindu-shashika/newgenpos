@@ -65,7 +65,21 @@ class BarcodeController extends Controller
             'is_default' => (bool) $barcode->is_default,
             'is_continuous' => (bool) $barcode->is_continuous,
             'is_custom' => (bool) $barcode->is_custom,
+            'print_options' => $this->normalizePrintOptions($barcode->print_options),
         ];
+    }
+
+    protected function normalizePrintOptions($value): array
+    {
+        if (is_string($value)) {
+            $value = json_decode($value, true);
+        }
+
+        if (! is_array($value)) {
+            return Barcode::defaultPrintOptions();
+        }
+
+        return array_merge(Barcode::defaultPrintOptions(), $value);
     }
 
     protected function prepareBarcodeInput(Request $request): array
@@ -94,6 +108,13 @@ class BarcodeController extends Controller
             $input['is_continuous'] = 0;
             $input['stickers_in_one_sheet'] = $request->input('stickers_in_one_sheet');
             $input['paper_height'] = $request->input('paper_height');
+        }
+
+        if ($request->has('print_options')) {
+            $options = $request->input('print_options');
+            $input['print_options'] = $this->normalizePrintOptions(
+                is_array($options) ? $options : json_decode((string) $options, true)
+            );
         }
 
         return $input;

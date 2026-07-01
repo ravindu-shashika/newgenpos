@@ -1092,6 +1092,18 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
+                    title: const Text('Confirm quantity on add'),
+                    subtitle: const Text(
+                      'Show qty and unit discount modal when scanning or selecting a product',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: uiSettings.enableAddItemModal,
+                    onChanged: (v) => ref
+                        .read(posUiSettingsProvider.notifier)
+                        .patch((s) => s.copyWith(enableAddItemModal: v)),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
                     title: const Text('On-screen keyboard'),
                     value: uiSettings.enableKeyboard,
                     onChanged: (v) {

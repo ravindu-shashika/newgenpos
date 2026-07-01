@@ -176,6 +176,7 @@ class CatalogRepository {
             id: Value(_int(m['id'])),
             name: m['name']?.toString() ?? '',
             code: m['code']?.toString() ?? '',
+            altCode: Value(m['alt_code']?.toString()),
             type: Value(m['type']?.toString() ?? 'standard'),
             brandId: Value(_intOrNull(m['brand_id'])),
             categoryId: Value(_intOrNull(m['category_id'])),
@@ -183,6 +184,8 @@ class CatalogRepository {
             saleUnitId: Value(_intOrNull(m['sale_unit_id'])),
             cost: Value(_dbl(m['cost'])),
             price: Value(_dbl(m['price'])),
+            maxPrice: Value(_dblOrNull(m['max_price'])),
+            wholesalePrice: Value(_dbl(m['wholesale_price'])),
             taxId: Value(_intOrNull(m['tax_id'])),
             taxMethod: Value(_int(m['tax_method'], fallback: 1)),
             image: Value(m['image']?.toString()),
@@ -208,6 +211,20 @@ class CatalogRepository {
             updatedAt: Value(m['updated_at']?.toString()),
           ),
           _db.productVariants,
+        );
+        break;
+      case 'product_batches':
+        await _upsertList(
+          rows,
+          (m) => ProductBatchesCompanion.insert(
+            id: Value(_int(m['id'])),
+            productId: _int(m['product_id']),
+            batchNo: m['batch_no']?.toString() ?? '',
+            expiredDate: Value(m['expired_date']?.toString()),
+            qty: Value(_dbl(m['qty'])),
+            updatedAt: Value(m['updated_at']?.toString()),
+          ),
+          _db.productBatches,
         );
         break;
       case 'product_stock':
@@ -320,6 +337,7 @@ class CatalogRepository {
           id: Value(_int(m['id'])),
           name: m['name']?.toString() ?? '',
           code: m['code']?.toString() ?? '',
+          altCode: Value(m['alt_code']?.toString()),
           type: Value(m['type']?.toString() ?? 'standard'),
           brandId: Value(_intOrNull(m['brand_id'])),
           categoryId: Value(_intOrNull(m['category_id'])),
@@ -327,6 +345,8 @@ class CatalogRepository {
           saleUnitId: Value(_intOrNull(m['sale_unit_id'])),
           cost: Value(_dbl(m['cost'])),
           price: Value(_dbl(m['price'])),
+          maxPrice: Value(_dblOrNull(m['max_price'])),
+          wholesalePrice: Value(_dbl(m['wholesale_price'])),
           taxId: Value(_intOrNull(m['tax_id'])),
           taxMethod: Value(_int(m['tax_method'], fallback: 1)),
           image: Value(m['image']?.toString()),
@@ -351,6 +371,19 @@ class CatalogRepository {
           updatedAt: Value(m['updated_at']?.toString()),
         ),
         _db.productVariants,
+      );
+
+      await _upsertList(
+        data['product_batches'] as List<dynamic>? ?? [],
+        (m) => ProductBatchesCompanion.insert(
+          id: Value(_int(m['id'])),
+          productId: _int(m['product_id']),
+          batchNo: m['batch_no']?.toString() ?? '',
+          expiredDate: Value(m['expired_date']?.toString()),
+          qty: Value(_dbl(m['qty'])),
+          updatedAt: Value(m['updated_at']?.toString()),
+        ),
+        _db.productBatches,
       );
 
       await _upsertList(

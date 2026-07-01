@@ -18,6 +18,7 @@ use App\Services\PosReturnService;
 use App\Services\PosReturnSettlementService;
 use App\Services\PosReturnSyncService;
 use App\Models\Product;
+use App\Models\ProductBatch;
 use App\Models\ProductVariant;
 use App\Models\Product_Warehouse;
 use App\Models\Tax;
@@ -165,8 +166,9 @@ class PosAppController extends SaleDashboardController
                 'billers' => $this->pullBillers($since),
                 'coupons' => $this->pullCoupons($since),
                 'products' => $this->pullProducts($warehouseId, $since),
-                'product_stock' => $this->pullProductStock($warehouseId, $since),
                 'product_variants' => $this->pullProductVariants($since),
+                'product_batches' => $this->pullProductBatches($warehouseId, $since),
+                'product_stock' => $this->pullProductStock($warehouseId, $since),
             ]);
         } catch (\Throwable $e) {
             report($e);
@@ -228,7 +230,9 @@ class PosAppController extends SaleDashboardController
         $products = Product::query()
             ->where('is_active', true)
             ->where(function ($q) use ($like) {
-                $q->where('name', 'LIKE', $like)->orWhere('code', 'LIKE', $like);
+                $q->where('name', 'LIKE', $like)
+                    ->orWhere('code', 'LIKE', $like)
+                    ->orWhere('alt_code', 'LIKE', $like);
             })
             ->whereIn('type', ['standard', 'combo', 'service', 'digital'])
             ->orderBy('name')
@@ -740,10 +744,22 @@ class PosAppController extends SaleDashboardController
         $this->applySince($q, $since);
 
         return $q->get([
-            'id', 'name', 'code', 'type', 'brand_id', 'category_id', 'unit_id', 'sale_unit_id',
-            'cost', 'price', 'tax_id', 'tax_method', 'image', 'is_variant', 'is_batch', 'is_imei',
+            'id', 'name', 'code', 'alt_code', 'type', 'brand_id', 'category_id', 'unit_id', 'sale_unit_id',
+            'cost', 'price', 'max_price', 'wholesale_price', 'tax_id', 'tax_method', 'image', 'is_variant', 'is_batch', 'is_imei',
             'is_embeded', 'featured', 'updated_at',
         ]);
+    }
+
+    private function pullProductBatches(int $warehouseId, ?string $since)
+    {
+        $productIds = Product_Warehouse::where('warehouse_id', $warehouseId)
+            ->distinct()
+            ->pluck('product_id');
+
+        $q = ProductBatch::query()->whereIn('product_id', $productIds);
+        $this->applySince($q, $since);
+
+        return $q->get(['id', 'product_id', 'batch_no', 'expired_date', 'qty', 'updated_at']);
     }
 
     private function pullProductStock(int $warehouseId, ?string $since)

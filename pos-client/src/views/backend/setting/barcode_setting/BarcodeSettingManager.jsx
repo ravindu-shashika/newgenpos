@@ -19,6 +19,11 @@ import {
 import { api } from '../../../../services';
 import authStore from '../../../../stores/authStore';
 import usePermissions from '../../../../stores/usePermissions';
+import {
+    DEFAULT_BARCODE_PRINT_OPTIONS,
+    ZEBRA_80MM_PRESET,
+    normalizeBarcodePrintOptions,
+} from '../../../../utils/barcodeTemplateDefaults';
 
 const PAGE_SIZES = [10, 25, 50];
 
@@ -37,6 +42,7 @@ const EMPTY_FORM = {
     col_distance: '0',
     is_continuous: false,
     is_default: false,
+    print_options: { ...DEFAULT_BARCODE_PRINT_OPTIONS },
 };
 
 function hasBarcodeAccess(permissions) {
@@ -85,6 +91,38 @@ const BarcodeSettingManager = ({ controllerName }) => {
     const setField = (name) => (e) => {
         const { type, value, checked } = e.target;
         setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+    };
+
+    const setPrintOption = (key, value) => {
+        setForm((f) => ({
+            ...f,
+            print_options: { ...f.print_options, [key]: value },
+        }));
+    };
+
+    const applyZebraPreset = () => {
+        setForm({
+            ...EMPTY_FORM,
+            name: ZEBRA_80MM_PRESET.name,
+            description: ZEBRA_80MM_PRESET.description,
+            width: String(ZEBRA_80MM_PRESET.width),
+            height: String(ZEBRA_80MM_PRESET.height),
+            paper_width: String(ZEBRA_80MM_PRESET.paper_width),
+            paper_height: String(ZEBRA_80MM_PRESET.paper_height),
+            top_margin: String(ZEBRA_80MM_PRESET.top_margin),
+            left_margin: String(ZEBRA_80MM_PRESET.left_margin),
+            stickers_in_one_row: String(ZEBRA_80MM_PRESET.stickers_in_one_row),
+            stickers_in_one_sheet: String(ZEBRA_80MM_PRESET.stickers_in_one_sheet),
+            row_distance: String(ZEBRA_80MM_PRESET.row_distance),
+            col_distance: String(ZEBRA_80MM_PRESET.col_distance),
+            is_continuous: ZEBRA_80MM_PRESET.is_continuous,
+            is_default: false,
+            print_options: { ...ZEBRA_80MM_PRESET.print_options },
+        });
+        setFormErrors({});
+        setIsEditing(false);
+        setEditId(null);
+        setModalOpen(true);
     };
 
     useEffect(() => {
@@ -148,6 +186,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
         col_distance: item.col_distance ?? '0',
         is_continuous: !!item.is_continuous,
         is_default: !!item.is_default,
+        print_options: normalizeBarcodePrintOptions(item.print_options),
     });
 
     const validate = () => {
@@ -183,6 +222,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
         is_continuous: form.is_continuous ? 1 : 0,
         is_default: form.is_default ? 1 : 0,
         is_custom: 1,
+        print_options: normalizeBarcodePrintOptions(form.print_options),
     });
 
     const handleOpenAdd = () => {
@@ -314,19 +354,25 @@ const BarcodeSettingManager = ({ controllerName }) => {
     if (!canView) {
         return (
             <PageLayout title="Barcode Settings">
-                <p>You do not have permission to view barcode settings.</p>
+                <p>You do not have permission to view barcode templates.</p>
             </PageLayout>
         );
     }
 
     return (
         <PageLayout
-            title="Barcode Settings"
+            title="Barcode Label Templates"
+            eyebrow="Settings"
             actions={
                 canAdd ? (
-                    <button type="button" className="ui-btn primary" onClick={handleOpenAdd}>
-                        Add New Setting
-                    </button>
+                    <div className="d-flex gap-2 flex-wrap">
+                        <button type="button" className="ui-btn ghost" onClick={applyZebraPreset}>
+                            Zebra 80mm preset
+                        </button>
+                        <button type="button" className="ui-btn primary" onClick={handleOpenAdd}>
+                            New template
+                        </button>
+                    </div>
                 ) : null
             }
         >
@@ -367,7 +413,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
 
             {modalOpen && (
             <Modal
-                title={isEditing ? 'Edit Barcode Sticker Setting' : 'Add Barcode Sticker Setting'}
+                title={isEditing ? 'Edit barcode template' : 'New barcode template'}
                 onClose={() => setModalOpen(false)}
                 footer={
                     <>
@@ -383,8 +429,8 @@ const BarcodeSettingManager = ({ controllerName }) => {
                 }
             >
                 <FormRow cols={1}>
-                    <FormField label="Sticker Sheet Setting Name" required error={formErrors.name}>
-                        <TextInput value={form.name} onChange={setField('name')} />
+                    <FormField label="Template name" required error={formErrors.name}>
+                        <TextInput value={form.name} onChange={setField('name')} placeholder="e.g. Zebra 80mm (2-up)" />
                     </FormField>
                 </FormRow>
                 <FormRow cols={1}>
@@ -468,12 +514,79 @@ const BarcodeSettingManager = ({ controllerName }) => {
                         <NumberInput value={form.col_distance} onChange={setField('col_distance')} min={0} step={0.00001} />
                     </FormField>
                 </FormRow>
+
+                <p className="ui-modal-hint" style={{ margin: '16px 0 8px' }}>
+                    Label content — saved with this template and applied on Print Barcode
+                </p>
+                <FormRow cols={3}>
+                    <FormField label="Business name">
+                        <CheckboxInput
+                            label="Show"
+                            checked={!!form.print_options?.business_name}
+                            onChange={(e) => setPrintOption('business_name', e.target.checked)}
+                        />
+                        <NumberInput
+                            className="mt-2"
+                            value={form.print_options?.business_name_size ?? 13}
+                            onChange={(e) => setPrintOption('business_name_size', parseInt(e.target.value, 10) || 13)}
+                            min={8}
+                            max={24}
+                            disabled={!form.print_options?.business_name}
+                        />
+                    </FormField>
+                    <FormField label="Product name">
+                        <CheckboxInput
+                            label="Show"
+                            checked={!!form.print_options?.name}
+                            onChange={(e) => setPrintOption('name', e.target.checked)}
+                        />
+                        <NumberInput
+                            className="mt-2"
+                            value={form.print_options?.name_size ?? 12}
+                            onChange={(e) => setPrintOption('name_size', parseInt(e.target.value, 10) || 12)}
+                            min={8}
+                            max={24}
+                            disabled={!form.print_options?.name}
+                        />
+                    </FormField>
+                    <FormField label="Price">
+                        <CheckboxInput
+                            label="Show"
+                            checked={!!form.print_options?.price}
+                            onChange={(e) => setPrintOption('price', e.target.checked)}
+                        />
+                        <NumberInput
+                            className="mt-2"
+                            value={form.print_options?.price_size ?? 12}
+                            onChange={(e) => setPrintOption('price_size', parseInt(e.target.value, 10) || 12)}
+                            min={8}
+                            max={24}
+                            disabled={!form.print_options?.price}
+                        />
+                    </FormField>
+                </FormRow>
+                <FormRow cols={2}>
+                    <FormField label="Brand">
+                        <CheckboxInput
+                            label="Show brand on label"
+                            checked={!!form.print_options?.brand_name}
+                            onChange={(e) => setPrintOption('brand_name', e.target.checked)}
+                        />
+                    </FormField>
+                    <FormField label="Promo price">
+                        <CheckboxInput
+                            label="Show promotional price"
+                            checked={!!form.print_options?.promo_price}
+                            onChange={(e) => setPrintOption('promo_price', e.target.checked)}
+                        />
+                    </FormField>
+                </FormRow>
             </Modal>
             )}
 
             {deleteId && (
             <ConfirmModal
-                title="Delete barcode setting?"
+                title="Delete barcode template?"
                 message="This action cannot be undone."
                 danger
                 onConfirm={() => handleDelete(deleteId)}

@@ -15,6 +15,7 @@ Future<int?> showCustomerSearchDialog({
   return showPosDialog<int>(
     context: context,
     builder: (ctx) => PosTouchKeyboardHost(
+      expand: false,
       child: _CustomerSearchDialog(
         customers: customers,
         selectedId: selectedId,

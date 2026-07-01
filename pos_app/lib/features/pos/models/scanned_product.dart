@@ -10,6 +10,10 @@ class ScannedProduct {
     this.variantId,
     this.image,
     this.source = ProductSource.local,
+    this.isBatch = false,
+    this.productBatchId,
+    this.batchNo,
+    this.maxPrice,
   });
 
   final int productId;
@@ -22,6 +26,44 @@ class ScannedProduct {
   final double warehouseQty;
   final String? image;
   final ProductSource source;
+  final bool isBatch;
+  final int? productBatchId;
+  final String? batchNo;
+  final double? maxPrice;
+
+  ScannedProduct copyWith({
+    int? productId,
+    int? variantId,
+    String? code,
+    String? name,
+    double? price,
+    double? taxRate,
+    int? taxMethod,
+    double? warehouseQty,
+    String? image,
+    ProductSource? source,
+    bool? isBatch,
+    int? productBatchId,
+    String? batchNo,
+    double? maxPrice,
+  }) {
+    return ScannedProduct(
+      productId: productId ?? this.productId,
+      variantId: variantId ?? this.variantId,
+      code: code ?? this.code,
+      name: name ?? this.name,
+      price: price ?? this.price,
+      taxRate: taxRate ?? this.taxRate,
+      taxMethod: taxMethod ?? this.taxMethod,
+      warehouseQty: warehouseQty ?? this.warehouseQty,
+      image: image ?? this.image,
+      source: source ?? this.source,
+      isBatch: isBatch ?? this.isBatch,
+      productBatchId: productBatchId ?? this.productBatchId,
+      batchNo: batchNo ?? this.batchNo,
+      maxPrice: maxPrice ?? this.maxPrice,
+    );
+  }
 
   factory ScannedProduct.fromApiMap(Map<String, dynamic> map) {
     return ScannedProduct(
@@ -35,6 +77,9 @@ class ScannedProduct {
       warehouseQty: _dbl(map['warehouse_qty'] ?? map['qty']),
       image: map['image']?.toString() ?? map['base_image']?.toString(),
       source: ProductSource.remote,
+      isBatch: map['is_batch'] == true || map['is_batch'] == 1,
+      productBatchId: _intOrNull(map['batch_id'] ?? map['product_batch_id']),
+      batchNo: map['batch_no']?.toString(),
     );
   }
 
@@ -55,5 +100,18 @@ class ScannedProduct {
   }
 }
 
-// Re-export source enum for model file consumers
+class ProductBatchOption {
+  const ProductBatchOption({
+    required this.batchId,
+    required this.batchNo,
+    required this.qty,
+    this.expiredDate,
+  });
+
+  final int batchId;
+  final String batchNo;
+  final double qty;
+  final String? expiredDate;
+}
+
 enum ProductSource { local, remote }

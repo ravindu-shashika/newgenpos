@@ -2619,6 +2619,21 @@ class SaleController extends Controller
             }
         }
 
+        // Exact alt_code match (barcode scan path)
+        if (!$product) {
+            if ($general_setting && in_array('restaurant', explode(',', $general_setting->modules))) {
+                $product = Product::select('id','name','code','is_variant','is_batch','is_imei','qty','price','wholesale_price','cost','promotion','promotion_price','last_date','tax_id','tax_method','type','unit_id','sale_unit_id','extras')
+                    ->where('alt_code', $code)
+                    ->where('is_active', true)
+                    ->first();
+            } else {
+                $product = Product::select('id','name','code','is_variant','is_batch','is_imei','qty','price','wholesale_price','cost','promotion','promotion_price','last_date','tax_id','tax_method','type','unit_id','sale_unit_id')
+                    ->where('alt_code', $code)
+                    ->where('is_active', true)
+                    ->first();
+            }
+        }
+
         if (!$product) {
             return response()->json(['error' => 'Product not found'], 404);
         }

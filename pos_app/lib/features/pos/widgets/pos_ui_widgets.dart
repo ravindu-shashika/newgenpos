@@ -639,17 +639,23 @@ class PosCartLineCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.posSurface.productIconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.shopping_bag_outlined,
-              size: 20,
-              color: styles.accent.withValues(alpha: 0.85),
+          Material(
+            color: context.posSurface.productIconBg,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: enabled ? onEdit : null,
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 52,
+                height: 52,
+                child: Center(
+                  child: Icon(
+                    Icons.shopping_bag_outlined,
+                    size: 26,
+                    color: styles.accent.withValues(alpha: 0.9),
+                  ),
+                ),
+              ),
             ),
           ),
           SizedBox(width: 10),
