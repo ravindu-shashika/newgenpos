@@ -644,7 +644,7 @@ class _RecentTransactionsList extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      t.orderId,
+                      t.referenceNo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -695,11 +695,7 @@ class _RecentTransactionsList extends StatelessWidget {
               SizedBox(width: 8),
               Text(
                 formatPosMoney(t.total),
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: context.posBrand.primary,
-                ),
+                style: context.posStyles.productPrice.copyWith(fontSize: 15),
               ),
             ],
           ),

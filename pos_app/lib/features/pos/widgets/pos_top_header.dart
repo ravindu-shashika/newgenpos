@@ -1,10 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/providers/pos_connectivity_providers.dart';
 import '../../../core/theme/pos_theme.dart';
+import 'pos_top_bar_clock.dart';
 
 /// Shared shell header — optional leading slot + link status chips.
 class PosShellHeader extends StatelessWidget {
@@ -59,7 +57,7 @@ class PosShellHeader extends StatelessWidget {
               SizedBox(width: 12),
             ],
             const Spacer(),
-            const _PosLiveClock(),
+            const PosTopBarLiveClock(),
             SizedBox(width: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -101,48 +99,6 @@ class PosShellHeader extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PosLiveClock extends StatefulWidget {
-  const _PosLiveClock();
-
-  @override
-  State<_PosLiveClock> createState() => _PosLiveClockState();
-}
-
-class _PosLiveClockState extends State<_PosLiveClock> {
-  late Timer _timer;
-  DateTime _now = DateTime.now();
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateStr = DateFormat('MMM d, yyyy').format(_now);
-    final timeStr = DateFormat('HH:mm:ss').format(_now);
-
-    return Text(
-      '$dateStr | $timeStr',
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        color: context.posStyles.text,
-        fontFeatures: [FontFeature.tabularFigures()],
       ),
     );
   }

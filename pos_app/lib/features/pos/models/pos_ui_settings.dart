@@ -12,6 +12,7 @@ class PosUiSettings {
     this.enableExchange = false,
     this.enablePointsPayment = false,
     this.gridColumnCount,
+    this.gridPageSize,
     this.saleReferencePrefix = 'posr-',
     this.saleReferenceMode = 'datetime',
     this.saleReferenceNextSeq = 1,
@@ -22,6 +23,7 @@ class PosUiSettings {
     this.buttonPrimaryColor = '',
     this.darkMode = false,
     this.fontScale = 1.0,
+    this.topBarDateTimeFormat = PosUiSettings.defaultTopBarDateTimeFormat,
   });
 
   final bool enableShipping;
@@ -35,6 +37,9 @@ class PosUiSettings {
 
   /// Local override for product grid columns. `null` uses server `product_number`.
   final int? gridColumnCount;
+
+  /// Local override for how many products load per catalog page. `null` = auto.
+  final int? gridPageSize;
 
   /// Sale invoice reference prefix (e.g. posr-, sr-, INV).
   final String saleReferencePrefix;
@@ -62,12 +67,54 @@ class PosUiSettings {
   final bool darkMode;
   final double fontScale;
 
+  /// [intl](https://pub.dev/packages/intl) pattern for the shell top-bar clock.
+  final String topBarDateTimeFormat;
+
+  static const defaultTopBarDateTimeFormat = "MMM d, yyyy' | 'HH:mm:ss";
+
+  /// Preset patterns → example label for settings UI.
+  static const topBarDateTimeFormatOptions = <MapEntry<String, String>>[
+    MapEntry(defaultTopBarDateTimeFormat, 'Jun 29, 2026 | 14:30:45'),
+    MapEntry("dd/MM/yyyy' | 'HH:mm:ss", '29/06/2026 | 14:30:45'),
+    MapEntry("MM/dd/yyyy' | 'hh:mm a", '06/29/2026 | 02:30 PM'),
+    MapEntry("yyyy-MM-dd' | 'HH:mm", '2026-06-29 | 14:30'),
+    MapEntry("EEE, MMM d' | 'h:mm a", 'Mon, Jun 29 | 2:30 PM'),
+    MapEntry('dd-MM-yyyy HH:mm:ss', '29-06-2026 14:30:45'),
+    MapEntry('HH:mm:ss', '14:30:45'),
+    MapEntry('MMM d, yyyy', 'Jun 29, 2026'),
+  ];
+
+  static String resolveTopBarDateTimeFormat(String? raw) {
+    final pattern = raw?.trim();
+    if (pattern == null || pattern.isEmpty) {
+      return defaultTopBarDateTimeFormat;
+    }
+    final known = topBarDateTimeFormatOptions
+        .any((entry) => entry.key == pattern);
+    return known ? pattern : defaultTopBarDateTimeFormat;
+  }
+
   static int resolveGridColumnCount({
     int? localOverride,
     int? serverProductNumber,
   }) {
     final value = localOverride ?? serverProductNumber ?? 5;
     return value.clamp(1, 12);
+  }
+
+  static const gridPageSizePresets = [12, 16, 20, 24, 30, 36, 48, 60];
+
+  /// Products fetched per catalog page (scroll / load more batch size).
+  static int resolveGridPageSize({
+    int? localOverride,
+    required int columns,
+    int? serverProductNumber,
+  }) {
+    if (localOverride != null) {
+      return localOverride.clamp(12, 120);
+    }
+    final serverPage = serverProductNumber ?? 15;
+    return (columns * 4).clamp(serverPage, 60);
   }
 
   PosUiSettings copyWith({
@@ -81,6 +128,8 @@ class PosUiSettings {
     bool? enablePointsPayment,
     int? gridColumnCount,
     bool clearGridColumnCount = false,
+    int? gridPageSize,
+    bool clearGridPageSize = false,
     String? saleReferencePrefix,
     String? saleReferenceMode,
     int? saleReferenceNextSeq,
@@ -95,6 +144,7 @@ class PosUiSettings {
     bool clearButtonPrimaryColor = false,
     bool? darkMode,
     double? fontScale,
+    String? topBarDateTimeFormat,
   }) {
     return PosUiSettings(
       enableShipping: enableShipping ?? this.enableShipping,
@@ -108,6 +158,9 @@ class PosUiSettings {
       gridColumnCount: clearGridColumnCount
           ? null
           : (gridColumnCount ?? this.gridColumnCount),
+      gridPageSize: clearGridPageSize
+          ? null
+          : (gridPageSize ?? this.gridPageSize),
       saleReferencePrefix: saleReferencePrefix ?? this.saleReferencePrefix,
       saleReferenceMode: saleReferenceMode ?? this.saleReferenceMode,
       saleReferenceNextSeq: saleReferenceNextSeq ?? this.saleReferenceNextSeq,
@@ -126,6 +179,8 @@ class PosUiSettings {
           : (buttonPrimaryColor ?? this.buttonPrimaryColor),
       darkMode: darkMode ?? this.darkMode,
       fontScale: fontScale ?? this.fontScale,
+      topBarDateTimeFormat:
+          topBarDateTimeFormat ?? this.topBarDateTimeFormat,
     );
   }
 
@@ -144,6 +199,7 @@ class PosUiSettings {
       enablePointsPayment:
           _bool(json['enable_points_payment'], fallback: false),
       gridColumnCount: _intOrNull(json['grid_column_count']),
+      gridPageSize: _intOrNull(json['grid_page_size']),
       saleReferencePrefix:
           json['sale_reference_prefix']?.toString().trim().isNotEmpty == true
               ? json['sale_reference_prefix'].toString().trim()
@@ -162,6 +218,9 @@ class PosUiSettings {
       buttonPrimaryColor: json['button_primary_color']?.toString() ?? '',
       darkMode: _bool(json['dark_mode'], fallback: false),
       fontScale: _doubleOrNull(json['font_scale']) ?? 1.0,
+      topBarDateTimeFormat: resolveTopBarDateTimeFormat(
+        json['top_bar_datetime_format']?.toString(),
+      ),
     );
   }
 
@@ -175,6 +234,7 @@ class PosUiSettings {
         'enable_exchange': enableExchange,
         'enable_points_payment': enablePointsPayment,
         if (gridColumnCount != null) 'grid_column_count': gridColumnCount,
+        if (gridPageSize != null) 'grid_page_size': gridPageSize,
         'sale_reference_prefix': saleReferencePrefix,
         'sale_reference_mode': saleReferenceMode,
         'sale_reference_next_seq': saleReferenceNextSeq,
@@ -186,6 +246,7 @@ class PosUiSettings {
           'button_primary_color': buttonPrimaryColor,
         'dark_mode': darkMode,
         'font_scale': fontScale,
+        'top_bar_datetime_format': topBarDateTimeFormat,
       };
 
   String encode() => jsonEncode(toJson());

@@ -196,9 +196,10 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
           Padding(
             padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Text(
-              'Looks up sales saved on this device only. No cash refund — '
-              'credit can be settled on the next sale. Damaged items are not '
-              'added back to stock.',
+              'Looks up sales saved on this device only. To return one item '
+              'from a multi-item sale, set qty to 0 on lines you are keeping. '
+              'No cash refund — credit can be settled on the next sale. '
+              'Damaged items are not added back to stock.',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ),

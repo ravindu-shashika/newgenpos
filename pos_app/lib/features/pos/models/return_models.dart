@@ -171,6 +171,47 @@ class ReturnReceiptLine {
   final double total;
 }
 
+/// Result from the exchange dialog after creating a return bill.
+class ExchangeReturnResult {
+  const ExchangeReturnResult({
+    required this.returnResult,
+    required this.allowedProductIds,
+    this.originalSaleReferenceNo,
+  });
+
+  final SavedReturnResult returnResult;
+  final Set<int> allowedProductIds;
+  final String? originalSaleReferenceNo;
+}
+
+/// Active exchange session: return bill created; replacements go on main cart.
+class ExchangeSession {
+  const ExchangeSession({
+    required this.returnClientUuid,
+    required this.returnReferenceNo,
+    required this.creditRemaining,
+    required this.allowedProductIds,
+    this.originalSaleReferenceNo,
+  });
+
+  final String returnClientUuid;
+  final String returnReferenceNo;
+  final double creditRemaining;
+  final Set<int> allowedProductIds;
+  final String? originalSaleReferenceNo;
+
+  factory ExchangeSession.fromResult(ExchangeReturnResult result) {
+    return ExchangeSession(
+      returnClientUuid: result.returnResult.clientUuid,
+      returnReferenceNo: result.returnResult.referenceNo,
+      creditRemaining: result.returnResult.creditRemaining,
+      allowedProductIds: result.allowedProductIds,
+      originalSaleReferenceNo:
+          result.originalSaleReferenceNo ?? result.returnResult.saleReferenceNo,
+    );
+  }
+}
+
 class AppliedReturnSettlement {
   const AppliedReturnSettlement({
     required this.returnClientUuid,

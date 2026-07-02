@@ -102,7 +102,7 @@ class StaffPerformanceRow {
 
 class DashboardTransaction {
   const DashboardTransaction({
-    required this.orderId,
+    required this.referenceNo,
     required this.createdAt,
     required this.itemCount,
     required this.paymentLabel,
@@ -111,7 +111,7 @@ class DashboardTransaction {
     required this.isPaid,
   });
 
-  final String orderId;
+  final String referenceNo;
   final DateTime createdAt;
   final int itemCount;
   final String paymentLabel;

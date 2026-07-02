@@ -635,6 +635,38 @@ class _VisualsCard extends StatelessWidget {
               Text('A', style: TextStyle(fontSize: 18, color: s.text)),
             ],
           ),
+          SizedBox(height: 20),
+          Text(
+            'Top bar clock format',
+            style: s.titleMedium.copyWith(fontSize: 13),
+          ),
+          SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey(uiSettings.topBarDateTimeFormat),
+            initialValue: PosUiSettings.resolveTopBarDateTimeFormat(
+              uiSettings.topBarDateTimeFormat,
+            ),
+            decoration: const InputDecoration(
+              labelText: 'Date & time display',
+              helperText: 'Format shown in the running clock on the top bar',
+              border: OutlineInputBorder(),
+            ),
+            isExpanded: true,
+            items: PosUiSettings.topBarDateTimeFormatOptions
+                .map(
+                  (entry) => DropdownMenuItem<String>(
+                    value: entry.key,
+                    child: Text(entry.value),
+                  ),
+                )
+                .toList(),
+            onChanged: (pattern) {
+              if (pattern == null) return;
+              unawaited(
+                onPatch((s) => s.copyWith(topBarDateTimeFormat: pattern)),
+              );
+            },
+          ),
           SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
@@ -646,6 +678,8 @@ class _VisualsCard extends StatelessWidget {
                     clearButtonPrimaryColor: true,
                     darkMode: false,
                     fontScale: 1.0,
+                    topBarDateTimeFormat:
+                        PosUiSettings.defaultTopBarDateTimeFormat,
                   ),
                 ),
               ),
@@ -1058,7 +1092,8 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable return'),
                     subtitle: const Text(
-                      'Return sales and settle store credit at checkout',
+                      'Return sales; for partial returns set qty to 0 on lines '
+                      'you keep. Settle store credit at checkout.',
                       style: TextStyle(fontSize: 12),
                     ),
                     value: uiSettings.enableReturn,
@@ -1070,7 +1105,8 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable exchange'),
                     subtitle: const Text(
-                      'Exchange returned items for new products on a sale',
+                      'Return item → add same product on register → settle '
+                      'with return bill at checkout',
                       style: TextStyle(fontSize: 12),
                     ),
                     value: uiSettings.enableExchange,
@@ -1102,9 +1138,44 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                         .read(posUiSettingsProvider.notifier)
                         .patch((s) => s.copyWith(enableAddItemModal: v)),
                   ),
+                  SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    key: ValueKey('grid-page-${uiSettings.gridPageSize}'),
+                    initialValue: uiSettings.gridPageSize,
+                    decoration: const InputDecoration(
+                      labelText: 'Products per page',
+                      helperText:
+                          'How many products load in the catalog grid at once',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('Auto (based on column count)'),
+                      ),
+                      ...PosUiSettings.gridPageSizePresets.map(
+                        (n) => DropdownMenuItem<int?>(
+                          value: n,
+                          child: Text('$n products'),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      ref.read(posUiSettingsProvider.notifier).patch(
+                            (s) => v == null
+                                ? s.copyWith(clearGridPageSize: true)
+                                : s.copyWith(gridPageSize: v),
+                          );
+                      reloadProductGrid(ref);
+                    },
+                  ),
+                  SizedBox(height: 12),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('On-screen keyboard'),
+                    subtitle: const Text(
+                      'Show touch keys on focus. Physical and OS keyboards still work.',
+                    ),
                     value: uiSettings.enableKeyboard,
                     onChanged: (v) {
                       ref

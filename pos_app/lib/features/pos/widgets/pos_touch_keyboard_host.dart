@@ -146,40 +146,45 @@ class _PosTouchKeyboardPanelState
     final kb = ref.watch(posTouchKeyboardControllerProvider);
     final session = widget.session;
 
-    return Material(
-      elevation: widget.compact ? 8 : 16,
-      child: session.kind == PosTouchInputKind.text
-          ? PosTouchTextKeyboard(
-              controller: kb,
-              maxLines: session.maxLines,
-            )
-          : widget.compact
-              ? _CompactNumericPanel(
-                  controller: session.controller,
-                  showQuickCash: session.kind == PosTouchInputKind.amount &&
-                      session.showQuickCash,
-                  quickCashInitial: _quickCashInitial,
-                  onChanged: session.onChanged,
-                  onQuickCashUsed: () {
-                    if (_quickCashInitial) {
-                      setState(() => _quickCashInitial = false);
-                    }
-                  },
-                  onDone: kb.detach,
-                )
-              : _NumericKeyboardPanel(
-                  controller: session.controller,
-                  showQuickCash: session.kind == PosTouchInputKind.amount &&
-                      session.showQuickCash,
-                  quickCashInitial: _quickCashInitial,
-                  onChanged: session.onChanged,
-                  onQuickCashUsed: () {
-                    if (_quickCashInitial) {
-                      setState(() => _quickCashInitial = false);
-                    }
-                  },
-                  onDone: kb.detach,
-                ),
+    return Focus(
+      skipTraversal: true,
+      canRequestFocus: false,
+      descendantsAreFocusable: false,
+      child: Material(
+        elevation: widget.compact ? 8 : 16,
+        child: session.kind == PosTouchInputKind.text
+            ? PosTouchTextKeyboard(
+                controller: kb,
+                maxLines: session.maxLines,
+              )
+            : widget.compact
+                ? _CompactNumericPanel(
+                    controller: session.controller,
+                    showQuickCash: session.kind == PosTouchInputKind.amount &&
+                        session.showQuickCash,
+                    quickCashInitial: _quickCashInitial,
+                    onChanged: session.onChanged,
+                    onQuickCashUsed: () {
+                      if (_quickCashInitial) {
+                        setState(() => _quickCashInitial = false);
+                      }
+                    },
+                    onDone: kb.detach,
+                  )
+                : _NumericKeyboardPanel(
+                    controller: session.controller,
+                    showQuickCash: session.kind == PosTouchInputKind.amount &&
+                        session.showQuickCash,
+                    quickCashInitial: _quickCashInitial,
+                    onChanged: session.onChanged,
+                    onQuickCashUsed: () {
+                      if (_quickCashInitial) {
+                        setState(() => _quickCashInitial = false);
+                      }
+                    },
+                    onDone: kb.detach,
+                  ),
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:intl/intl.dart';
 
@@ -93,6 +94,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
   int? _openCashRegisterId;
   bool _returnFlowActive = false;
   bool _exchangeFlowActive = false;
+  ExchangeSession? _exchangeSession;
   ProviderSubscription<int>? _returnTriggerSub;
   ProviderSubscription<int>? _exchangeTriggerSub;
 
@@ -344,6 +346,71 @@ class _PosScreenState extends ConsumerState<PosScreen>
       warehouseId: parties.warehouseId,
       saleDate: DateTime.now(),
     ));
+    if (mounted) {
+      setState(() => _exchangeSession = null);
+    }
+  }
+
+  void _clearExchangeSession() {
+    final session = _exchangeSession;
+    if (session == null) return;
+
+    final remaining = _checkout.returnSettlements
+        .where((s) => s.returnClientUuid != session.returnClientUuid)
+        .toList();
+
+    setState(() => _exchangeSession = null);
+    if (remaining.length != _checkout.returnSettlements.length) {
+      _setCheckout(_checkout.copyWith(returnSettlements: remaining));
+    }
+  }
+
+  void _maybeApplyExchangeCredit() {
+    final session = _exchangeSession;
+    if (session == null || _checkout.isEmpty) return;
+
+    final totalsWithoutCredit =
+        _calcTotals(_checkout.copyWith(clearReturnSettlements: true));
+    final amount = math.min(
+      session.creditRemaining,
+      totalsWithoutCredit.grandTotal,
+    );
+
+    final others = _checkout.returnSettlements
+        .where((s) => s.returnClientUuid != session.returnClientUuid)
+        .toList();
+
+    if (amount <= 0) {
+      if (others.length != _checkout.returnSettlements.length) {
+        _setCheckout(_checkout.copyWith(returnSettlements: others));
+      }
+      return;
+    }
+
+    AppliedReturnSettlement? existing;
+    for (final row in _checkout.returnSettlements) {
+      if (row.returnClientUuid == session.returnClientUuid) {
+        existing = row;
+        break;
+      }
+    }
+
+    final settlement = AppliedReturnSettlement(
+      returnClientUuid: session.returnClientUuid,
+      returnReferenceNo: session.returnReferenceNo,
+      amount: amount,
+      returnId: existing?.returnId,
+    );
+
+    if (existing != null &&
+        (existing.amount - amount).abs() < 0.0001 &&
+        others.length + 1 == _checkout.returnSettlements.length) {
+      return;
+    }
+
+    _setCheckout(
+      _checkout.copyWith(returnSettlements: [...others, settlement]),
+    );
   }
 
   @override
@@ -544,6 +611,16 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return false;
     }
 
+    final exchangeSession = _exchangeSession;
+    if (exchangeSession != null &&
+        !exchangeSession.allowedProductIds.contains(product.productId)) {
+      _showSnack(
+        'Exchange: only the same product can be added as a replacement',
+        error: true,
+      );
+      return false;
+    }
+
     var resolved = product;
     if (product.isBatch && product.productBatchId == null) {
       final options = await ref
@@ -639,6 +716,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         : draft;
 
     _setCheckout(_checkout.addProduct(line));
+    _maybeApplyExchangeCredit();
     return true;
   }
 
@@ -713,6 +791,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
             .toList(),
       ),
     );
+    _maybeApplyExchangeCredit();
   }
 
   Future<void> _editCartLine(PosCheckoutState checkout, CartLine line) async {
@@ -755,6 +834,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
   ) async {
     if (newQty <= 0) {
       _setCheckout(checkout.updateQty(line.lineKey, newQty));
+      _maybeApplyExchangeCredit();
       return;
     }
 
@@ -801,18 +881,32 @@ class _PosScreenState extends ConsumerState<PosScreen>
             .toList(),
       ),
     );
+    _maybeApplyExchangeCredit();
   }
 
   Future<String?> _validateCheckoutStock(int warehouseId) async {
     final repo = ref.read(productLookupRepositoryProvider);
-
+    final uniqueKeys = <String, ({int productId, int? variantId, int? productBatchId})>{};
     for (final line in _checkout.lines) {
-      final available = await repo.getWarehouseQty(
-        warehouseId: warehouseId,
+      final key =
+          '${line.productId}_${line.variantId ?? 0}_${line.productBatchId ?? 0}';
+      uniqueKeys[key] = (
         productId: line.productId,
         variantId: line.variantId,
         productBatchId: line.productBatchId,
       );
+    }
+
+    final stockByKey = await repo.getWarehouseQtyBatch(
+      warehouseId: warehouseId,
+      keys: uniqueKeys.values.toList(),
+    );
+
+    for (final line in _checkout.lines) {
+      final stockKey = line.productBatchId != null
+          ? '${line.productId}_${line.variantId ?? 0}_${line.productBatchId}'
+          : '${line.productId}_${line.variantId ?? 0}';
+      final available = stockByKey[stockKey] ?? 0;
       final inCart = checkoutQtyForProduct(
         _checkout.lines,
         productId: line.productId,
@@ -1567,20 +1661,28 @@ class _PosScreenState extends ConsumerState<PosScreen>
       await Future<void>.delayed(Duration.zero);
       if (!mounted) return;
 
-      final ok = await showExchangeSaleDialog(
+      final result = await showExchangeSaleDialog(
         context: context,
         returnRepo: ref.read(localReturnRepositoryProvider),
-        exchangeRepo: ref.read(localExchangeRepositoryProvider),
-        productLookup: ref.read(productLookupRepositoryProvider),
         warehouseId: warehouseId,
         customerId: customerId,
       );
 
-      if (ok == true && mounted) {
-        _showSnack('Exchange saved', success: true);
-        ref.read(syncRevisionProvider.notifier).state++;
-        _syncSalesInBackground();
-      }
+      if (result == null || !mounted) return;
+
+      await _printReturnReceipt(result.returnResult);
+      setState(() {
+        _exchangeSession = ExchangeSession.fromResult(result);
+      });
+      _maybeApplyExchangeCredit();
+
+      _showSnack(
+        'Return ${formatSaleReferenceDisplay(result.returnResult.referenceNo)} — '
+        'add same-product replacements, then checkout',
+        success: true,
+      );
+      ref.read(syncRevisionProvider.notifier).state++;
+      _syncSalesInBackground();
     } finally {
       _exchangeFlowActive = false;
     }
@@ -1595,12 +1697,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return;
     }
 
-    final credits = await ref.read(localReturnRepositoryProvider).loadPendingCredits(
-          warehouseId: warehouseId,
-          customerId: customerId,
-        );
-
     if (!mounted) return;
+    ref.read(posTouchKeyboardControllerProvider).detach();
     final beforeCredit = _checkout.returnCreditApplied;
     final maxApply = _calcTotals(_checkout.copyWith(returnSettlements: []))
             .grandTotal -
@@ -1608,7 +1706,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
     final applied = await showReturnCreditDialog(
       context: context,
-      credits: credits,
       maxApply: maxApply > 0 ? maxApply : 0,
       initial: _checkout.returnSettlements,
       onLookupReference: (refNo) => ref
@@ -1617,13 +1714,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
             referenceNo: refNo,
             warehouseId: warehouseId,
             customerId: customerId,
-          ),
-      onManualAmount: (amount) => ref
-          .read(localReturnRepositoryProvider)
-          .distributeManualSettlement(
-            credits: credits,
-            amount: amount,
-            maxApply: maxApply > 0 ? maxApply : 0,
           ),
     );
     if (applied == null || !mounted) return;
@@ -2133,7 +2223,44 @@ class _PosScreenState extends ConsumerState<PosScreen>
             child: grid.isLoading && products.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : grid.error != null && products.isEmpty
-                    ? Center(child: Text('$grid.error'))
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 40,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Failed to load products',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${grid.error}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              OutlinedButton.icon(
+                                onPressed: () => ref
+                                    .read(productGridProvider.notifier)
+                                    .reload(),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
                     : products.isEmpty
                         ? Center(
                             child: Text(
@@ -2240,6 +2367,44 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
   }
 
+  Widget _buildExchangeSessionBanner() {
+    final session = _exchangeSession!;
+    final styles = context.posStyles;
+    return Material(
+      color: context.posBrand.primary.withValues(alpha: 0.12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.swap_horiz_rounded, color: context.posBrand.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Exchange in progress',
+                    style: styles.body.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    'Add same-product replacements. Credit from '
+                    '${formatSaleReferenceDisplay(session.returnReferenceNo)} '
+                    'is applied at checkout.',
+                    style: styles.caption,
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: _clearExchangeSession,
+              child: const Text('Cancel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCheckout(
     PosCheckoutState checkout,
     PosTotals totals,
@@ -2259,6 +2424,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_exchangeSession != null) _buildExchangeSessionBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
             child: Column(

@@ -234,7 +234,7 @@ class DashboardStatsService {
 
   DashboardTransaction _mapTransaction(LocalSale sale) {
     return DashboardTransaction(
-      orderId: _formatOrderId(sale),
+      referenceNo: _formatReferenceNo(sale),
       createdAt: sale.createdAt,
       itemCount: sale.itemCount,
       paymentLabel: _paymentLabel(sale.payloadJson),
@@ -244,17 +244,14 @@ class DashboardStatsService {
     );
   }
 
-  String _formatOrderId(LocalSale sale) {
+  String _formatReferenceNo(LocalSale sale) {
     final ref = resolveLocalSaleReference(
       clientUuid: sale.clientUuid,
       referenceNo: sale.referenceNo,
       serverReferenceNo: sale.serverReferenceNo,
     );
-    if (ref.length <= 10) return '#$ref';
-    final digits = ref.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length >= 5) {
-      return '#${digits.substring(digits.length - 5)}';
-    }
+    final display = formatSaleReferenceDisplay(ref);
+    if (display.isNotEmpty) return display;
     return '#${sale.id}';
   }
 

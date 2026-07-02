@@ -1,30 +1,22 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/repositories/local_exchange_repository.dart';
 import '../../../core/repositories/local_return_repository.dart';
-import '../../../core/repositories/product_lookup_repository.dart';
 import '../../../core/theme/pos_theme.dart';
 import '../pos_currency.dart';
-import '../models/exchange_models.dart';
 import '../models/return_models.dart';
-import '../models/scanned_product.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
 
-Future<bool?> showExchangeSaleDialog({
+Future<ExchangeReturnResult?> showExchangeSaleDialog({
   required BuildContext context,
   required LocalReturnRepository returnRepo,
-  required LocalExchangeRepository exchangeRepo,
-  required ProductLookupRepository productLookup,
   required int warehouseId,
   required int customerId,
 }) {
-  return showPosDialog<bool>(
+  return showPosDialog<ExchangeReturnResult>(
     context: context,
     builder: (ctx) => _ExchangeSaleDialog(
       returnRepo: returnRepo,
-      exchangeRepo: exchangeRepo,
-      productLookup: productLookup,
       warehouseId: warehouseId,
       customerId: customerId,
     ),
@@ -34,15 +26,11 @@ Future<bool?> showExchangeSaleDialog({
 class _ExchangeSaleDialog extends StatefulWidget {
   const _ExchangeSaleDialog({
     required this.returnRepo,
-    required this.exchangeRepo,
-    required this.productLookup,
     required this.warehouseId,
     required this.customerId,
   });
 
   final LocalReturnRepository returnRepo;
-  final LocalExchangeRepository exchangeRepo;
-  final ProductLookupRepository productLookup;
   final int warehouseId;
   final int customerId;
 
@@ -52,15 +40,13 @@ class _ExchangeSaleDialog extends StatefulWidget {
 
 class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
   final _refCtrl = TextEditingController();
-  final _productSearchCtrl = TextEditingController();
   ReturnSaleLookup? _lookup;
   final _returnQtyByLine = <int, double>{};
   final _selectedReturn = <int, bool>{};
-  final _newLines = <ExchangeNewLine>[];
   String? _error;
   bool _busy = false;
 
-  double get _exchangeValue {
+  double get _returnValue {
     final lookup = _lookup;
     if (lookup == null) return 0;
     var total = 0.0;
@@ -76,15 +62,9 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     return total;
   }
 
-  double get _newProductsTotal =>
-      _newLines.fold(0.0, (sum, line) => sum + line.lineTotal);
-
-  double get _balance => _newProductsTotal - _exchangeValue;
-
   @override
   void dispose() {
     _refCtrl.dispose();
-    _productSearchCtrl.dispose();
     super.dispose();
   }
 
@@ -116,7 +96,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
       final selected = <int, bool>{};
       for (final line in lookup.lines) {
         qty[line.productSaleId] = line.returnableQty;
-        selected[line.productSaleId] = true;
+        selected[line.productSaleId] = false;
       }
 
       if (!mounted) return;
@@ -128,7 +108,6 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
         _selectedReturn
           ..clear()
           ..addAll(selected);
-        _newLines.clear();
       });
     } catch (e) {
       if (!mounted) return;
@@ -136,74 +115,6 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _addProduct() async {
-    final code = _productSearchCtrl.text.trim();
-    if (code.isEmpty) return;
-
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      final product = await widget.productLookup.lookup(
-        code: code,
-        warehouseId: widget.warehouseId,
-        customerId: widget.customerId,
-      );
-      if (product == null) {
-        throw StateError('Product not found: $code');
-      }
-
-      final line = _lineFromProduct(product);
-      final existingIndex = _newLines.indexWhere(
-        (l) => l.productId == line.productId && l.variantId == line.variantId,
-      );
-
-      if (!mounted) return;
-      setState(() {
-        if (existingIndex >= 0) {
-          final existing = _newLines[existingIndex];
-          _newLines[existingIndex] =
-              existing.copyWith(qty: existing.qty + 1);
-        } else {
-          _newLines.add(line);
-        }
-        _productSearchCtrl.clear();
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  ExchangeNewLine _lineFromProduct(ScannedProduct product) {
-    final price = product.price;
-    final qty = 1.0;
-    double tax;
-    if (product.taxMethod == 1) {
-      tax = price * qty * product.taxRate / 100;
-    } else {
-      tax = price * qty - (price * qty / (1 + product.taxRate / 100));
-    }
-    final lineTotal = product.taxMethod == 1 ? price * qty + tax : price * qty;
-
-    return ExchangeNewLine(
-      productId: product.productId,
-      variantId: product.variantId,
-      code: product.code,
-      name: product.name,
-      qty: qty,
-      netUnitPrice: price,
-      discount: 0,
-      taxRate: product.taxRate,
-      tax: tax,
-      lineTotal: lineTotal,
-    );
   }
 
   Future<void> _submit() async {
@@ -211,20 +122,18 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     if (lookup == null) return;
 
     final returnSelections =
-        <({ReturnSaleLookupLine line, double qty})>[];
+        <({ReturnSaleLookupLine line, double qty, bool isDamage})>[];
+    final allowedProductIds = <int>{};
     for (final line in lookup.lines) {
       if (_selectedReturn[line.productSaleId] != true) continue;
       final qty = _returnQtyByLine[line.productSaleId] ?? 0;
       if (qty <= 0) continue;
-      returnSelections.add((line: line, qty: qty));
+      returnSelections.add((line: line, qty: qty, isDamage: false));
+      allowedProductIds.add(line.productId);
     }
 
     if (returnSelections.isEmpty) {
-      setState(() => _error = 'Select items to return');
-      return;
-    }
-    if (_newLines.isEmpty) {
-      setState(() => _error = 'Add new products for exchange');
+      setState(() => _error = 'Select items to return for exchange');
       return;
     }
 
@@ -234,15 +143,25 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     });
 
     try {
-      await widget.exchangeRepo.saveExchange(
+      final result = await widget.returnRepo.saveReturn(
         lookup: lookup,
-        returnSelections: returnSelections,
-        newLines: _newLines,
+        selections: returnSelections,
         warehouseId: widget.warehouseId,
+        customerId:
+            lookup.customerId > 0 ? lookup.customerId : widget.customerId,
         saleId: lookup.saleId,
+        returnNote: 'Exchange return',
       );
+
       if (!mounted) return;
-      Navigator.pop(context, true);
+      Navigator.pop(
+        context,
+        ExchangeReturnResult(
+          returnResult: result,
+          allowedProductIds: allowedProductIds,
+          originalSaleReferenceNo: lookup.referenceNo,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString());
@@ -251,24 +170,13 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     }
   }
 
-  String _balanceLabel() {
-    final b = _balance;
-    if (b > 0.0001) {
-      return 'Customer pays ${formatPosMoney(b.abs())}';
-    }
-    if (b < -0.0001) {
-      return 'Refund to customer ${formatPosMoney(b.abs())}';
-    }
-    return 'Even exchange — no balance';
-  }
-
   @override
   Widget build(BuildContext context) {
     return PosProfessionalWideDialogShell(
       title: 'Sale exchange',
-      subtitle: 'Return items and add replacement products',
+      subtitle: 'Return items, then add same-product replacements on the register',
       icon: Icons.swap_horiz_rounded,
-      maxWidth: 980,
+      maxWidth: 720,
       onClose: () {
         if (!_busy) Navigator.pop(context);
       },
@@ -281,18 +189,16 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Return value: ${formatPosMoney(_exchangeValue)}  ·  '
-                  'New total: ${formatPosMoney(_newProductsTotal)}',
-                  style: TextStyle(fontSize: 13),
+                  'Return credit: ${formatPosMoney(_returnValue)}',
+                  style: const TextStyle(fontSize: 13),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  _balanceLabel(),
+                  'A return bill is printed. Add replacements on the main screen '
+                  'and settle credit at checkout.',
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: _balance > 0
-                        ? PosColors.red
-                        : context.posBrand.primary,
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -300,7 +206,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
           ),
           PosProfessionalDialogFooter(
             secondaryLabel: 'Cancel',
-            primaryLabel: 'Complete exchange',
+            primaryLabel: 'Create return bill',
             primaryEnabled: !_busy && _lookup != null,
             primaryLoading: _busy,
             onSecondary: _busy ? null : () => Navigator.pop(context),
@@ -320,14 +226,14 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                   Expanded(
                     child: TextField(
                       controller: _refCtrl,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         labelText: 'Original sale reference',
                         hintText: 'posr20260604153045',
                       ),
                       onSubmitted: (_) => _loadSale(),
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   FilledButton(
                     onPressed: _busy ? null : _loadSale,
                     child: const Text('Find'),
@@ -340,9 +246,20 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                 child: Text(
                   _error!,
-                  style: TextStyle(color: PosColors.red),
+                  style: const TextStyle(color: PosColors.red),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                'Check items to return. Only the same product (any size) can be '
+                'added as a replacement after the return bill is created.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
             Expanded(
               child: _lookup == null
                   ? const Center(
@@ -350,14 +267,7 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                         'Find the original sale to start an exchange',
                       ),
                     )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _buildReturnPanel()),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: _buildNewProductsPanel()),
-                      ],
-                    ),
+                  : _buildReturnPanel(),
             ),
           ],
         ),
@@ -370,16 +280,16 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(24, 12, 24, 4),
           child: Text(
-            'Return items',
+            'Items to return',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             itemCount: lookup.lines.length,
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
@@ -398,11 +308,19 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(line.name,
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                        Text(line.code,
-                            style: TextStyle(
-                                fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        Text(
+                          line.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          line.code,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -427,98 +345,6 @@ class _ExchangeSaleDialogState extends State<_ExchangeSaleDialog> {
               );
             },
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNewProductsPanel() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'New products',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _productSearchCtrl,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'Scan / enter code',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _addProduct(),
-                ),
-              ),
-              SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: _busy ? null : _addProduct,
-                icon: const Icon(Icons.add),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _newLines.isEmpty
-              ? const Center(child: Text('Add products for the exchange'))
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _newLines.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final line = _newLines[i];
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(line.name,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600)),
-                              Text(
-                                '${line.code} · ${formatPosMoney(line.lineTotal)}',
-                                style: TextStyle(
-                                    fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: line.qty > 1
-                              ? () => setState(
-                                  () => _newLines[i] = line.copyWith(
-                                        qty: line.qty - 1,
-                                      ),
-                                )
-                              : null,
-                          icon: const Icon(Icons.remove, size: 18),
-                        ),
-                        Text(line.qty.toStringAsFixed(0)),
-                        IconButton(
-                          onPressed: () => setState(
-                            () => _newLines[i] = line.copyWith(qty: line.qty + 1),
-                          ),
-                          icon: const Icon(Icons.add, size: 18),
-                        ),
-                        IconButton(
-                          onPressed: () =>
-                              setState(() => _newLines.removeAt(i)),
-                          icon: const Icon(Icons.delete_outline,
-                              color: PosColors.red, size: 20),
-                        ),
-                      ],
-                    );
-                  },
-                ),
         ),
       ],
     );

@@ -26,7 +26,7 @@ Future<void> main() async {
   final db = AppDatabase();
   final session = SessionService(db);
   await session.ensureLoaded();
-  await session.migrateFromSharedPreferencesIfNeeded();
+  await session.migrateFromSharedPreferencesIfNeeded(); 
 
   if (!session.isRegistered &&
       session.isTerminalRegistered &&

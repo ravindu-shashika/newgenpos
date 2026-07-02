@@ -1,113 +1,119 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/pos_theme.dart';
 import '../pos_currency.dart';
 import '../models/return_models.dart';
 import 'pos_professional_dialog.dart';
+import 'pos_touch_keyboard_controller.dart';
 import 'pos_touch_text_field.dart';
+import 'pos_touch_text_keyboard.dart';
 import 'show_pos_dialog.dart';
 
 Future<List<AppliedReturnSettlement>?> showReturnCreditDialog({
   required BuildContext context,
-  required List<PendingReturnCredit> credits,
   required double maxApply,
   List<AppliedReturnSettlement> initial = const [],
-  Future<PendingReturnCredit?> Function(String referenceNo)? onLookupReference,
-  List<AppliedReturnSettlement> Function(double amount)? onManualAmount,
+  required Future<PendingReturnCredit?> Function(String referenceNo)
+      onLookupReference,
 }) {
   return showPosDialog<List<AppliedReturnSettlement>>(
     context: context,
     builder: (ctx) => _ReturnCreditDialog(
-      credits: credits,
       maxApply: maxApply,
       initial: initial,
       onLookupReference: onLookupReference,
-      onManualAmount: onManualAmount,
     ),
   );
 }
 
-class _ReturnCreditDialog extends StatefulWidget {
+class _ReturnCreditDialog extends ConsumerStatefulWidget {
   const _ReturnCreditDialog({
-    required this.credits,
     required this.maxApply,
     required this.initial,
-    this.onLookupReference,
-    this.onManualAmount,
+    required this.onLookupReference,
   });
 
-  final List<PendingReturnCredit> credits;
   final double maxApply;
   final List<AppliedReturnSettlement> initial;
-  final Future<PendingReturnCredit?> Function(String referenceNo)?
+  final Future<PendingReturnCredit?> Function(String referenceNo)
       onLookupReference;
-  final List<AppliedReturnSettlement> Function(double amount)? onManualAmount;
 
   @override
-  State<_ReturnCreditDialog> createState() => _ReturnCreditDialogState();
+  ConsumerState<_ReturnCreditDialog> createState() =>
+      _ReturnCreditDialogState();
 }
 
-class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
+class _ReturnCreditDialogState extends ConsumerState<_ReturnCreditDialog> {
   late List<AppliedReturnSettlement> _settlements;
-  final _scanCtrl = TextEditingController();
-  final _manualCtrl = TextEditingController();
+  late final PosTouchKeyboardController _typeKeyboard;
+  final _billCtrl = TextEditingController();
+  final _billFocus = FocusNode();
   String? _error;
   bool _scanBusy = false;
-  int _tab = 0;
+  bool _typeMode = false;
+
+  bool get _scanMode => !_typeMode;
 
   @override
   void initState() {
     super.initState();
+    _typeKeyboard = PosTouchKeyboardController();
     _settlements = [...widget.initial];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(posTouchKeyboardControllerProvider).detach();
+      _billFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    _scanCtrl.dispose();
-    _manualCtrl.dispose();
+    ref.read(posTouchKeyboardControllerProvider).detach();
+    _typeKeyboard.dispose();
+    _billCtrl.dispose();
+    _billFocus.dispose();
     super.dispose();
   }
 
   double get _selectedTotal =>
       _settlements.fold<double>(0, (s, r) => s + r.amount);
 
-  double _amountForCredit(String clientUuid) {
-    return _settlements
-        .where((s) => s.returnClientUuid == clientUuid)
-        .fold<double>(0, (sum, s) => sum + s.amount);
+  void _bindTypeKeyboard() {
+    _typeKeyboard.attach(
+      PosTouchKeyboardSession(
+        controller: _billCtrl,
+        focusNode: _billFocus,
+        kind: PosTouchInputKind.text,
+        onChanged: () => setState(() {}),
+      ),
+      detachOnFocusLoss: false,
+    );
   }
 
-  void _setCreditAmount(PendingReturnCredit credit, double amount) {
-    final others = _settlements
-        .where((s) => s.returnClientUuid != credit.clientUuid)
-        .toList();
-    if (amount <= 0) {
-      setState(() => _settlements = others);
-      return;
+  void _setEntryMode(bool typeMode) {
+    if (_typeMode == typeMode) return;
+    setState(() => _typeMode = typeMode);
+    ref.read(posTouchKeyboardControllerProvider).detach();
+    if (typeMode) {
+      _bindTypeKeyboard();
+    } else {
+      _typeKeyboard.detach();
     }
-    setState(() {
-      _settlements = [
-        ...others,
-        AppliedReturnSettlement(
-          returnClientUuid: credit.clientUuid,
-          returnReferenceNo: credit.referenceNo,
-          amount: amount,
-          returnId: credit.returnId,
-        ),
-      ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _billFocus.requestFocus();
     });
   }
 
   void _apply() => Navigator.pop(context, _settlements);
 
-  Future<void> _scanReturnBill() async {
-    final lookup = widget.onLookupReference;
-    if (lookup == null) return;
-
-    final ref = _scanCtrl.text.trim();
-    if (ref.isEmpty) {
-      setState(() => _error = 'Scan or enter return bill number');
+  Future<void> _lookupReturnBill() async {
+    final refNo = _billCtrl.text.trim();
+    if (refNo.isEmpty) {
+      setState(() => _error = _scanMode
+          ? 'Scan return bill barcode'
+          : 'Enter return bill number');
       return;
     }
 
@@ -117,7 +123,7 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
     });
 
     try {
-      final credit = await lookup(ref);
+      final credit = await widget.onLookupReference(refNo);
       if (credit == null) {
         throw StateError('Return bill not found or already settled');
       }
@@ -137,9 +143,8 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
             returnId: credit.returnId,
           ),
         ];
-        _tab = 2;
       });
-      _scanCtrl.clear();
+      _billCtrl.clear();
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -147,110 +152,113 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
     }
   }
 
-  void _applyManualAmount() {
-    final builder = widget.onManualAmount;
-    if (builder == null) return;
+  Widget _buildBillField() {
+    final decoration = InputDecoration(
+      labelText: 'Return bill #',
+      prefixIcon: Icon(
+        _scanMode ? Icons.qr_code_scanner : Icons.keyboard_outlined,
+      ),
+    );
 
-    final raw = _manualCtrl.text.trim();
-    final amount = double.tryParse(raw);
-    if (amount == null || amount <= 0) {
-      setState(() => _error = 'Enter a valid return amount');
-      return;
+    if (_scanMode) {
+      return PosTouchTextField(
+        key: const ValueKey('return-bill-scan'),
+        controller: _billCtrl,
+        focusNode: _billFocus,
+        autofocus: true,
+        suppressNativeKeyboard: true,
+        textCapitalization: TextCapitalization.characters,
+        decoration: decoration,
+        onSubmitted: (_) => _lookupReturnBill(),
+      );
     }
 
-    final settlements = builder(amount.clamp(0, widget.maxApply));
-    if (settlements.isEmpty) {
-      setState(() => _error = 'No pending return credit to apply');
-      return;
-    }
-
-    setState(() {
-      _error = null;
-      _settlements = settlements;
-      _tab = 2;
-    });
-    _manualCtrl.clear();
+    return TextField(
+      key: const ValueKey('return-bill-type'),
+      controller: _billCtrl,
+      focusNode: _billFocus,
+      showCursor: true,
+      autofocus: true,
+      textCapitalization: TextCapitalization.characters,
+      decoration: decoration,
+      onTap: _bindTypeKeyboard,
+      onSubmitted: (_) => _lookupReturnBill(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return PosProfessionalDialogShell(
       title: 'Settle return credit',
-      subtitle: 'Scan return bill or enter amount for this sale',
+      subtitle: _scanMode
+          ? 'Scan return bill for this sale'
+          : 'Type return bill for this sale',
       icon: Icons.account_balance_wallet_outlined,
       maxWidth: 580,
-      maxBodyHeight: 420,
-      onClose: () => Navigator.pop(context),
+      maxBodyHeight: _typeMode ? 560 : 280,
+      onClose: () {
+        ref.read(posTouchKeyboardControllerProvider).detach();
+        _typeKeyboard.detach();
+        Navigator.pop(context);
+      },
       footer: PosProfessionalDialogFooter(
         secondaryLabel: 'Cancel',
         primaryLabel: 'Apply credit',
-        primaryEnabled: _selectedTotal > 0 || widget.credits.isNotEmpty,
+        primaryEnabled: _selectedTotal > 0,
         onSecondary: () => Navigator.pop(context),
         onPrimary: _apply,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Apply up to ${formatPosMoney(widget.maxApply)} against this sale',
-            style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          ),
-          SizedBox(height: 12),
-          SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Scan bill')),
-              ButtonSegment(value: 1, label: Text('Manual')),
-              ButtonSegment(value: 2, label: Text('Credits')),
-            ],
-            selected: {_tab},
-            onSelectionChanged: (s) => setState(() => _tab = s.first),
-          ),
-          SizedBox(height: 14),
-          if (_error != null) ...[
-            Text(_error!, style: TextStyle(color: PosColors.red)),
-            SizedBox(height: 8),
-          ],
-          Expanded(child: _buildTabBody()),
-          if (_selectedTotal > 0) ...[
-            SizedBox(height: 12),
-            Text(
-              'Selected ${formatPosMoney(_selectedTotal)}',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBody() {
-    switch (_tab) {
-      case 0:
-        return Column(
+      body: SingleChildScrollView(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Scan the return bill barcode or enter return reference',
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              'Apply up to ${formatPosMoney(widget.maxApply)} against this sale',
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: PosTouchTextField(
-                    controller: _scanCtrl,
-                    autofocus: true,
-                    suppressNativeKeyboard: true,
-                    decoration: InputDecoration(
-                      labelText: 'Return bill #',
-                      prefixIcon: Icon(Icons.qr_code_scanner),
-                    ),
-                    onSubmitted: (_) => _scanReturnBill(),
-                  ),
+            const SizedBox(height: 14),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('Scan'),
+                  icon: Icon(Icons.qr_code_scanner, size: 18),
                 ),
-                SizedBox(width: 10),
+                ButtonSegment(
+                  value: true,
+                  label: Text('Type'),
+                  icon: Icon(Icons.keyboard_outlined, size: 18),
+                ),
+              ],
+              selected: {_typeMode},
+              onSelectionChanged: (selection) =>
+                  _setEntryMode(selection.first),
+            ),
+            const SizedBox(height: 14),
+            if (_error != null) ...[
+              Text(_error!, style: const TextStyle(color: PosColors.red)),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              _scanMode
+                  ? 'Scan the return bill barcode with your scanner'
+                  : 'Tap keys below to enter return bill reference',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _buildBillField()),
+                const SizedBox(width: 10),
                 FilledButton(
-                  onPressed: _scanBusy ? null : _scanReturnBill,
+                  onPressed: _scanBusy ? null : _lookupReturnBill,
                   child: _scanBusy
                       ? const SizedBox(
                           width: 18,
@@ -261,107 +269,33 @@ class _ReturnCreditDialogState extends State<_ReturnCreditDialog> {
                 ),
               ],
             ),
-          ],
-        );
-      case 1:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Enter return credit amount to settle on this sale',
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-            ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _manualCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                    ],
-                    decoration: InputDecoration(
-                      labelText: 'Return amount',
-                      prefixText: 'Rs ',
+            if (_typeMode) ...[
+              const SizedBox(height: 12),
+              ListenableBuilder(
+                listenable: _typeKeyboard,
+                builder: (context, _) => Material(
+                  color: context.posStyles.cardBg,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    onSubmitted: (_) => _applyManualAmount(),
+                    child: PosTouchTextKeyboard(controller: _typeKeyboard),
                   ),
                 ),
-                SizedBox(width: 10),
-                FilledButton(
-                  onPressed: _applyManualAmount,
-                  child: const Text('Apply'),
-                ),
-              ],
-            ),
+              ),
+            ],
+            if (_selectedTotal > 0) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Selected ${formatPosMoney(_selectedTotal)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
           ],
-        );
-      default:
-        if (widget.credits.isEmpty) {
-          return const PosProfessionalEmptyState(
-            message: 'No pending return credits for this customer.',
-            icon: Icons.receipt_long_outlined,
-          );
-        }
-        return ListView.separated(
-          itemCount: widget.credits.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) {
-            final credit = widget.credits[i];
-            final amount = _amountForCredit(credit.clientUuid);
-            return Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    credit.referenceNo,
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    'Credit ${formatPosMoney(credit.creditRemaining)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Slider(
-                          value: amount.clamp(0, credit.creditRemaining),
-                          max: credit.creditRemaining,
-                          onChanged: (v) {
-                            final room =
-                                widget.maxApply - _selectedTotal + amount;
-                            final next = v.clamp(0, room).toDouble();
-                            _setCreditAmount(credit, next);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 72,
-                        child: Text(
-                          formatPosMoney(amount),
-                          textAlign: TextAlign.end,
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-    }
+        ),
+      ),
+    );
   }
 }

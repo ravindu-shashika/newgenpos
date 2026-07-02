@@ -97,6 +97,7 @@ class CatalogDownloadService {
     }
 
     var completedChunks = 0;
+    var productsDownloaded = false;
 
     for (final plan in resourcePlans) {
       if (_cancelled) throw Exception('Download cancelled');
@@ -131,6 +132,7 @@ class CatalogDownloadService {
 
         final rows = chunk['data'] as List<dynamic>? ?? [];
         await _persistDownloadChunk(resource, rows);
+        if (resource == 'products') productsDownloaded = true;
         completedChunks++;
 
         onProgress?.call(DownloadProgressInfo(
@@ -172,6 +174,15 @@ class CatalogDownloadService {
       await _posSettings.refreshFromBootstrap(_api);
     } catch (e, stack) {
       AppLogger.error('Download', 'POS settings bootstrap refresh failed', e, stack);
+    }
+
+    if (productsDownloaded) {
+      try {
+        AppLogger.info('Download', 'Rebuilding product search index');
+        await _db.rebuildProductSearchIndex();
+      } catch (e, stack) {
+        AppLogger.error('Download', 'Product search index rebuild failed', e, stack);
+      }
     }
 
     return resolvedWarehouseId;

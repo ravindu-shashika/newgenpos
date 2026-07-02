@@ -61,7 +61,9 @@ class ProductGridNotifier extends StateNotifier<ProductGridState> {
     );
     _ref.listen(sessionRevisionProvider, (_, __) => reload());
     _ref.listen(
-      posUiSettingsProvider.select((settings) => settings.gridColumnCount),
+      posUiSettingsProvider.select(
+        (settings) => (settings.gridColumnCount, settings.gridPageSize),
+      ),
       (_, __) => reload(),
     );
     reload();
@@ -77,8 +79,11 @@ class ProductGridNotifier extends StateNotifier<ProductGridState> {
       localOverride: ui.gridColumnCount,
       serverProductNumber: serverColumns,
     );
-    final serverPage = serverColumns ?? 15;
-    return (columns * 4).clamp(serverPage, 60);
+    return PosUiSettings.resolveGridPageSize(
+      localOverride: ui.gridPageSize,
+      columns: columns,
+      serverProductNumber: serverColumns,
+    );
   }
 
   Future<void> reload() async {

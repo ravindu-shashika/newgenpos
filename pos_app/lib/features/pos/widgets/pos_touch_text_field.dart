@@ -185,17 +185,18 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
                 onChanged: () => widget.onChanged?.call(widget.controller.text),
                 maxLines: widget.maxLines,
               ),
+              detachOnFocusLoss: false,
             );
-        return;
       }
-      // Native OS keyboard — ensure TextInput is connected after barcode mode.
+      // Keep OS / physical keyboard available alongside the on-screen keyboard.
       _focusNode.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final touchKeyboard =
+    final showTouchKeyboard =
         ref.watch(posUiSettingsProvider).enableKeyboard &&
             !widget.suppressNativeKeyboard;
     final scannerOnly = widget.suppressNativeKeyboard;
@@ -203,7 +204,7 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
     return TextField(
       controller: widget.controller,
       focusNode: _focusNode,
-      readOnly: touchKeyboard || widget.readOnlyWhenKeyboardOff || scannerOnly,
+      readOnly: widget.readOnlyWhenKeyboardOff || scannerOnly,
       showCursor: true,
       autofocus: widget.autofocus,
       maxLines: widget.maxLines,
@@ -211,9 +212,8 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
       style: widget.style,
       textAlign: widget.textAlign,
       textCapitalization: widget.textCapitalization,
-      keyboardType: touchKeyboard || scannerOnly
-          ? TextInputType.none
-          : _nativeKeyboardType(),
+      keyboardType:
+          scannerOnly ? TextInputType.none : _nativeKeyboardType(),
       enableInteractiveSelection: !scannerOnly,
       decoration: widget.decoration,
       onChanged: widget.onChanged,
@@ -225,7 +225,7 @@ class _PosTouchTextFieldState extends ConsumerState<PosTouchTextField> {
           _activateInputKeyboard();
         }
         widget.onTap?.call();
-        if (touchKeyboard) _focusNode.requestFocus();
+        if (showTouchKeyboard) _focusNode.requestFocus();
       },
     );
   }

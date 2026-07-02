@@ -1,4 +1,7 @@
+import 'package:drift/drift.dart';
+
 import '../../../core/database/app_database.dart';
+import '../../../core/database/product_catalog_sql.dart';
 import '../models/inventory_models.dart';
 
 class InventoryService {
@@ -6,82 +9,169 @@ class InventoryService {
 
   final AppDatabase _db;
   static const lowStockThreshold = 10.0;
+  static const _searchIdCap = 2000;
 
-  Future<InventoryOverview> load({int? warehouseId}) async {
-    final products = await _db.select(_db.products).get();
-    final categories = await _db.select(_db.categories).get();
-    final categoryNames = {for (final c in categories) c.id: c.name};
+  Future<InventorySummary> loadSummary({int? warehouseId}) async {
+    final warehouseScoped = warehouseId != null;
+    final variables = <Variable>[
+      if (warehouseScoped) Variable<int>(warehouseId),
+      Variable<double>(lowStockThreshold),
+      Variable<double>(lowStockThreshold),
+    ];
 
-    final stockQuery = _db.select(_db.productStock);
-    final stockRows = warehouseId == null
-        ? await stockQuery.get()
-        : await (stockQuery..where((s) => s.warehouseId.equals(warehouseId)))
-            .get();
+    final row = await _db
+        .customSelect(
+          ProductCatalogSql.inventorySummarySql(warehouseScoped: warehouseScoped),
+          variables: variables,
+          readsFrom: {_db.products, _db.productStock},
+        )
+        .getSingle();
 
-    final qtyByProduct = <int, double>{};
-    for (final row in stockRows) {
-      qtyByProduct[row.productId] =
-          (qtyByProduct[row.productId] ?? 0) + row.qty;
-    }
-
-    final items = <InventoryItemRow>[];
-    for (final product in products) {
-      final qty = qtyByProduct[product.id] ?? 0;
-      final status = _statusForQty(qty);
-      items.add(
-        InventoryItemRow(
-          productId: product.id,
-          name: product.name,
-          code: product.code,
-          categoryName: product.categoryId == null
-              ? '—'
-              : (categoryNames[product.categoryId] ?? 'Category'),
-          qty: qty,
-          price: product.price,
-          status: status,
-          statusLabel: _statusLabel(status),
-          statusDetail: _statusDetail(status, qty),
-        ),
-      );
-    }
-
-    items.sort((a, b) {
-      final rank = _statusRank(a.status).compareTo(_statusRank(b.status));
-      if (rank != 0) return rank;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-
-    final lowStockCount =
-        items.where((i) => i.isLowStock || i.isOutOfStock).length;
-    final inStockCount = items.where((i) => i.isInStock).length;
-    final recentUpdateCount = products
-        .where((p) => p.updatedAt?.trim().isNotEmpty == true)
-        .length;
-
-    return InventoryOverview(
-      totalItems: products.length,
-      lowStockCount: lowStockCount,
-      inStockCount: inStockCount,
-      recentUpdateCount: recentUpdateCount,
-      items: items,
+    return InventorySummary(
+      totalItems: row.read<int>('total_items'),
+      lowStockCount: row.read<int>('low_stock_count'),
+      inStockCount: row.read<int>('in_stock_count'),
+      recentUpdateCount: row.read<int>('recent_update_count'),
     );
   }
+
+  Future<InventoryListPage> loadPage({
+    int? warehouseId,
+    String search = '',
+    int offset = 0,
+    int limit = 4,
+  }) async {
+    final term = search.trim();
+    List<int>? searchIds;
+    if (term.length >= 2) {
+      searchIds = await _searchProductIds(term);
+      if (searchIds.isEmpty) {
+        return const InventoryListPage(items: [], totalCount: 0);
+      }
+    }
+
+    final warehouseScoped = warehouseId != null;
+    final searchFilterSql = searchIds == null
+        ? ''
+        : 'AND p.id IN (${List.filled(searchIds.length, '?').join(', ')})';
+
+    final baseVars = <Variable>[
+      if (warehouseScoped) Variable<int>(warehouseId),
+      if (searchIds != null) ...searchIds.map(Variable<int>.new),
+    ];
+
+    final countRow = await _db
+        .customSelect(
+          ProductCatalogSql.inventoryCountSql(
+            warehouseScoped: warehouseScoped,
+            searchFilterSql: searchFilterSql,
+          ),
+          variables: baseVars,
+          readsFrom: {_db.products, _db.productStock, _db.categories},
+        )
+        .getSingle();
+    final totalCount = countRow.read<int>('cnt');
+
+    if (totalCount == 0 || offset >= totalCount) {
+      return InventoryListPage(items: const [], totalCount: totalCount);
+    }
+
+    final rows = await _db
+        .customSelect(
+          ProductCatalogSql.inventoryPageSql(
+            warehouseScoped: warehouseScoped,
+            searchFilterSql: searchFilterSql,
+          ),
+          variables: [
+            ...baseVars,
+            Variable<double>(lowStockThreshold),
+            Variable<int>(limit),
+            Variable<int>(offset),
+          ],
+          readsFrom: {_db.products, _db.productStock, _db.categories},
+        )
+        .get();
+
+    final items = rows.map((row) {
+      final qty = row.read<double>('qty');
+      final status = _statusForQty(qty);
+      return InventoryItemRow(
+        productId: row.read<int>('product_id'),
+        name: row.read<String>('name'),
+        code: row.read<String>('code'),
+        categoryName: row.read<String>('category_name'),
+        qty: qty,
+        price: row.read<double>('price'),
+        status: status,
+        statusLabel: _statusLabel(status),
+        statusDetail: _statusDetail(status, qty),
+      );
+    }).toList();
+
+    return InventoryListPage(items: items, totalCount: totalCount);
+  }
+
+  Future<List<int>> _searchProductIds(String term) async {
+    final ids = <int>{};
+
+    final ftsMatch = ProductCatalogSql.ftsMatchExpression(term);
+    if (ftsMatch != null) {
+      try {
+        ids.addAll(
+          await _db.searchProductIdsFts(
+            matchExpression: ftsMatch,
+            limit: _searchIdCap,
+          ),
+        );
+      } catch (_) {}
+    }
+
+    if (ids.length < _searchIdCap) {
+      final categoryRows = await _db
+          .customSelect(
+            ProductCatalogSql.inventoryCategorySearchSql,
+            variables: [
+              Variable<String>(term),
+              Variable<int>(_searchIdCap),
+            ],
+            readsFrom: {_db.products, _db.categories},
+          )
+          .get();
+      for (final row in categoryRows) {
+        ids.add(row.read<int>('product_id'));
+        if (ids.length >= _searchIdCap) break;
+      }
+    }
+
+    if (ids.length < _searchIdCap && _isCodeLikeTerm(term)) {
+      final prefix = '${term.replaceAll('%', '').replaceAll('_', '')}%';
+      final codeRows = await _db
+          .customSelect(
+            ProductCatalogSql.inventoryCodePrefixSql,
+            variables: [
+              Variable<String>(prefix),
+              Variable<String>(prefix),
+              Variable<int>(_searchIdCap),
+            ],
+            readsFrom: {_db.products},
+          )
+          .get();
+      for (final row in codeRows) {
+        ids.add(row.read<int>('product_id'));
+        if (ids.length >= _searchIdCap) break;
+      }
+    }
+
+    return ids.toList();
+  }
+
+  bool _isCodeLikeTerm(String term) =>
+      !term.contains(' ') && RegExp(r'^[A-Za-z0-9\-]+$').hasMatch(term);
 
   InventoryStockStatus _statusForQty(double qty) {
     if (qty <= 0) return InventoryStockStatus.outOfStock;
     if (qty <= lowStockThreshold) return InventoryStockStatus.lowStock;
     return InventoryStockStatus.inStock;
-  }
-
-  int _statusRank(InventoryStockStatus status) {
-    switch (status) {
-      case InventoryStockStatus.outOfStock:
-        return 0;
-      case InventoryStockStatus.lowStock:
-        return 1;
-      case InventoryStockStatus.inStock:
-        return 2;
-    }
   }
 
   String _statusLabel(InventoryStockStatus status) {

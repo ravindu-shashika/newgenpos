@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'product_catalog_sql.dart';
 import 'tables.dart';
 
 part 'app_database.g.dart';
@@ -37,13 +38,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
           await _createProductLookupIndexes(m);
+          await _createProductCatalogScaleIndexes(m);
+          await _createProductFts(m);
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -100,8 +103,90 @@ class AppDatabase extends _$AppDatabase {
               'ON product_batches(product_id)',
             );
           }
+          if (from < 13) {
+            await _createProductCatalogScaleIndexes(m);
+            await _createProductFts(m);
+            await m.database.customStatement('DELETE FROM products_fts');
+            await m.database.customStatement(ProductCatalogSql.rebuildFtsSql);
+          }
         },
       );
+
+  static Future<void> _createProductCatalogScaleIndexes(Migrator m) async {
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_featured ON products(featured)',
+    );
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_category_id '
+      'ON products(category_id)',
+    );
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_brand_id ON products(brand_id)',
+    );
+    await m.database.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_stock_wh_instock '
+      'ON product_stock(warehouse_id, product_id, variant_id) '
+      'WHERE qty > 0',
+    );
+  }
+
+  static Future<void> _createProductFts(Migrator m) async {
+    await m.database.customStatement('''
+CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
+  product_id UNINDEXED,
+  name,
+  code,
+  alt_code,
+  tokenize='unicode61 remove_diacritics 2'
+)
+''');
+  }
+
+  /// Rebuild full-text index after catalog sync (safe for 1M+ rows).
+  Future<void> rebuildProductSearchIndex() async {
+    await transaction(() async {
+      await customStatement('DELETE FROM products_fts');
+      await customStatement(ProductCatalogSql.rebuildFtsSql);
+    });
+    await customStatement('ANALYZE products');
+    await customStatement('ANALYZE product_stock');
+  }
+
+  Future<void> upsertProductSearchIndexRow({
+    required int productId,
+    required String name,
+    required String code,
+    String? altCode,
+  }) {
+    return customStatement(
+      ProductCatalogSql.upsertFtsRowSql,
+      [
+        productId,
+        productId,
+        name,
+        code,
+        altCode ?? '',
+      ],
+    );
+  }
+
+  Future<List<int>> searchProductIdsFts({
+    required String matchExpression,
+    int limit = 25,
+  }) async {
+    final rows = await customSelect(
+      ProductCatalogSql.ftsSearchSql,
+      variables: [
+        Variable<String>(matchExpression),
+        Variable<int>(limit),
+      ],
+      readsFrom: const {},
+    ).get();
+    return rows
+        .map((r) => r.read<int>('product_id'))
+        .whereType<int>()
+        .toList();
+  }
 
   static Future<void> _createProductLookupIndexes(Migrator m) async {
     await m.database.customStatement(

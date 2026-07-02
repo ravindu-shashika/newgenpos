@@ -23,67 +23,73 @@ class PosTouchTextKeyboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.posStyles;
-    return Material(
-      elevation: 12,
-      color: s.cardBg,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final row in _rows)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      for (final key in row)
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 3),
-                            child: _KeyButton(
-                              label: key,
-                              onPressed: () => controller.insertText(key),
+    return Focus(
+      skipTraversal: true,
+      canRequestFocus: false,
+      descendantsAreFocusable: false,
+      child: Material(
+        elevation: 12,
+        color: s.cardBg,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final row in _rows)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        for (final key in row)
+                          Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 3),
+                              child: _KeyButton(
+                                label: key,
+                                onPressed: () => controller.insertText(key),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: _KeyButton(
-                      label: 'Space',
-                      onPressed: () => controller.insertText(' '),
+                      ],
                     ),
                   ),
-                  SizedBox(width: 6),
-                  _KeyButton(
-                    label: '⌫',
-                    width: 72,
-                    onPressed: controller.backspace,
-                  ),
-                  SizedBox(width: 6),
-                  if (maxLines > 1)
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _KeyButton(
+                        label: 'Space',
+                        onPressed: () => controller.insertText(' '),
+                      ),
+                    ),
+                    SizedBox(width: 6),
                     _KeyButton(
-                      label: 'Enter',
+                      label: '⌫',
                       width: 72,
-                      onPressed: () => controller.insertText('\n'),
+                      onPressed: controller.backspace,
                     ),
-                  SizedBox(width: 6),
-                  _KeyButton(
-                    label: 'Done',
-                    width: 72,
-                    color: context.posBrand.buttonPrimary,
-                    foreground: Colors.white,
-                    onPressed: controller.detach,
-                  ),
-                ],
-              ),
-            ],
+                    SizedBox(width: 6),
+                    if (maxLines > 1)
+                      _KeyButton(
+                        label: 'Enter',
+                        width: 72,
+                        onPressed: () => controller.insertText('\n'),
+                      ),
+                    SizedBox(width: 6),
+                    _KeyButton(
+                      label: 'Done',
+                      width: 72,
+                      color: context.posBrand.buttonPrimary,
+                      foreground: Colors.white,
+                      onPressed: controller.detach,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

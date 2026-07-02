@@ -47,20 +47,31 @@ class PosTouchKeyboardController extends ChangeNotifier {
     }
     _session = null;
     _focusListener = null;
+    _detachOnFocusLoss = false;
   }
 
-  void attach(PosTouchKeyboardSession session) {
-    if (_session?.focusNode == session.focusNode) return;
+  /// When false (default), the session stays active while the user taps on-screen
+  /// keys — otherwise focus moves to the key and [insertText] stops working.
+  void attach(PosTouchKeyboardSession session, {bool detachOnFocusLoss = false}) {
+    if (_session?.focusNode == session.focusNode &&
+        _detachOnFocusLoss == detachOnFocusLoss) {
+      return;
+    }
     _clearSession();
     _session = session;
-    _focusListener = () {
-      if (!session.focusNode.hasFocus) {
-        Future<void>.microtask(detach);
-      }
-    };
-    session.focusNode.addListener(_focusListener!);
+    _detachOnFocusLoss = detachOnFocusLoss;
+    if (detachOnFocusLoss) {
+      _focusListener = () {
+        if (!session.focusNode.hasFocus) {
+          Future<void>.microtask(detach);
+        }
+      };
+      session.focusNode.addListener(_focusListener!);
+    }
     _safeNotify();
   }
+
+  bool _detachOnFocusLoss = true;
 
   void detach() {
     if (_session == null) return;

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../pos_http/pos_api_client.dart';
 import '../database/app_database.dart';
+import '../database/product_catalog_sql.dart';
 import '../../features/pos/models/cart_line_edit_context.dart';
 import '../../features/pos/models/product_list_page.dart';
 import '../../features/pos/models/scanned_product.dart';
@@ -72,7 +73,7 @@ class ProductLookupRepository {
     return page.items;
   }
 
-  /// Paginated product grid — loads a slice sorted by name.
+  /// Paginated product grid — SQL-side aggregation (scales to 1M+ SKUs).
   Future<ProductListPage> listInStockPage({
     required int warehouseId,
     ProductGridFilter filter = ProductGridFilter.all,
@@ -81,81 +82,20 @@ class ProductLookupRepository {
     int offset = 0,
     int limit = 24,
   }) async {
-    final stockRows = await (_db.select(_db.productStock)
-          ..where((s) => s.warehouseId.equals(warehouseId))
-          ..orderBy([(s) => OrderingTerm.asc(s.productId)]))
-        .get();
+    final filterSql = _gridFilterSql(filter);
+    final filterVars = _gridFilterVariables(filter, filterId);
+    final baseVars = [Variable<int>(warehouseId), ...filterVars];
 
-    final productIdsFromStock = stockRows
-        .where((s) => s.qty > 0)
-        .map((s) => s.productId)
-        .toSet()
-        .toList();
-    final isBatchById = <int, bool>{};
-    if (productIdsFromStock.isNotEmpty) {
-      final batchFlags = await (_db.select(_db.products)
-            ..where((p) => p.id.isIn(productIdsFromStock)))
-          .get();
-      isBatchById.addAll({for (final p in batchFlags) p.id: p.isBatch});
-    }
+    final countRow = await _db
+        .customSelect(
+          ProductCatalogSql.gridCountSql(filterSql),
+          variables: baseVars,
+          readsFrom: { _db.products, _db.productStock, _db.productBatches },
+        )
+        .getSingle();
+    final totalCount = countRow.read<int>('cnt');
 
-    final qtyByKey = <String, double>{};
-    final variantByKey = <String, int?>{};
-    final productIds = <int>{};
-
-    for (final stock in stockRows) {
-      if (stock.qty <= 0) continue;
-      if ((isBatchById[stock.productId] ?? false) &&
-          stock.variantId == null &&
-          stock.productBatchId == null) {
-        continue;
-      }
-      final key = '${stock.productId}_${stock.variantId ?? 0}';
-      qtyByKey[key] = (qtyByKey[key] ?? 0) + stock.qty;
-      variantByKey[key] = stock.variantId;
-      productIds.add(stock.productId);
-    }
-
-    for (final productId in productIds) {
-      if (!(isBatchById[productId] ?? false)) continue;
-      final key = '${productId}_0';
-      if (variantByKey[key] != null) continue;
-      final batchTotal = await _warehouseBatchStockTotal(
-        productId: productId,
-        warehouseId: warehouseId,
-      );
-      if (batchTotal > 0) {
-        qtyByKey[key] = batchTotal;
-      } else {
-        qtyByKey.remove(key);
-      }
-    }
-
-    if (productIds.isEmpty) {
-      return const ProductListPage(items: [], totalCount: 0, offset: 0);
-    }
-
-    final productQuery = _filteredProductsQuery(
-      productIds: productIds.toList(),
-      filter: filter,
-      filterId: filterId,
-    );
-    final productRows = await productQuery.get();
-    final productsById = {for (final p in productRows) p.id: p};
-
-    final sortedKeys = qtyByKey.keys.where((key) {
-      final productId = int.parse(key.split('_').first);
-      return productsById.containsKey(productId);
-    }).toList()
-      ..sort((a, b) {
-        final nameA = productsById[int.parse(a.split('_').first)]!.name;
-        final nameB = productsById[int.parse(b.split('_').first)]!.name;
-        return nameA.compareTo(nameB);
-      });
-
-    final totalCount = sortedKeys.length;
-    final pageKeys = sortedKeys.skip(offset).take(limit).toList();
-    if (pageKeys.isEmpty) {
+    if (totalCount == 0 || offset >= totalCount) {
       return ProductListPage(
         items: const [],
         totalCount: totalCount,
@@ -163,49 +103,86 @@ class ProductLookupRepository {
       );
     }
 
+    final rows = await _db
+        .customSelect(
+          ProductCatalogSql.gridPageSql(filterSql),
+          variables: [
+            ...baseVars,
+            Variable<int>(limit),
+            Variable<int>(offset),
+          ],
+          readsFrom: { _db.products, _db.productStock, _db.productBatches },
+        )
+        .get();
+
+    if (rows.isEmpty) {
+      return ProductListPage(
+        items: const [],
+        totalCount: totalCount,
+        offset: offset,
+      );
+    }
+
+    final pageKeys = <String>[];
+    final variantByKey = <String, int?>{};
+    final qtyByKey = <String, double>{};
+    final productsById = <int, QueryRow>{};
+
+    for (final row in rows) {
+      final productId = row.read<int>('product_id');
+      final variantIdRaw = row.read<int>('variant_id');
+      final variantId = variantIdRaw == 0 ? null : variantIdRaw;
+      final key = '${productId}_${variantId ?? 0}';
+      pageKeys.add(key);
+      variantByKey[key] = variantId;
+      qtyByKey[key] = row.read<double>('qty');
+      productsById[productId] = row;
+    }
+
     final variantMap = await _variantMapForKeys(pageKeys, variantByKey);
     final taxMap = await _taxRateMap(
-      pageKeys
-          .map((key) => productsById[int.parse(key.split('_').first)]!.taxId)
+      productsById.values
+          .map((r) => r.read<int?>('tax_id'))
           .toSet(),
     );
 
     final items = <ScannedProduct>[];
     for (final key in pageKeys) {
       final productId = int.parse(key.split('_').first);
-      final product = productsById[productId]!;
+      final row = productsById[productId]!;
       final variantId = variantByKey[key];
-      var code = product.code;
-      var price =
-          _resolvePrice(product.price, product.wholesalePrice, priceType);
+      var code = row.read<String>('code');
+      var price = _resolvePrice(
+        row.read<double>('price'),
+        row.read<double>('wholesale_price'),
+        priceType,
+      );
 
       if (variantId != null) {
         final variant = variantMap['${productId}_$variantId'];
         if (variant != null) {
           code = variant.itemCode;
-          price = _resolvePrice(
-                product.price,
-                product.wholesalePrice,
-                priceType,
-              ) +
-              variant.additionalPrice;
+          price += variant.additionalPrice;
         }
       }
 
-      items.add(ScannedProduct(
-        productId: product.id,
-        variantId: variantId,
-        code: code,
-        name: product.name,
-        price: price,
-        taxRate: product.taxId == null ? 0 : (taxMap[product.taxId] ?? 0),
-        taxMethod: product.taxMethod,
-        warehouseQty: qtyByKey[key] ?? 0,
-        image: product.image,
-        source: ProductSource.local,
-        isBatch: product.isBatch,
-        maxPrice: product.maxPrice,
-      ));
+      final taxId = row.read<int?>('tax_id');
+      items.add(
+        ScannedProduct(
+          productId: productId,
+          variantId: variantId,
+          code: code,
+          name: row.read<String>('name'),
+          price: price,
+          taxRate: taxId == null ? 0 : (taxMap[taxId] ?? 0),
+          taxMethod: row.read<int>('tax_method'),
+          warehouseQty: qtyByKey[key] ?? 0,
+          image: row.read<String?>('image'),
+          source: ProductSource.local,
+          isBatch: row.read<int>('is_batch') == 1,
+          maxPrice: row.read<double?>('max_price'),
+        ),
+      );
     }
 
     return ProductListPage(
@@ -215,26 +192,27 @@ class ProductLookupRepository {
     );
   }
 
-  Selectable<Product> _filteredProductsQuery({
-    required List<int> productIds,
-    required ProductGridFilter filter,
-    required int filterId,
-  }) {
+  String _gridFilterSql(ProductGridFilter filter) {
     switch (filter) {
       case ProductGridFilter.all:
-        return _db.select(_db.products)
-          ..where((p) => p.id.isIn(productIds));
+        return '';
       case ProductGridFilter.featured:
-        return _db.select(_db.products)
-          ..where((p) => p.id.isIn(productIds) & p.featured.equals(1));
+        return 'AND p.featured = 1';
       case ProductGridFilter.category:
-        return _db.select(_db.products)
-          ..where(
-            (p) => p.id.isIn(productIds) & p.categoryId.equals(filterId),
-          );
+        return 'AND p.category_id = ?';
       case ProductGridFilter.brand:
-        return _db.select(_db.products)
-          ..where((p) => p.id.isIn(productIds) & p.brandId.equals(filterId));
+        return 'AND p.brand_id = ?';
+    }
+  }
+
+  List<Variable> _gridFilterVariables(ProductGridFilter filter, int filterId) {
+    switch (filter) {
+      case ProductGridFilter.all:
+      case ProductGridFilter.featured:
+        return const [];
+      case ProductGridFilter.category:
+      case ProductGridFilter.brand:
+        return [Variable<int>(filterId)];
     }
   }
 
@@ -338,13 +316,39 @@ class ProductLookupRepository {
     }
 
     if (candidates.length < limit) {
-      final nameLike = '%$escaped%';
+      final ftsMatch = ProductCatalogSql.ftsMatchExpression(term);
+      if (ftsMatch != null) {
+        try {
+          final ftsIds = await _db.searchProductIdsFts(
+            matchExpression: ftsMatch,
+            limit: limit,
+          );
+          if (ftsIds.isNotEmpty) {
+            final productRows = await (_db.select(_db.products)
+                  ..where((p) => p.id.isIn(ftsIds)))
+                .get();
+            final byId = {for (final p in productRows) p.id: p};
+            for (final id in ftsIds) {
+              if (candidates.length >= limit) break;
+              final product = byId[id];
+              if (product == null) continue;
+              addCandidate(product: product);
+            }
+          }
+        } catch (_) {
+          // FTS unavailable — fall through to legacy prefix scan.
+        }
+      }
+    }
+
+    if (candidates.length < limit && !codeLike) {
+      final prefix = '${escaped.substring(0, escaped.length.clamp(0, 3))}%';
       final productRows = await (_db.select(_db.products)
             ..where(
               (p) =>
-                  p.name.like(nameLike) |
-                  p.code.like(nameLike) |
-                  p.altCode.like(nameLike),
+                  p.name.like(prefix) |
+                  p.code.like(prefix) |
+                  p.altCode.like(prefix),
             )
             ..limit(limit))
           .get();
@@ -707,6 +711,88 @@ class ProductLookupRepository {
       }
     }
     return totals;
+  }
+
+  /// Batch stock lookup for checkout validation (one query per cart).
+  Future<Map<String, double>> getWarehouseQtyBatch({
+    required int warehouseId,
+    required List<({
+      int productId,
+      int? variantId,
+      int? productBatchId,
+    })> keys,
+  }) async {
+    if (keys.isEmpty) return {};
+
+    final batchKeys = keys.where((k) => k.productBatchId != null).toList();
+    final otherKeys = keys.where((k) => k.productBatchId == null).toList();
+    final result = <String, double>{};
+
+    for (final k in batchKeys) {
+      final mapKey =
+          '${k.productId}_${k.variantId ?? 0}_${k.productBatchId}';
+      result[mapKey] = await getWarehouseQty(
+        warehouseId: warehouseId,
+        productId: k.productId,
+        variantId: k.variantId,
+        productBatchId: k.productBatchId,
+      );
+    }
+
+    if (otherKeys.isEmpty) return result;
+
+    final productIds = otherKeys.map((k) => k.productId).toSet().toList();
+    final products = await (_db.select(_db.products)
+          ..where((p) => p.id.isIn(productIds)))
+        .get();
+    final isBatchById = {for (final p in products) p.id: p.isBatch};
+
+    final stockRows = await (_db.select(_db.productStock)
+          ..where(
+            (s) =>
+                s.warehouseId.equals(warehouseId) &
+                s.productId.isIn(productIds),
+          ))
+        .get();
+
+    for (final k in otherKeys) {
+      final mapKey = '${k.productId}_${k.variantId ?? 0}';
+      if (result.containsKey(mapKey)) continue;
+
+      final isBatch = isBatchById[k.productId] ?? false;
+      if (isBatch && k.variantId == null) {
+        result[mapKey] = await _warehouseBatchStockTotal(
+          productId: k.productId,
+          warehouseId: warehouseId,
+        );
+        continue;
+      }
+
+      if (k.variantId != null) {
+        result[mapKey] = stockRows
+            .where((r) => r.productId == k.productId && r.variantId == k.variantId)
+            .fold<double>(0, (sum, r) => sum + r.qty);
+      } else if (isBatch) {
+        result[mapKey] = stockRows
+            .where(
+              (r) =>
+                  r.productId == k.productId &&
+                  r.productBatchId != null,
+            )
+            .fold<double>(0, (sum, r) => sum + r.qty);
+      } else {
+        result[mapKey] = stockRows
+            .where(
+              (r) =>
+                  r.productId == k.productId &&
+                  r.variantId == null &&
+                  r.productBatchId == null,
+            )
+            .fold<double>(0, (sum, r) => sum + r.qty);
+      }
+    }
+
+    return result;
   }
 
   /// Available warehouse quantity for a product (matches search/grid logic).
