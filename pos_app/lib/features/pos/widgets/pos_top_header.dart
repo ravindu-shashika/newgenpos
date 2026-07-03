@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/local_reverb_settings_provider.dart';
 import '../../../core/providers/pos_connectivity_providers.dart';
+import '../../../core/realtime/pos_realtime_config.dart';
+import '../../../core/realtime/pos_realtime_service.dart';
 import '../../../core/theme/pos_theme.dart';
 import 'pos_top_bar_clock.dart';
 
 /// Shared shell header — optional leading slot + link status chips.
-class PosShellHeader extends StatelessWidget {
+class PosShellHeader extends ConsumerWidget {
   const PosShellHeader({
     super.key,
     this.leading,
@@ -32,9 +36,45 @@ class PosShellHeader extends StatelessWidget {
     return _PosStatusState.disconnected;
   }
 
+  static _PosStatusState _stockChipState(PosRealtimeConnectionState state) {
+    switch (state) {
+      case PosRealtimeConnectionState.live:
+        return _PosStatusState.connected;
+      case PosRealtimeConnectionState.connecting:
+        return _PosStatusState.checking;
+      case PosRealtimeConnectionState.polling:
+        return _PosStatusState.checking;
+      case PosRealtimeConnectionState.disabled:
+        return _PosStatusState.disconnected;
+      case PosRealtimeConnectionState.disconnected:
+        return _PosStatusState.disconnected;
+    }
+  }
+
+  static String _stockLabel(PosRealtimeConnectionState state) {
+    switch (state) {
+      case PosRealtimeConnectionState.live:
+        return 'Stock live';
+      case PosRealtimeConnectionState.polling:
+        return 'Stock poll';
+      case PosRealtimeConnectionState.connecting:
+        return 'Stock…';
+      case PosRealtimeConnectionState.disabled:
+        return 'Stock off';
+      case PosRealtimeConnectionState.disconnected:
+        return 'Stock';
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final styles = context.posStyles;
+    final stockState = ref.watch(posRealtimeConnectionStateProvider);
+    final stockConfig = ref.watch(posRealtimeConfigProvider);
+    final localEnabled = ref.watch(
+      localReverbSettingsProvider.select((s) => s.enableLiveStockSync),
+    );
+    final showStockChip = stockConfig.enabled && localEnabled;
 
     return Material(
       color: styles.cardBg,
@@ -94,6 +134,15 @@ class PosShellHeader extends StatelessWidget {
                     ),
                     onTap: onRefresh,
                   ),
+                  if (showStockChip) ...[
+                    SizedBox(width: 6),
+                    _PosStatusChip(
+                      label: _stockLabel(stockState),
+                      icon: Icons.inventory_2_outlined,
+                      state: _stockChipState(stockState),
+                      onTap: onRefresh,
+                    ),
+                  ],
                 ],
               ),
             ),

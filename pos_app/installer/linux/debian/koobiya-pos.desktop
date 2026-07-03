@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KOOBIYA POS
+Comment=Offline-first POS terminal
+Exec=/usr/lib/koobiya-pos/pos_app
+Icon=koobiya-pos
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=pos_app

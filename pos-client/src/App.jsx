@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { NavBar, SideNav, ComponentContainer } from './components';
+import { NavBar, SideNav, ComponentContainer, PosStockRealtimeListener } from './components';
 import { Login } from './auth';
 import { HashRouter, useLocation, Routes, Route } from 'react-router-dom';
 import PosPage from './views/backend/pos/PosPage';
@@ -29,6 +29,7 @@ function AuthenticatedLayout({
 }) {
   return (
     <div className="app-layout">
+      <PosStockRealtimeListener />
       <NavBar
         components={menuRoutes}
         selectedComponentName={selectedComponent}

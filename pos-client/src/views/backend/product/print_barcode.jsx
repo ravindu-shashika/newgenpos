@@ -298,6 +298,7 @@ export default function BackendProductPrintBarcode() {
                             <tr>
                                 <th>Name</th>
                                 <th>Code</th>
+                                <th>Alt code</th>
                                 <th>Quantity</th>
                                 <th>Warehouse / Price</th>
                                 <th style={{ width: '50px' }} aria-label="Actions" />
@@ -308,6 +309,7 @@ export default function BackendProductPrintBarcode() {
                                 <tr key={`${p.code}-${i}`}>
                                     <td>{p.name}</td>
                                     <td>{p.code}</td>
+                                    <td>{p.alt_code || '—'}</td>
                                     <td style={{ width: '120px' }}>
                                         <NumberInput
                                             value={p.quantity}
@@ -347,7 +349,7 @@ export default function BackendProductPrintBarcode() {
                             ))}
                             {selectedProducts.length === 0 && (
                                 <tr>
-                                    <td colSpan="5" className="text-center p-4 text-muted">
+                                    <td colSpan="6" className="text-center p-4 text-muted">
                                         No products selected. Use the search bar above to add products.
                                     </td>
                                 </tr>
@@ -440,6 +442,41 @@ export default function BackendProductPrintBarcode() {
                                 placeholder="Size"
                                 style={{ width: '80px' }}
                                 disabled={!printOptions.brand_name}
+                            />
+                        </div>
+                    </FormField>
+                </FormRow>
+
+                <FormRow cols={3} className="mt-3">
+                    <FormField label="Product Code">
+                        <div className="d-flex align-items-center gap-2">
+                            <CheckboxInput
+                                checked={printOptions.product_code !== false}
+                                onChange={(e) => setPrintOptions({ ...printOptions, product_code: e.target.checked })}
+                            />
+                            <TextInput
+                                type="number"
+                                value={printOptions.product_code_size ?? 12}
+                                onChange={(e) => setPrintOptions({ ...printOptions, product_code_size: parseInt(e.target.value, 10) || 12 })}
+                                placeholder="Size"
+                                style={{ width: '80px' }}
+                                disabled={printOptions.product_code === false}
+                            />
+                        </div>
+                    </FormField>
+                    <FormField label="Alt Code">
+                        <div className="d-flex align-items-center gap-2">
+                            <CheckboxInput
+                                checked={printOptions.alt_code !== false}
+                                onChange={(e) => setPrintOptions({ ...printOptions, alt_code: e.target.checked })}
+                            />
+                            <TextInput
+                                type="number"
+                                value={printOptions.alt_code_size ?? 12}
+                                onChange={(e) => setPrintOptions({ ...printOptions, alt_code_size: parseInt(e.target.value, 10) || 12 })}
+                                placeholder="Size"
+                                style={{ width: '80px' }}
+                                disabled={printOptions.alt_code === false}
                             />
                         </div>
                     </FormField>

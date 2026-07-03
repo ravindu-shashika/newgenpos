@@ -1,0 +1,109 @@
+name: POS App Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'pos-v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: pos_app
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          & installer/windows/build_installer.ps1
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: koobiya-pos-windows
+          path: pos_app/installer/output/KOOBIYA-POS-Setup-*.exe
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: pos_app
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Build macOS DMG
+        run: |
+          chmod +x installer/macos/build_dmg.sh installer/scripts/read_version.sh
+          bash installer/macos/build_dmg.sh
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: koobiya-pos-macos
+          path: pos_app/installer/output/KOOBIYA-POS-*-macos.dmg
+          if-no-files-found: error
+
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pos_app
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Build Linux .deb
+        run: |
+          chmod +x installer/linux/build_deb.sh installer/scripts/read_version.sh
+          bash installer/linux/build_deb.sh
+
+      - name: Upload Linux .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: koobiya-pos-linux
+          path: pos_app/installer/output/koobiya-pos_*_amd64.deb
+          if-no-files-found: error

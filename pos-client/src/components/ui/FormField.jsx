@@ -10,9 +10,10 @@ import React, { useMemo } from 'react';
  * FormRow — a grid wrapper.
  * FormSection — a section divider inside a form grid.
  */
-export function FormField({ label, required, error, children, span2 }) {
+export function FormField({ label, required, error, children, span2, spanFull }) {
+  const spanClass = spanFull ? ' span-full' : span2 ? ' span2' : '';
   return (
-    <div className={`ui-field${span2 ? ' span2' : ''}`}>
+    <div className={`ui-field${spanClass}`}>
       {label && (
         <label className="ui-label">
           {label}

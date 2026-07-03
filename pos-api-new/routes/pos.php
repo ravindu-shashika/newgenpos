@@ -9,6 +9,7 @@
 
 use App\Http\Controllers\PosAppController;
 use App\Http\Controllers\PosAuthController;
+use App\Http\Controllers\PosBroadcastingController;
 use App\Http\Controllers\PosCashRegisterController;
 use App\Http\Controllers\PosDashboardController;
 use App\Http\Controllers\PosDownloadController;
@@ -26,6 +27,7 @@ Route::prefix('pos')->name('pos.')->group(function () {
     Route::middleware(['auth.pos.token'])->group(function () {
         Route::get('auth/me', [PosAuthController::class, 'me']);
         Route::get('bootstrap', [PosAppController::class, 'bootstrap']);
+        Route::post('broadcasting/auth', [PosBroadcastingController::class, 'auth']);
         Route::get('cash-register/check/{warehouseId}', [PosCashRegisterController::class, 'check']);
         Route::post('cash-register/open', [PosCashRegisterController::class, 'open']);
         Route::get('cash-register/{id}/details', [PosCashRegisterController::class, 'details']);
@@ -45,6 +47,9 @@ Route::prefix('pos')->name('pos.')->group(function () {
         Route::post('setup/manifest', [PosDownloadController::class, 'manifest']);
         Route::post('setup/download', [PosDownloadController::class, 'download']);
         Route::post('setup/download-all', [PosDownloadController::class, 'downloadAll']);
+        Route::post('setup/snapshot/request', [PosDownloadController::class, 'snapshotRequest']);
+        Route::get('setup/snapshot/{id}/status', [PosDownloadController::class, 'snapshotStatus']);
+        Route::get('setup/snapshot/{id}/download', [PosDownloadController::class, 'snapshotDownload']);
     });
 
     // --- React web POS (logged-in dashboard user) ---

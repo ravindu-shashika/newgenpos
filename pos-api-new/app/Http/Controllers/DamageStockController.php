@@ -13,12 +13,13 @@ use Illuminate\Support\Facades\Schema;
 use App\Models\Unit;
 use App\Models\ProductVariant;
 use Auth;
+use App\Http\Controllers\Concerns\BroadcastsPosStockChanges;
 use App\Traits\SpaResponse;
 use Spatie\Permission\Models\Role;
 
 class DamageStockController extends Controller
 {
-    use SpaResponse;
+    use SpaResponse, BroadcastsPosStockChanges;
 
     protected function userCanAccessDamageStock(): bool
     {
@@ -368,6 +369,7 @@ class DamageStockController extends Controller
             $product_code = $data['product_code'];
             $qty          = $data['qty'];
             $unit_cost    = isset($data['unit_cost']) ? $data['unit_cost'] : [];
+            $posStockIds  = [];
 
             foreach ($product_id as $key => $pro_id) {
                 $lims_product_data = Product::find($pro_id);
@@ -403,6 +405,7 @@ class DamageStockController extends Controller
 
                 $lims_product_data->save();
                 $lims_product_warehouse_data->save();
+                $posStockIds[] = (int) $lims_product_warehouse_data->id;
 
                 $product_damage                    = [];
                 $product_damage['product_id']      = $pro_id;
@@ -416,6 +419,13 @@ class DamageStockController extends Controller
             }
 
             DB::commit();
+
+            $this->broadcastPosStockChanges(
+                (int) $data['warehouse_id'],
+                'damage',
+                $lims_damage_data->reference_no,
+                $posStockIds,
+            );
 
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [

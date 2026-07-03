@@ -4,6 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/providers/local_reverb_settings_provider.dart';
+import '../../core/providers/pos_ui_settings_provider.dart';
+import '../../core/realtime/pos_realtime_service.dart';
+import '../../core/sync/pos_stock_fallback_scheduler.dart';
+import '../../core/sync/database_backup_scheduler.dart';
+import '../../core/sync/sync_upload_scheduler.dart';
 import '../../core/services/pos_window_service.dart';
 import '../auth/login_screen.dart';
 import 'pos_dashboard_screen.dart';
@@ -16,6 +22,7 @@ import 'providers/pos_settings_subpage_provider.dart';
 import 'services/cash_register_exit_guard.dart';
 import 'services/dashboard_stats_service.dart';
 import 'services/pos_sidebar_actions.dart';
+import 'widgets/database_backup_reminder_banner.dart';
 import 'widgets/pos_main_shell.dart';
 import 'widgets/pos_sidebar.dart';
 import 'widgets/pos_professional_dialog.dart';
@@ -47,6 +54,9 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
         if (!mounted) return false;
         return CashRegisterExitGuard.ensureClosed(ref: ref, context: ctx);
       });
+      if (mounted) {
+        unawaited(connectPosRealtimeIfConfigured(ref));
+      }
     });
   }
 
@@ -130,6 +140,9 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(syncUploadSchedulerProvider);
+    ref.watch(databaseBackupSchedulerProvider);
+    ref.watch(posStockFallbackSchedulerProvider);
     final section = ref.watch(posNavSectionProvider);
 
     ref.listen<PosNavSection>(posNavSectionProvider, (previous, next) {
@@ -154,19 +167,33 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       });
     });
 
+    ref.listen<bool>(
+      localReverbSettingsProvider.select((s) => s.enableLiveStockSync),
+      (previous, next) {
+        if (previous == next) return;
+        unawaited(connectPosRealtimeIfConfigured(ref));
+      },
+    );
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: ValueListenableBuilder<bool>(
         valueListenable: PosWindowService.instance.kioskActiveNotifier,
         builder: (context, kioskActive, _) {
+          final enablePrint = ref.watch(posUiSettingsProvider).enablePrint;
           final shell = PosMainShell(
             activeSection: section,
             onDashboard: () => _selectSection(PosNavSection.dashboard),
             onRegister: () => _selectSection(PosNavSection.register),
             onInventory: () => _selectSection(PosNavSection.inventory),
-            onPrintLastReceipt: () => unawaited(
-              PosSidebarActions.printLastReceipt(context: context, ref: ref),
-            ),
+            onPrintLastReceipt: enablePrint
+                ? () => unawaited(
+                      PosSidebarActions.printLastReceipt(
+                        context: context,
+                        ref: ref,
+                      ),
+                    )
+                : null,
             onCashRegisterDetails: () => unawaited(
               PosSidebarActions.showCashRegisterDetails(
                 context: context,
@@ -201,13 +228,20 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
           );
 
           if (!PosWindowService.isSupported || !kioskActive) {
-            return shell;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const DatabaseBackupReminderBanner(),
+                Expanded(child: shell),
+              ],
+            );
           }
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const PosWindowTitleBar(),
+              const DatabaseBackupReminderBanner(),
               Expanded(child: shell),
             ],
           );

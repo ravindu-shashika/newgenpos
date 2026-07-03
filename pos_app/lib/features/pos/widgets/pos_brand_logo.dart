@@ -38,12 +38,15 @@ class PosBrandLogo extends StatelessWidget {
         variant: variant,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
-          child: Image.file(
-            file,
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => _fallbackContent(context),
+          child: ColoredBox(
+            color: _isSidebar ? Colors.white : Colors.transparent,
+            child: Image.file(
+              file,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _fallbackContent(context),
+            ),
           ),
         ),
       );

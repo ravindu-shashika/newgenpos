@@ -35,11 +35,11 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Requests\PurchaseRequest;
 use App\Http\Requests\Purchase\UpdatePurchaseRequest;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use App\Http\Controllers\Concerns\BroadcastsPosStockChanges;
 
 class PurchaseController extends Controller
 {
-    use TenantInfo, StaffAccess, SpaResponse;
+    use TenantInfo, StaffAccess, SpaResponse, BroadcastsPosStockChanges;
 
     public function index(Request $request)
     {
@@ -319,6 +319,8 @@ class PurchaseController extends Controller
             $imei_numbers = $data['imei_number'];
             $product_purchase = [];
             $log_data['item_description'] = '';
+            $posStockIds = [];
+            $posBatchIds = [];
 
             foreach ($product_id as $i => $id) {
                 $lims_purchase_unit_data = $this->resolvePurchaseUnit(
@@ -353,6 +355,7 @@ class PurchaseController extends Controller
                         $product_batch_data->expired_date = $lineExpiredDate;
                         $product_batch_data->qty += $quantity;
                         $product_batch_data->save();
+                        $posBatchIds[] = (int) $product_batch_data->id;
                     }
                     else {
                         $product_batch_data = ProductBatch::create([
@@ -361,6 +364,7 @@ class PurchaseController extends Controller
                                                 'expired_date' => $lineExpiredDate,
                                                 'qty' => $quantity
                                             ]);
+                        $posBatchIds[] = (int) $product_batch_data->id;
                     }
                     $product_purchase['product_batch_id'] = $product_batch_data->id;
                 }
@@ -456,6 +460,7 @@ class PurchaseController extends Controller
                         $lims_product_warehouse_data->imei_number = $imei_numbers[$i];
                 }
                 $lims_product_warehouse_data->save();
+                $posStockIds[] = (int) $lims_product_warehouse_data->id;
 
                 $log_data['item_description'] .= $lims_product_data->name. '-'. $qty[$i].' '.$lims_purchase_unit_data->unit_code.'<br>';
 
@@ -521,6 +526,14 @@ class PurchaseController extends Controller
             $this->createActivityLog($log_data);
 
             DB::commit();
+
+            $this->broadcastPosStockChanges(
+                (int) $data['warehouse_id'],
+                'purchase',
+                $lims_purchase_data->reference_no,
+                $posStockIds,
+                $posBatchIds,
+            );
 
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, ['success' => true, 'message' => __('db.Purchase created successfully')], 201);

@@ -21,8 +21,10 @@ import '../auth/login_screen.dart';
 import 'models/cart_line.dart';
 import 'models/pos_settings.dart';
 import 'models/pos_ui_settings.dart';
+import 'models/return_cart_line.dart';
 import 'models/return_models.dart';
 import 'models/scanned_product.dart';
+import 'services/return_entry_service.dart';
 import 'pos_checkout_defaults.dart';
 import 'pos_checkout_state.dart';
 import 'cart_line_calc.dart';
@@ -55,10 +57,7 @@ import 'widgets/payment_carousel_dialog.dart';
 import 'widgets/transaction_success_dialog.dart';
 import 'services/return_receipt_print_service.dart';
 import 'widgets/return_credit_dialog.dart';
-import 'widgets/return_sale_dialog.dart';
-import 'widgets/return_mode_dialog.dart';
-import 'widgets/return_without_bill_dialog.dart';
-import 'widgets/exchange_sale_dialog.dart';
+import 'widgets/return_session_panel.dart';
 import 'widgets/pos_professional_dialog.dart';
 import 'widgets/pos_toast.dart';
 import 'widgets/show_pos_dialog.dart';
@@ -82,6 +81,7 @@ class PosScreen extends ConsumerStatefulWidget {
 class _PosScreenState extends ConsumerState<PosScreen>
     with WidgetsBindingObserver {
   final _scanCtrl = TextEditingController();
+  final _returnScanCtrl = TextEditingController();
   final _searchFocus = FocusNode();
   final _catalogScrollCtrl = ScrollController();
   Timer? _searchDebounce;
@@ -93,10 +93,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
   bool _initialized = false;
   int? _openCashRegisterId;
   bool _returnFlowActive = false;
-  bool _exchangeFlowActive = false;
-  ExchangeSession? _exchangeSession;
   ProviderSubscription<int>? _returnTriggerSub;
-  ProviderSubscription<int>? _exchangeTriggerSub;
 
   @override
   void initState() {
@@ -111,13 +108,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
           (prev, next) {
             if (prev == null || next <= prev) return;
             unawaited(_showReturnFlow());
-          },
-        );
-        _exchangeTriggerSub = ref.listenManual<int>(
-          posExchangeSaleTriggerProvider,
-          (prev, next) {
-            if (prev == null || next <= prev) return;
-            unawaited(_showExchangeSale());
           },
         );
       });
@@ -347,81 +337,140 @@ class _PosScreenState extends ConsumerState<PosScreen>
       saleDate: DateTime.now(),
     ));
     if (mounted) {
-      setState(() => _exchangeSession = null);
+      setState(() {});
     }
   }
 
-  void _clearExchangeSession() {
-    final session = _exchangeSession;
-    if (session == null) return;
-
-    final remaining = _checkout.returnSettlements
-        .where((s) => s.returnClientUuid != session.returnClientUuid)
-        .toList();
-
-    setState(() => _exchangeSession = null);
-    if (remaining.length != _checkout.returnSettlements.length) {
-      _setCheckout(_checkout.copyWith(returnSettlements: remaining));
+  Future<ReturnSaleLookup?> _serverSaleLookup(String referenceNo) async {
+    try {
+      final data = await ref
+          .read(apiClientProvider)
+          .lookupSaleForReturn(referenceNo: referenceNo);
+      return ReturnSaleLookup.fromJson(data);
+    } catch (_) {
+      return null;
     }
   }
 
-  void _maybeApplyExchangeCredit() {
-    final session = _exchangeSession;
-    if (session == null || _checkout.isEmpty) return;
+  void _clearReturnSession() {
+    _returnScanCtrl.clear();
+    _setCheckout(_checkout.clearReturnSession());
+    if (mounted) setState(() {});
+  }
 
-    final totalsWithoutCredit =
-        _calcTotals(_checkout.copyWith(clearReturnSettlements: true));
-    final amount = math.min(
-      session.creditRemaining,
-      totalsWithoutCredit.grandTotal,
-    );
+  void _startReturnSession(ReturnCheckoutSessionStart start) {
+    _setCheckout(_checkout.startReturnSession(start));
+    if (mounted) setState(() {});
+  }
 
-    final others = _checkout.returnSettlements
-        .where((s) => s.returnClientUuid != session.returnClientUuid)
-        .toList();
+  ReturnEntryService get _returnEntryService =>
+      ReturnEntryService(ref.read(productLookupRepositoryProvider));
 
-    if (amount <= 0) {
-      if (others.length != _checkout.returnSettlements.length) {
-        _setCheckout(_checkout.copyWith(returnSettlements: others));
-      }
+  Future<void> _handleReturnScanSubmit(String input) async {
+    final warehouseId = _warehouseId;
+    final customerId = _checkout.customerId;
+    if (warehouseId == null || customerId == null) {
+      _showSnack('Customer and warehouse required', error: true);
       return;
     }
+    if (!_checkout.hasReturnSession) return;
 
-    AppliedReturnSettlement? existing;
-    for (final row in _checkout.returnSettlements) {
-      if (row.returnClientUuid == session.returnClientUuid) {
-        existing = row;
-        break;
+    final term = input.trim();
+    if (term.isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      var match = await _returnEntryService.resolveInput(
+        input: term,
+        warehouseId: warehouseId,
+        customerId: customerId,
+        saleLookup: _checkout.originalSaleLookup,
+      );
+
+      if (match == null && term.length >= 2) {
+        final hits = await _returnEntryService.searchByName(
+          query: term,
+          warehouseId: warehouseId,
+        );
+        if (hits.length > 1 && mounted) {
+          final picked = await showPosDialog<ScannedProduct>(
+            context: context,
+            builder: (ctx) => SimpleDialog(
+              title: const Text('Select product'),
+              children: [
+                for (final p in hits.take(12))
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(context, p),
+                    child: ListTile(
+                      title: Text(p.name),
+                      subtitle: Text(p.code),
+                    ),
+                  ),
+              ],
+            ),
+          );
+          if (picked == null) return;
+          match = ReturnProductMatch(
+            product: picked,
+            saleLine: _returnEntryService.matchProductToSaleLine(
+              product: picked,
+              lookup: _checkout.originalSaleLookup!,
+            ),
+          );
+        } else if (hits.length == 1) {
+          final product = hits.first;
+          match = ReturnProductMatch(
+            product: product,
+            saleLine: _checkout.originalSaleLookup != null
+                ? _returnEntryService.matchProductToSaleLine(
+                    product: product,
+                    lookup: _checkout.originalSaleLookup!,
+                  )
+                : null,
+          );
+        }
       }
+
+      if (match == null) {
+        _showSnack('Product not found or not on original sale', error: true);
+        return;
+      }
+
+      if (_checkout.originalSaleLookup != null && match.saleLine == null) {
+        _showSnack('Product not found on original sale', error: true);
+        return;
+      }
+
+      final saleLine = match.saleLine;
+      if (saleLine != null) {
+        final inSession = _checkout.returnQtyInSessionForSaleLine(
+          saleLine.productSaleId,
+        );
+        if (inSession >= saleLine.returnableQty) {
+          _showSnack('Max returnable qty reached for this line', error: true);
+          return;
+        }
+      }
+
+      final cartLine = _returnEntryService.buildReturnLine(match: match);
+      _setCheckout(_checkout.addReturnLine(cartLine));
+      _returnScanCtrl.clear();
+    } catch (e) {
+      _showSnack('Return scan error: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-
-    final settlement = AppliedReturnSettlement(
-      returnClientUuid: session.returnClientUuid,
-      returnReferenceNo: session.returnReferenceNo,
-      amount: amount,
-      returnId: existing?.returnId,
-    );
-
-    if (existing != null &&
-        (existing.amount - amount).abs() < 0.0001 &&
-        others.length + 1 == _checkout.returnSettlements.length) {
-      return;
-    }
-
-    _setCheckout(
-      _checkout.copyWith(returnSettlements: [...others, settlement]),
-    );
   }
 
   @override
   void dispose() {
     _returnTriggerSub?.close();
-    _exchangeTriggerSub?.close();
     WidgetsBinding.instance.removeObserver(this);
     _onlinePollTimer?.cancel();
     _catalogScrollCtrl.removeListener(_onCatalogScroll);
     _catalogScrollCtrl.dispose();
     _scanCtrl.dispose();
+    _returnScanCtrl.dispose();
     _searchDebounce?.cancel();
     _searchFocus.dispose();
     super.dispose();
@@ -449,7 +498,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
       orderTaxRate: ui.enableTax ? checkout.orderTaxRate : 0,
       shippingCost: ui.enableShipping ? checkout.shippingCost : 0,
       couponDiscount: checkout.couponDiscount,
-      returnCredit: ui.enableReturn ? checkout.returnCreditApplied : 0,
+      returnSettlementCredit:
+          ui.enableReturn ? checkout.returnCreditApplied : 0,
+      returnSessionCredit:
+          ui.enableReturn ? checkout.returnCreditFromSession : 0,
     );
   }
 
@@ -611,16 +663,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return false;
     }
 
-    final exchangeSession = _exchangeSession;
-    if (exchangeSession != null &&
-        !exchangeSession.allowedProductIds.contains(product.productId)) {
-      _showSnack(
-        'Exchange: only the same product can be added as a replacement',
-        error: true,
-      );
-      return false;
-    }
-
     var resolved = product;
     if (product.isBatch && product.productBatchId == null) {
       final options = await ref
@@ -716,7 +758,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
         : draft;
 
     _setCheckout(_checkout.addProduct(line));
-    _maybeApplyExchangeCredit();
     return true;
   }
 
@@ -791,7 +832,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
             .toList(),
       ),
     );
-    _maybeApplyExchangeCredit();
   }
 
   Future<void> _editCartLine(PosCheckoutState checkout, CartLine line) async {
@@ -834,7 +874,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
   ) async {
     if (newQty <= 0) {
       _setCheckout(checkout.updateQty(line.lineKey, newQty));
-      _maybeApplyExchangeCredit();
       return;
     }
 
@@ -881,7 +920,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
             .toList(),
       ),
     );
-    _maybeApplyExchangeCredit();
   }
 
   Future<String?> _validateCheckoutStock(int warehouseId) async {
@@ -1131,6 +1169,146 @@ class _PosScreenState extends ConsumerState<PosScreen>
     }
   }
 
+  Future<void> _completeReturnOnly({
+    required String paidById,
+    required double paidAmount,
+    bool? printInvoice,
+  }) async {
+    final session = ref.read(sessionServiceProvider);
+    final warehouseId = session.warehouseId;
+    final customerId = _checkout.customerId;
+    if (warehouseId == null || customerId == null) {
+      _showSnack('Customer and warehouse required', error: true);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final result = await ref
+          .read(localReturnRepositoryProvider)
+          .saveReturnFromCartLines(
+            lines: _checkout.returnLines,
+            warehouseId: warehouseId,
+            customerId: customerId,
+            lookup: _checkout.originalSaleLookup,
+            billerId: _checkout.billerId ?? session.billerId,
+          );
+
+      if (!mounted) return;
+      final ui = ref.read(posUiSettingsProvider);
+      if (ui.enablePrint) {
+        await _printReturnReceipt(result);
+      }
+
+      await showTransactionSuccessDialog(
+        context: context,
+        transactionNo: formatSaleReferenceDisplay(result.referenceNo),
+        refId: result.clientUuid,
+        changeDue: 0,
+      );
+
+      await _resetCheckoutForNewSale();
+      ref.read(syncRevisionProvider.notifier).state++;
+      _syncSalesInBackground();
+      _showSnack(
+        'Return ${formatSaleReferenceDisplay(result.referenceNo)} completed',
+        success: true,
+      );
+    } catch (e) {
+      _showSnack('Return failed: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _completeReturnPlusSale({
+    required String paidById,
+    required double paidAmount,
+    double? payingAmount,
+    bool isDraft = false,
+    String paymentReceiver = '',
+    String paymentNote = '',
+    String cardNumber = '',
+    String cardHolderName = '',
+    String cardType = '',
+    String chequeNo = '',
+    List<MixPaymentLine>? mixPayments,
+    bool? printInvoice,
+  }) async {
+    final session = ref.read(sessionServiceProvider);
+    final warehouseId = session.warehouseId;
+    final customerId = _checkout.customerId;
+    if (warehouseId == null || customerId == null) {
+      _showSnack('Customer and warehouse required', error: true);
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final stockError = await _validateCheckoutStock(warehouseId);
+      if (!mounted) return;
+      if (stockError != null) {
+        _showSnack(stockError, error: true);
+        return;
+      }
+
+      final returnResult = await ref
+          .read(localReturnRepositoryProvider)
+          .saveReturnFromCartLines(
+            lines: _checkout.returnLines,
+            warehouseId: warehouseId,
+            customerId: customerId,
+            lookup: _checkout.originalSaleLookup,
+            billerId: _checkout.billerId ?? session.billerId,
+          );
+
+      final saleGrand = _calcTotals(
+        _checkout.copyWith(clearReturnSession: true),
+      ).saleGrandTotal;
+      final settlementAmount = math.min(
+        returnResult.creditRemaining,
+        saleGrand,
+      );
+
+      final settlements = [
+        ..._checkout.returnSettlements,
+        if (settlementAmount > 0)
+          AppliedReturnSettlement(
+            returnClientUuid: returnResult.clientUuid,
+            returnReferenceNo: returnResult.referenceNo,
+            amount: settlementAmount,
+          ),
+      ];
+
+      _setCheckout(
+        _checkout.copyWith(
+          clearReturnSession: true,
+          returnSettlements: settlements,
+        ),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _busy = false);
+      _showSnack('Checkout failed: $e', error: true);
+      return;
+    }
+
+    if (!mounted) return;
+    await _completeSale(
+      paidById: paidById,
+      paidAmount: paidAmount,
+      payingAmount: payingAmount,
+      isDraft: isDraft,
+      paymentReceiver: paymentReceiver,
+      paymentNote: paymentNote,
+      cardNumber: cardNumber,
+      cardHolderName: cardHolderName,
+      cardType: cardType,
+      chequeNo: chequeNo,
+      mixPayments: mixPayments,
+      printInvoice: printInvoice,
+    );
+  }
+
   Future<void> _completeSale({
     required String paidById,
     required double paidAmount,
@@ -1145,7 +1323,44 @@ class _PosScreenState extends ConsumerState<PosScreen>
     List<MixPaymentLine>? mixPayments,
     bool? printInvoice,
   }) async {
-    if (_checkout.isEmpty) {
+    final checkout = _checkout;
+    final hasReturnLines =
+        checkout.hasReturnSession && checkout.returnLines.isNotEmpty;
+    final hasSaleLines = checkout.lines.isNotEmpty;
+
+    if (!checkout.canCheckout) {
+      _showSnack('Add at least one product', error: true);
+      return;
+    }
+
+    if (hasReturnLines && !hasSaleLines) {
+      await _completeReturnOnly(
+        paidById: paidById,
+        paidAmount: paidAmount,
+        printInvoice: printInvoice,
+      );
+      return;
+    }
+
+    if (hasReturnLines && hasSaleLines) {
+      await _completeReturnPlusSale(
+        paidById: paidById,
+        paidAmount: paidAmount,
+        payingAmount: payingAmount,
+        isDraft: isDraft,
+        paymentReceiver: paymentReceiver,
+        paymentNote: paymentNote,
+        cardNumber: cardNumber,
+        cardHolderName: cardHolderName,
+        cardType: cardType,
+        chequeNo: chequeNo,
+        mixPayments: mixPayments,
+        printInvoice: printInvoice,
+      );
+      return;
+    }
+
+    if (checkout.isEmpty) {
       _showSnack('Add at least one product', error: true);
       return;
     }
@@ -1255,13 +1470,32 @@ class _PosScreenState extends ConsumerState<PosScreen>
       }
 
       if (!isDraft && mounted) {
+        final autoPrint = printInvoice == true && ui.shouldAutoPrintBill;
+        if (autoPrint) {
+          try {
+            final cashierName = session.userName?.trim() ?? '';
+            final receipt =
+                await ref.read(localSaleRepositoryProvider).getLastReceipt(
+                      cashierName: cashierName,
+                    );
+            if (receipt != null && receipt.lines.isNotEmpty) {
+              final printSettings = ref.read(localPrintSettingsProvider);
+              await ReceiptPrintService.printReceipt(
+                receipt,
+                printSettings: printSettings,
+                cashierName: cashierName,
+              );
+            }
+          } catch (_) {}
+        }
+
         await showTransactionSuccessDialog(
           context: context,
           transactionNo: formatSaleReferenceDisplay(referenceNo),
           refId: clientUuid,
           changeDue: changeDue,
           cashReceived: changeDue > 0.009 ? tendered : null,
-          onPrintReceipt: () => _printLastReceipt(),
+          onPrintReceipt: ui.enablePrint ? () => _printLastReceipt() : null,
         );
       }
 
@@ -1359,8 +1593,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       paidById: '1',
       initialSaleNote: _checkout.saleNote,
       initialStaffNote: _checkout.staffNote,
-      showPrintInvoiceOption: settings?.showPrintInvoice ?? false,
-      defaultPrintInvoice: settings?.showPrintInvoice ?? false,
+      printOnComplete: uiSettings.shouldAutoPrintBill,
       showWhatsappOption: uiSettings.enableWhatsapp,
       defaultSendWhatsapp: settings?.sendSms ?? false,
       isMixPayment: true,
@@ -1383,7 +1616,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       cardHolderName: result.cardHolderName,
       cardType: result.cardType,
       chequeNo: result.chequeNo,
-      printInvoice: result.printInvoice,
+      printInvoice: uiSettings.shouldAutoPrintBill,
     );
   }
 
@@ -1398,6 +1631,14 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
   Future<void> _showSavePaymentCarousel() async {
     final totals = _totals;
+
+    if (_checkout.returnSessionMode == ReturnSessionMode.returnOnly &&
+        _checkout.returnLines.isNotEmpty &&
+        _checkout.lines.isEmpty) {
+      await _completeReturnOnly(paidById: '1', paidAmount: 0);
+      return;
+    }
+
     final settings = ref.read(posSettingsProvider).value;
     final uiSettings = ref.read(posUiSettingsProvider);
     final meta = await ref.read(posLocalMetaProvider.future);
@@ -1430,6 +1671,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         session.terminalName?.trim().isNotEmpty == true
             ? session.terminalName!.trim()
             : 'Terminal 01';
+    final orderRef = generateSaleReference(uiSettings);
 
     final result = await showPaymentCarouselDialog(
       context: context,
@@ -1446,14 +1688,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
       coupons: coupons,
       initialSaleNote: _checkout.saleNote,
       initialStaffNote: _checkout.staffNote,
-      showPrintInvoiceOption: true,
-      defaultPrintInvoice: true,
+      printOnComplete: uiSettings.shouldAutoPrintBill,
       showWhatsappOption: uiSettings.enableWhatsapp,
       defaultSendWhatsapp: settings?.sendSms ?? false,
       mixMethods: _paymentMethodsForMix(),
       returnCredit: uiSettings.enableReturn ? totals.returnCredit : 0,
-      onReturnCreditTap:
-          uiSettings.enableReturn ? _showReturnCreditPicker : null,
+      allowZeroBalanceComplete: totals.balanceDue <= 0.009 &&
+          _checkout.returnLines.isNotEmpty,
       orderLines: [
         for (final line in _checkout.lines)
           PaymentOrderLine(
@@ -1467,6 +1708,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       orderTax: totals.orderTax,
       stationLabel: stationLabel,
       terminalLabel: terminalLabel,
+      orderReference:
+          'Order #${formatSaleReferenceDisplay(orderRef.reference)}',
     );
 
     if (result == null || !mounted) return;
@@ -1507,7 +1750,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
       cardHolderName: result.finalize.cardHolderName,
       cardType: result.finalize.cardType,
       chequeNo: result.finalize.chequeNo,
-      printInvoice: result.finalize.printInvoice,
+      printInvoice: uiSettings.shouldAutoPrintBill
+          ? result.finalize.printInvoice
+          : false,
     );
   }
 
@@ -1523,8 +1768,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       paidById: paidById,
       initialSaleNote: _checkout.saleNote,
       initialStaffNote: _checkout.staffNote,
-      showPrintInvoiceOption: settings?.showPrintInvoice ?? false,
-      defaultPrintInvoice: settings?.showPrintInvoice ?? false,
+      printOnComplete: uiSettings.shouldAutoPrintBill,
       showWhatsappOption: uiSettings.enableWhatsapp,
       defaultSendWhatsapp: settings?.sendSms ?? false,
     );
@@ -1543,7 +1787,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       cardNumber: result.cardNumber,
       cardHolderName: result.cardHolderName,
       cardType: result.cardType,
-      printInvoice: result.printInvoice,
+      chequeNo: result.chequeNo,
+      printInvoice: uiSettings.shouldAutoPrintBill,
     );
   }
 
@@ -1562,38 +1807,17 @@ class _PosScreenState extends ConsumerState<PosScreen>
       }
 
       ref.read(posTouchKeyboardControllerProvider).detach();
-      final mode = await showReturnModeDialog(context);
-      if (mode == null || !mounted) return;
+      if (!mounted) return;
 
-      SavedReturnResult? result;
-      if (mode == ReturnEntryMode.withPastBill) {
-        result = await showReturnSaleDialog(
-          context: context,
-          returnRepo: ref.read(localReturnRepositoryProvider),
-          warehouseId: warehouseId,
-          customerId: customerId,
-        );
-      } else {
-        result = await showReturnWithoutBillDialog(
-          context: context,
-          returnRepo: ref.read(localReturnRepositoryProvider),
-          productLookup: ref.read(productLookupRepositoryProvider),
-          warehouseId: warehouseId,
-          customerId: customerId,
-          billerId: _checkout.billerId ?? session.billerId,
-        );
-      }
-
-      if (result == null || !mounted) return;
-
-      await _printReturnReceipt(result);
+      _startReturnSession(
+        const ReturnCheckoutSessionStart(
+          mode: ReturnSessionMode.returnAndSale,
+        ),
+      );
       _showSnack(
-        'Return ${formatSaleReferenceDisplay(result.referenceNo)} — '
-        'credit ${formatPosMoney(result.creditRemaining)}',
+        'Return session started — scan items to return',
         success: true,
       );
-      ref.read(syncRevisionProvider.notifier).state++;
-      _syncSalesInBackground();
     } finally {
       _returnFlowActive = false;
     }
@@ -1641,51 +1865,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
   Future<void> _showReturnSale() async {
     await _showReturnFlow();
-  }
-
-  Future<void> _showExchangeSale() async {
-    if (!ref.read(posUiSettingsProvider).enableExchange) return;
-    if (_exchangeFlowActive) return;
-    _exchangeFlowActive = true;
-
-    try {
-      final session = ref.read(sessionServiceProvider);
-      final warehouseId = session.warehouseId;
-      final customerId = _checkout.customerId;
-      if (warehouseId == null || customerId == null) {
-        _showSnack('Customer and warehouse required', error: true);
-        return;
-      }
-
-      ref.read(posTouchKeyboardControllerProvider).detach();
-      await Future<void>.delayed(Duration.zero);
-      if (!mounted) return;
-
-      final result = await showExchangeSaleDialog(
-        context: context,
-        returnRepo: ref.read(localReturnRepositoryProvider),
-        warehouseId: warehouseId,
-        customerId: customerId,
-      );
-
-      if (result == null || !mounted) return;
-
-      await _printReturnReceipt(result.returnResult);
-      setState(() {
-        _exchangeSession = ExchangeSession.fromResult(result);
-      });
-      _maybeApplyExchangeCredit();
-
-      _showSnack(
-        'Return ${formatSaleReferenceDisplay(result.returnResult.referenceNo)} — '
-        'add same-product replacements, then checkout',
-        success: true,
-      );
-      ref.read(syncRevisionProvider.notifier).state++;
-      _syncSalesInBackground();
-    } finally {
-      _exchangeFlowActive = false;
-    }
   }
 
   Future<void> _showReturnCreditPicker() async {
@@ -1960,11 +2139,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
   }
 
   Future<void> _clearCart() async {
-    if (_checkout.isEmpty) return;
+    if (!_checkout.canCheckout) return;
     final ok = await showPosConfirmDialog(
       context: context,
       title: 'Clear cart?',
-      message: 'Remove all items and cancel this sale?',
+      message: 'Remove all items and cancel this checkout?',
       icon: Icons.remove_shopping_cart_outlined,
       confirmLabel: 'Clear',
       destructive: true,
@@ -2367,44 +2546,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
   }
 
-  Widget _buildExchangeSessionBanner() {
-    final session = _exchangeSession!;
-    final styles = context.posStyles;
-    return Material(
-      color: context.posBrand.primary.withValues(alpha: 0.12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(Icons.swap_horiz_rounded, color: context.posBrand.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Exchange in progress',
-                    style: styles.body.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    'Add same-product replacements. Credit from '
-                    '${formatSaleReferenceDisplay(session.returnReferenceNo)} '
-                    'is applied at checkout.',
-                    style: styles.caption,
-                  ),
-                ],
-              ),
-            ),
-            TextButton(
-              onPressed: _clearExchangeSession,
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCheckout(
     PosCheckoutState checkout,
     PosTotals totals,
@@ -2418,13 +2559,33 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final hasOrderDiscount = totals.orderDiscount > 0;
     final hasPromoDiscount = totals.couponDiscount > 0;
     final hasReturnCredit = totals.returnCredit > 0;
+    final hasReturnSession = checkout.hasReturnSession;
 
     return ColoredBox(
       color: context.posSurface.orderPanelBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_exchangeSession != null) _buildExchangeSessionBanner(),
+          if (hasReturnSession)
+            ReturnSessionPanel(
+              returnLines: checkout.returnLines,
+              totals: totals,
+              scanController: _returnScanCtrl,
+              onScanSubmit: (v) => unawaited(_handleReturnScanSubmit(v)),
+              onRemoveLine: (key) {
+                _setCheckout(checkout.removeReturnLine(key));
+                setState(() {});
+              },
+              onUpdateQty: (key, qty) {
+                _setCheckout(checkout.updateReturnQty(key, qty));
+                setState(() {});
+              },
+              onCancelSession: _clearReturnSession,
+              busy: _busy,
+              title: 'Return items',
+              showScanField: checkout.returnLines.isEmpty ||
+                  checkout.originalSaleLookup == null,
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
             child: Column(
@@ -2439,7 +2600,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                     const Spacer(),
                     TextButton.icon(
                       onPressed:
-                          checkout.isEmpty || _busy ? null : _clearCart,
+                          !checkout.canCheckout || _busy ? null : _clearCart,
                       icon: const Icon(Icons.delete_outline, size: 20),
                       label: const Text('Clear'),
                       style: TextButton.styleFrom(
@@ -2557,56 +2718,25 @@ class _PosScreenState extends ConsumerState<PosScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _checkout.isEmpty || _busy
-                            ? null
-                            : _showCouponModal,
-                        icon: const Icon(Icons.local_offer_outlined, size: 18),
-                        label: const Text('Coupon'),
-                        style: styles.checkoutOutlinedStyle(
-                          highlighted: hasPromoDiscount,
-                        ),
+                      child: PosPayButton(
+                        label: 'HOLD',
+                        icon: Icons.pause_circle_outline,
+                        backgroundColor: PosColors.amber,
+                        foregroundColor: const Color(0xFF1A1A1A),
+                        disabled: _checkout.isEmpty || _busy,
+                        onPressed: () => unawaited(_holdSale(totals)),
                       ),
                     ),
-                    SizedBox(width: 10),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _checkout.isEmpty || _busy
-                            ? null
-                            : _showDiscountModal,
-                        icon: const Icon(Icons.discount_outlined, size: 18),
-                        label: const Text('Discount'),
-                        style: styles.checkoutOutlinedStyle(
-                          highlighted: hasOrderDiscount,
-                        ),
+                      child: PosPayButton(
+                        label: 'CHECKOUT',
+                        icon: Icons.point_of_sale_rounded,
+                        disabled: !_checkout.canCheckout || _busy,
+                        onPressed: _showSavePaymentCarousel,
                       ),
                     ),
-                    if (ui.enableReturn) ...[
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _checkout.isEmpty || _busy
-                              ? null
-                              : _showReturnCreditPicker,
-                          icon: const Icon(
-                            Icons.account_balance_wallet_outlined,
-                            size: 18,
-                          ),
-                          label: Text(
-                            hasReturnCredit ? 'Return credit' : 'Settle return',
-                          ),
-                          style: styles.checkoutOutlinedStyle(
-                            highlighted: hasReturnCredit,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
-                ),
-                SizedBox(height: 14),
-                PosPayButton(
-                  disabled: _checkout.isEmpty || _busy,
-                  onPressed: _showSavePaymentCarousel,
                 ),
               ],
             ),

@@ -11,6 +11,8 @@ enum PosSettingsSubPage {
   maintenance,
   printer,
   server,
+  localData,
+  reverb,
 }
 
 final posSettingsSubPageProvider =
@@ -36,3 +38,11 @@ void openPosServerSettings(WidgetRef ref) {
 }
 
 void closePosServerSettings(WidgetRef ref) => closePosSettingsSubPage(ref);
+
+void openPosLocalDataSettings(WidgetRef ref) {
+  openPosSettingsSubPage(ref, PosSettingsSubPage.localData);
+}
+
+void openPosReverbSettings(WidgetRef ref) {
+  openPosSettingsSubPage(ref, PosSettingsSubPage.reverb);
+}

@@ -16,6 +16,7 @@ use App\Models\ProductVariant;
 use App\Models\ProductBatch;
 use App\Models\ProductPurchase;
 use Auth;
+use App\Http\Controllers\Concerns\BroadcastsPosStockChanges;
 use App\Traits\SpaResponse;
 use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Role;
@@ -23,7 +24,7 @@ use Spatie\Permission\Models\Permission;
 
 class AdjustmentController extends Controller
 {
-    use SpaResponse;
+    use SpaResponse, BroadcastsPosStockChanges;
 
     protected function userCanAccessAdjustment(): bool
     {
@@ -390,6 +391,7 @@ class AdjustmentController extends Controller
         return [
             'variant_id' => $variantId,
             'product_batch_id' => $lineBatchId,
+            'stock_id' => (int) $warehouse->id,
         ];
     }
 
@@ -828,6 +830,8 @@ class AdjustmentController extends Controller
             $batch_no = $data['batch_no'] ?? [];
             $expired_date = $data['expired_date'] ?? [];
             $product_batch_id = $data['product_batch_id'] ?? [];
+            $posStockIds = [];
+            $posBatchIds = [];
 
             foreach ($product_id as $key => $pro_id) {
                 $lims_product_data = Product::find($pro_id);
@@ -841,6 +845,13 @@ class AdjustmentController extends Controller
                     $expired_date[$key] ?? null,
                     !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
                 );
+
+                if (!empty($lineMeta['stock_id'])) {
+                    $posStockIds[] = (int) $lineMeta['stock_id'];
+                }
+                if (!empty($lineMeta['product_batch_id'])) {
+                    $posBatchIds[] = (int) $lineMeta['product_batch_id'];
+                }
 
                 $product_adjustment = [
                     'product_id' => $pro_id,
@@ -858,6 +869,14 @@ class AdjustmentController extends Controller
                 ProductAdjustment::create($product_adjustment);
             }
             DB::commit();
+
+            $this->broadcastPosStockChanges(
+                (int) $data['warehouse_id'],
+                'adjustment',
+                $lims_adjustment_data->reference_no,
+                $posStockIds,
+                $posBatchIds,
+            );
 
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [

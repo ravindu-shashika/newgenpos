@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Terminal;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Jobs\BuildPosCatalogSnapshotJob;
+use App\Services\PosCatalogSnapshotService;
 use App\Services\PosDownloadService;
 use App\Traits\SpaResponse;
 use Illuminate\Http\Request;
@@ -64,6 +66,7 @@ class PosDownloadController extends Controller
             'resource' => 'required|string|in:' . implode(',', $download->resourceNames()),
             'page' => 'nullable|integer|min:1',
             'per_page' => 'nullable|integer|min:1|max:5000',
+            'cursor_id' => 'nullable|integer|min:0',
             'warehouse_id' => 'nullable|integer',
             'mode' => 'nullable|in:full,delta',
             'since' => 'nullable|date',
@@ -85,6 +88,9 @@ class PosDownloadController extends Controller
 
         $page = (int) $request->input('page', 1);
         $perPage = (int) $request->input('per_page', PosDownloadService::CHUNK_SIZE);
+        $cursorId = $request->filled('cursor_id')
+            ? (int) $request->input('cursor_id')
+            : null;
 
         try {
             $result = $download->download(
@@ -95,6 +101,7 @@ class PosDownloadController extends Controller
                     'warehouse_id' => $warehouseId,
                     'mode' => $mode,
                     'since' => $since,
+                    'cursor_id' => $cursorId,
                 ]
             );
         } catch (\InvalidArgumentException $e) {
@@ -105,6 +112,9 @@ class PosDownloadController extends Controller
             'resource' => $request->input('resource'),
             'page' => $page,
             'per_page' => $perPage,
+            'cursor_id' => $cursorId,
+            'next_cursor_id' => $result['next_cursor_id'] ?? null,
+            'has_more' => $result['has_more'] ?? false,
             'warehouse_id' => $warehouseId,
             'mode' => $mode,
             'since' => $since,
@@ -123,6 +133,69 @@ class PosDownloadController extends Controller
         return $this->spaJson($request, [
             'message' => 'Download each resource page from POST /pos/setup/download',
             'manifest' => $manifest,
+        ]);
+    }
+
+    public function snapshotRequest(Request $request, PosCatalogSnapshotService $snapshots)
+    {
+        if (!$this->canDownload($request)) {
+            return response()->json([
+                'message' => 'Unauthorized. Terminal must be active.',
+            ], 401);
+        }
+
+        $warehouseId = $this->resolveWarehouseId($request);
+        if (!$warehouseId) {
+            return $this->spaJson($request, ['message' => 'warehouse_id is required.'], 422);
+        }
+
+        $meta = $snapshots->request($warehouseId);
+        BuildPosCatalogSnapshotJob::dispatch($warehouseId, $meta['id']);
+
+        return $this->spaJson($request, $meta, 202);
+    }
+
+    public function snapshotStatus(Request $request, string $id, PosCatalogSnapshotService $snapshots)
+    {
+        if (!$this->canDownload($request)) {
+            return response()->json([
+                'message' => 'Unauthorized. Terminal must be active.',
+            ], 401);
+        }
+
+        $warehouseId = $this->resolveWarehouseId($request);
+        if (!$warehouseId) {
+            return $this->spaJson($request, ['message' => 'warehouse_id is required.'], 422);
+        }
+
+        $meta = $snapshots->getStatus($warehouseId, $id);
+        if (!$meta) {
+            return $this->spaJson($request, ['message' => 'Snapshot not found.'], 404);
+        }
+
+        return $this->spaJson($request, $meta);
+    }
+
+    public function snapshotDownload(Request $request, string $id, PosCatalogSnapshotService $snapshots)
+    {
+        if (!$this->canDownload($request)) {
+            return response()->json([
+                'message' => 'Unauthorized. Terminal must be active.',
+            ], 401);
+        }
+
+        $warehouseId = $this->resolveWarehouseId($request);
+        if (!$warehouseId) {
+            return $this->spaJson($request, ['message' => 'warehouse_id is required.'], 422);
+        }
+
+        $path = $snapshots->snapshotFilePath($warehouseId, $id);
+        if (!$path || !is_readable($path)) {
+            return $this->spaJson($request, ['message' => 'Snapshot not ready.'], 404);
+        }
+
+        return response()->download($path, basename($path), [
+            'Content-Type' => 'application/gzip',
         ]);
     }
 

@@ -51,8 +51,7 @@ Future<FinalizeSaleResult?> showFinalizeSaleDialog({
   required String paidById,
   String initialSaleNote = '',
   String initialStaffNote = '',
-  bool showPrintInvoiceOption = false,
-  bool defaultPrintInvoice = false,
+  bool printOnComplete = false,
   bool showWhatsappOption = false,
   bool defaultSendWhatsapp = false,
   bool isMixPayment = false,
@@ -68,8 +67,7 @@ Future<FinalizeSaleResult?> showFinalizeSaleDialog({
         paidById: paidById,
         initialSaleNote: initialSaleNote,
         initialStaffNote: initialStaffNote,
-        showPrintInvoiceOption: showPrintInvoiceOption,
-        defaultPrintInvoice: defaultPrintInvoice,
+        printOnComplete: printOnComplete,
         showWhatsappOption: showWhatsappOption,
         defaultSendWhatsapp: defaultSendWhatsapp,
         isMixPayment: isMixPayment,
@@ -110,8 +108,7 @@ class _FinalizeSaleDialog extends ConsumerStatefulWidget {
     required this.paidById,
     required this.initialSaleNote,
     required this.initialStaffNote,
-    required this.showPrintInvoiceOption,
-    required this.defaultPrintInvoice,
+    required this.printOnComplete,
     required this.showWhatsappOption,
     required this.defaultSendWhatsapp,
     required this.isMixPayment,
@@ -123,8 +120,7 @@ class _FinalizeSaleDialog extends ConsumerStatefulWidget {
   final String paidById;
   final String initialSaleNote;
   final String initialStaffNote;
-  final bool showPrintInvoiceOption;
-  final bool defaultPrintInvoice;
+  final bool printOnComplete;
   final bool showWhatsappOption;
   final bool defaultSendWhatsapp;
   final bool isMixPayment;
@@ -148,7 +144,6 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
   late final TextEditingController _paymentNoteCtrl;
   late final TextEditingController _saleNoteCtrl;
   late final TextEditingController _staffNoteCtrl;
-  late bool _printInvoice;
   late bool _sendWhatsapp;
   bool _quickCashInitial = true;
   String _cardType = _cardTypes.first;
@@ -167,7 +162,6 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
     _paymentNoteCtrl = TextEditingController();
     _saleNoteCtrl = TextEditingController(text: widget.initialSaleNote);
     _staffNoteCtrl = TextEditingController(text: widget.initialStaffNote);
-    _printInvoice = widget.defaultPrintInvoice;
     _sendWhatsapp = widget.defaultSendWhatsapp;
     _mixRows = [
       _MixPaymentRowData(
@@ -371,7 +365,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
         cardHolderName: _mixHasCardRow ? _cardHolderCtrl.text.trim() : '',
         cardType: _mixHasCardRow ? _cardType : '',
         chequeNo: _mixHasChequeRow ? _chequeNoCtrl.text.trim() : '',
-        printInvoice: _printInvoice,
+        printInvoice: widget.printOnComplete,
         sendWhatsapp: _sendWhatsapp,
       ),
     );
@@ -390,7 +384,7 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
         cardNumber: _cardNumberCtrl.text.trim(),
         cardHolderName: _cardHolderCtrl.text.trim(),
         cardType: widget.isCard ? _cardType : '',
-        printInvoice: _printInvoice,
+        printInvoice: widget.printOnComplete,
         sendWhatsapp: _sendWhatsapp,
       ),
     );
@@ -413,18 +407,6 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
             primaryLabel: 'Submit',
             onPrimary: _submit,
           ),
-          if (widget.showPrintInvoiceOption)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  value: _printInvoice,
-                  onChanged: (v) =>
-                      setState(() => _printInvoice = v ?? false),
-                ),
-                Text('Print invoice'),
-              ],
-            ),
           if (widget.showWhatsappOption)
             Row(
               mainAxisSize: MainAxisSize.min,

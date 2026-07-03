@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../pos_http/pos_api_client.dart';
@@ -8,7 +11,67 @@ import '../repositories/local_auth_repository.dart';
 import '../repositories/pos_settings_repository.dart';
 import 'download_models.dart';
 
-/// Chunked catalog download — yields between batches so the UI stays responsive.
+class _DownloadTuning {
+  const _DownloadTuning({
+    required this.pageSize,
+    required this.dbBatchSize,
+    required this.parallelChunks,
+  });
+
+  final int pageSize;
+  final int dbBatchSize;
+  final int parallelChunks;
+
+  factory _DownloadTuning.forBulk(bool bulk) => _DownloadTuning(
+        pageSize: AppConfig.downloadPageSizeFor(bulk: bulk),
+        dbBatchSize: AppConfig.dbWriteBatchSizeFor(bulk: bulk),
+        parallelChunks: AppConfig.downloadParallelChunksFor(bulk: bulk),
+      );
+}
+
+int? _parseIntOrNull(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  return int.tryParse(v.toString());
+}
+
+class _DownloadCheckpoint {
+  const _DownloadCheckpoint({
+    required this.resource,
+    this.cursorId,
+    required this.mode,
+    this.since,
+  });
+
+  final String resource;
+  final int? cursorId;
+  final String mode;
+  final String? since;
+
+  Map<String, dynamic> toJson() => {
+        'resource': resource,
+        if (cursorId != null) 'cursor_id': cursorId,
+        'mode': mode,
+        if (since != null) 'since': since,
+      };
+
+  static _DownloadCheckpoint? decode(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return _DownloadCheckpoint(
+        resource: map['resource']?.toString() ?? '',
+        cursorId: _parseIntOrNull(map['cursor_id']),
+        mode: map['mode']?.toString() ?? 'full',
+        since: map['since']?.toString(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+/// Chunked catalog download — cursor pagination, checkpoints, incremental FTS.
 class CatalogDownloadService {
   CatalogDownloadService(
     this._db,
@@ -23,6 +86,7 @@ class CatalogDownloadService {
   final PosSettingsRepository _posSettings;
 
   bool _cancelled = false;
+  _DownloadTuning _tuning = _DownloadTuning.forBulk(false);
 
   void cancel() => _cancelled = true;
 
@@ -33,9 +97,11 @@ class CatalogDownloadService {
     String? username,
     String? password,
     String? since,
+    bool bulkMode = false,
     DownloadProgressCallback? onProgress,
   }) async {
     _cancelled = false;
+    _tuning = _DownloadTuning.forBulk(bulkMode);
 
     final meta = await _db.getSyncMeta();
     final resolvedSince = mode == PosDownloadMode.delta
@@ -51,9 +117,14 @@ class CatalogDownloadService {
 
     if (mode == PosDownloadMode.full) {
       await _db.clearAllLocalDataForFullDownload();
+      await _db.saveDownloadCheckpoint(null);
     }
 
-    AppLogger.info('Download', 'Fetching manifest', 'mode=$mode warehouse=$warehouseId');
+    AppLogger.info(
+      'Download',
+      'Fetching manifest',
+      'mode=$mode warehouse=$warehouseId bulk=$bulkMode',
+    );
 
     Map<String, dynamic> manifest;
     try {
@@ -63,6 +134,7 @@ class CatalogDownloadService {
         warehouseId: warehouseId,
         mode: mode,
         since: resolvedSince,
+        receiveTimeout: AppConfig.downloadReceiveTimeoutFor(bulk: bulkMode),
       );
     } catch (e, stack) {
       AppLogger.error('Download', 'Manifest request failed', e, stack);
@@ -76,79 +148,62 @@ class CatalogDownloadService {
     }
 
     final resources = manifest['resources'] as List<dynamic>? ?? [];
-
+    final resourceNames = <String>[];
     var totalChunks = 0;
-    final resourcePlans = <Map<String, dynamic>>[];
     for (final raw in resources) {
       if (raw is! Map) continue;
       final resource = raw['resource']?.toString() ?? '';
-      final totalRows = _int(raw['total']);
-      final serverPages = _int(raw['pages']);
-      if (resource.isEmpty || serverPages == 0) continue;
+      final pages = _int(raw['pages']);
+      if (resource.isEmpty || pages == 0) continue;
+      resourceNames.add(resource);
+      totalChunks += pages;
+    }
 
-      final clientPages = totalRows > 0
-          ? (totalRows / AppConfig.downloadPageSize).ceil()
-          : serverPages;
-      totalChunks += clientPages;
-      resourcePlans.add({
-        'resource': resource,
-        'clientPages': clientPages,
-      });
+    final savedCheckpoint = _DownloadCheckpoint.decode(
+      meta?.downloadCheckpointJson,
+    );
+    var resumeIndex = 0;
+    if (savedCheckpoint != null &&
+        savedCheckpoint.mode == (mode == PosDownloadMode.delta ? 'delta' : 'full')) {
+      final idx = resourceNames.indexOf(savedCheckpoint.resource);
+      if (idx >= 0) resumeIndex = idx;
     }
 
     var completedChunks = 0;
     var productsDownloaded = false;
+    var incrementalFtsDuringDownload = false;
 
-    for (final plan in resourcePlans) {
+    for (var r = resumeIndex; r < resourceNames.length; r++) {
       if (_cancelled) throw Exception('Download cancelled');
 
-      final resource = plan['resource'] as String;
-      final clientPages = plan['clientPages'] as int;
-
-      for (var page = 1; page <= clientPages; page++) {
-        if (_cancelled) throw Exception('Download cancelled');
-
-        Map<String, dynamic> chunk;
-        try {
-          chunk = await _api.downloadChunk(
-            username: username,
-            password: password,
-            resource: resource,
-            page: page,
-            warehouseId: resolvedWarehouseId,
-            perPage: AppConfig.downloadPageSize,
-            mode: mode,
-            since: resolvedSince,
-          );
-        } catch (e, stack) {
-          AppLogger.error(
-            'Download',
-            'Chunk failed: $resource page $page/$clientPages',
-            e,
-            stack,
-          );
-          rethrow;
-        }
-
-        final rows = chunk['data'] as List<dynamic>? ?? [];
-        await _persistDownloadChunk(resource, rows);
-        if (resource == 'products') productsDownloaded = true;
-        completedChunks++;
-
-        onProgress?.call(DownloadProgressInfo(
-          resource: resource,
-          page: page,
-          totalPages: clientPages,
-          completedChunks: completedChunks,
-          totalChunks: totalChunks > 0 ? totalChunks : clientPages,
-          rowsThisChunk: rows.length,
-          overallPercent: totalChunks > 0
-              ? (completedChunks / totalChunks * 100).clamp(0, 100)
-              : 0,
-        ));
-
-        await _yieldToUi();
+      final resource = resourceNames[r];
+      int? startCursor;
+      if (r == resumeIndex && savedCheckpoint?.resource == resource) {
+        startCursor = savedCheckpoint?.cursorId;
       }
+
+      final chunksDone = await _downloadResourceCursor(
+        resource: resource,
+        warehouseId: resolvedWarehouseId,
+        mode: mode,
+        since: resolvedSince,
+        username: username,
+        password: password,
+        startCursorId: startCursor,
+        totalChunks: totalChunks > 0 ? totalChunks : 1,
+        completedChunks: completedChunks,
+        onProgress: (info) {
+          onProgress?.call(info);
+        },
+      );
+
+      completedChunks += chunksDone;
+      if (resource == 'products') {
+        productsDownloaded = true;
+        incrementalFtsDuringDownload = true;
+      }
+
+      await _db.saveDownloadCheckpoint(null);
     }
 
     final syncAt = DateTime.now().toIso8601String();
@@ -173,19 +228,146 @@ class CatalogDownloadService {
     try {
       await _posSettings.refreshFromBootstrap(_api);
     } catch (e, stack) {
-      AppLogger.error('Download', 'POS settings bootstrap refresh failed', e, stack);
+      AppLogger.error(
+        'Download',
+        'POS settings bootstrap refresh failed',
+        e,
+        stack,
+      );
     }
 
-    if (productsDownloaded) {
+    if (productsDownloaded && !incrementalFtsDuringDownload) {
       try {
         AppLogger.info('Download', 'Rebuilding product search index');
         await _db.rebuildProductSearchIndex();
       } catch (e, stack) {
         AppLogger.error('Download', 'Product search index rebuild failed', e, stack);
       }
+    } else if (productsDownloaded) {
+      try {
+        await _db.customStatement('ANALYZE products');
+        await _db.customStatement('ANALYZE product_stock');
+      } catch (_) {}
     }
 
     return resolvedWarehouseId;
+  }
+
+  Future<int> _downloadResourceCursor({
+    required String resource,
+    required int warehouseId,
+    required PosDownloadMode mode,
+    required String? since,
+    required String? username,
+    required String? password,
+    int? startCursorId,
+    required int totalChunks,
+    required int completedChunks,
+    required void Function(DownloadProgressInfo info) onProgress,
+  }) async {
+    var cursorId = startCursorId;
+    var page = startCursorId == null ? 1 : 2;
+    var localCompleted = 0;
+    var chunkIndex = completedChunks;
+    Future<Map<String, dynamic>>? prefetch;
+
+    while (true) {
+      if (_cancelled) throw Exception('Download cancelled');
+
+      final Map<String, dynamic> chunk;
+      if (prefetch != null) {
+        chunk = await prefetch;
+        prefetch = null;
+      } else {
+        chunk = await _fetchChunk(
+          username: username,
+          password: password,
+          resource: resource,
+          page: page,
+          cursorId: cursorId,
+          warehouseId: warehouseId,
+          mode: mode,
+          since: since,
+        );
+      }
+
+      final rows = chunk['data'] as List<dynamic>? ?? [];
+      final hasMore = chunk['has_more'] == true;
+      final nextCursor = _intOrNull(chunk['next_cursor_id']);
+
+      if (hasMore && nextCursor != null && _tuning.parallelChunks > 1) {
+        prefetch = _fetchChunk(
+          username: username,
+          password: password,
+          resource: resource,
+          page: page + 1,
+          cursorId: nextCursor,
+          warehouseId: warehouseId,
+          mode: mode,
+          since: since,
+        );
+      }
+
+      await _persistDownloadChunk(resource, rows);
+      localCompleted++;
+      chunkIndex++;
+
+      onProgress(DownloadProgressInfo(
+        resource: resource,
+        page: localCompleted,
+        totalPages: totalChunks,
+        completedChunks: chunkIndex,
+        totalChunks: totalChunks,
+        rowsThisChunk: rows.length,
+        overallPercent:
+            totalChunks > 0 ? (chunkIndex / totalChunks * 100).clamp(0, 100) : 0,
+      ));
+
+      await _db.saveDownloadCheckpoint(
+        jsonEncode(
+          _DownloadCheckpoint(
+            resource: resource,
+            cursorId: nextCursor,
+            mode: mode == PosDownloadMode.delta ? 'delta' : 'full',
+            since: since,
+          ).toJson(),
+        ),
+      );
+
+      if (!hasMore || rows.isEmpty) break;
+
+      cursorId = nextCursor;
+      page++;
+      await _yieldToUi();
+    }
+
+    return localCompleted;
+  }
+
+  Future<Map<String, dynamic>> _fetchChunk({
+    required String? username,
+    required String? password,
+    required String resource,
+    required int page,
+    required int? cursorId,
+    required int warehouseId,
+    required PosDownloadMode mode,
+    required String? since,
+  }) {
+    return _api.downloadChunk(
+      username: username,
+      password: password,
+      resource: resource,
+      page: page,
+      cursorId: cursorId,
+      warehouseId: warehouseId,
+      perPage: _tuning.pageSize,
+      mode: mode,
+      since: since,
+      receiveTimeout: AppConfig.downloadReceiveTimeoutFor(
+        bulk: _tuning.pageSize >= AppConfig.downloadPageSizeBulk,
+      ),
+    );
   }
 
   /// Pull one catalog resource (e.g. product_stock) after a sale sync.
@@ -198,43 +380,19 @@ class CatalogDownloadService {
     final since = meta?.lastCatalogSyncAt ?? meta?.lastFullDownloadAt;
     if (since == null || since.isEmpty) return;
 
-    final manifest = await _api.downloadManifest(
+    _tuning = _DownloadTuning.forBulk(false);
+
+    await _downloadResourceCursor(
+      resource: resource,
       warehouseId: warehouseId,
       mode: PosDownloadMode.delta,
       since: since,
+      username: null,
+      password: null,
+      totalChunks: 1,
+      completedChunks: 0,
+      onProgress: (_) {},
     );
-
-    final resources = manifest['resources'] as List<dynamic>? ?? [];
-    Map<String, dynamic>? plan;
-    for (final raw in resources) {
-      if (raw is! Map) continue;
-      if (raw['resource']?.toString() == resource) {
-        final totalRows = _int(raw['total']);
-        final serverPages = _int(raw['pages']);
-        if (serverPages == 0) return;
-        final clientPages = totalRows > 0
-            ? (totalRows / AppConfig.downloadPageSize).ceil()
-            : serverPages;
-        plan = {'clientPages': clientPages};
-        break;
-      }
-    }
-    if (plan == null) return;
-
-    final clientPages = plan['clientPages'] as int;
-    for (var page = 1; page <= clientPages; page++) {
-      final chunk = await _api.downloadChunk(
-        resource: resource,
-        page: page,
-        warehouseId: warehouseId,
-        perPage: AppConfig.downloadPageSize,
-        mode: PosDownloadMode.delta,
-        since: since,
-      );
-      final rows = chunk['data'] as List<dynamic>? ?? [];
-      await _persistDownloadChunk(resource, rows);
-      await _yieldToUi();
-    }
 
     await _db.upsertSyncMeta(SyncMetaCompanion.insert(
       id: const Value(1),
@@ -380,6 +538,16 @@ class CatalogDownloadService {
             updatedAt: Value(m['updated_at']?.toString()),
           ),
           _db.products,
+          onBatchWritten: (maps) async {
+            for (final m in maps) {
+              await _db.upsertProductSearchIndexRow(
+                productId: _int(m['id']),
+                name: m['name']?.toString() ?? '',
+                code: m['code']?.toString() ?? '',
+                altCode: m['alt_code']?.toString(),
+              );
+            }
+          },
         );
         break;
       case 'product_variants':
@@ -457,19 +625,25 @@ class CatalogDownloadService {
   Future<void> _upsertBatched<T extends Table, D>(
     List<dynamic> items,
     Insertable<D> Function(Map<String, dynamic> m) mapper,
-    TableInfo<T, D> table,
-  ) async {
-    final batchSize = AppConfig.dbWriteBatchSize;
+    TableInfo<T, D> table, {
+    Future<void> Function(List<Map<String, dynamic>> maps)? onBatchWritten,
+  }) async {
+    final batchSize = _tuning.dbBatchSize;
     for (var i = 0; i < items.length; i += batchSize) {
       if (_cancelled) return;
       final slice = items.skip(i).take(batchSize);
+      final maps = <Map<String, dynamic>>[];
       await _db.batch((batch) {
         for (final raw in slice) {
           if (raw is! Map) continue;
           final map = Map<String, dynamic>.from(raw);
+          maps.add(map);
           batch.insert(table, mapper(map), mode: InsertMode.insertOrReplace);
         }
       });
+      if (onBatchWritten != null && maps.isNotEmpty) {
+        await onBatchWritten(maps);
+      }
       await _yieldToUi();
     }
   }
@@ -480,11 +654,7 @@ class CatalogDownloadService {
     return int.tryParse(v.toString()) ?? fallback;
   }
 
-  int? _intOrNull(dynamic v) {
-    if (v == null) return null;
-    if (v is int) return v;
-    return int.tryParse(v.toString());
-  }
+  int? _intOrNull(dynamic v) => _parseIntOrNull(v);
 
   double _dbl(dynamic v, {double fallback = 0}) {
     if (v == null) return fallback;

@@ -142,13 +142,14 @@ class PosExchangeService
         }
 
         $productSaleId = (int) ($line['product_sale_id'] ?? 0);
-        $productSale = $productSaleId > 0
-            ? Product_Sale::find($productSaleId)
-            : Product_Sale::where('sale_id', $sale->id)
-                ->where('product_id', $productId)
-                ->first();
+        if ($productSaleId <= 0) {
+            throw new \RuntimeException(
+                'product_sale_id is required on exchange return lines when linked to a sale.'
+            );
+        }
+        $productSale = Product_Sale::find($productSaleId);
 
-        if (!$productSale) {
+        if (!$productSale || (int) $productSale->sale_id !== (int) $sale->id) {
             throw new \RuntimeException('Original sale line not found for exchange return.');
         }
 
@@ -160,7 +161,8 @@ class PosExchangeService
         $saleUnit = (string) ($line['sale_unit'] ?? 'n/a');
         $productCode = (string) ($line['product_code'] ?? $product->code);
         $batchId = $line['product_batch_id'] ?? $productSale->product_batch_id;
-        $imei = (string) ($line['imei_number'] ?? '');
+        $imei = (string) ($line['imei_number'] ?? $productSale->imei_number ?? '');
+        $variantId = (int) ($line['variant_id'] ?? $productSale->variant_id ?? 0);
 
         $this->restoreStock(
             product: $product,
@@ -170,12 +172,16 @@ class PosExchangeService
             productCode: $productCode,
             batchId: $batchId,
             imei: $imei,
-            variantId: $productSale->variant_id,
+            variantId: $variantId > 0 ? $variantId : null,
         );
 
         ProductExchange::create([
             'exchange_id' => $exchangeId,
+            'product_sale_id' => $productSaleId,
             'product_id' => $productId,
+            'variant_id' => $variantId > 0 ? $variantId : null,
+            'product_batch_id' => $batchId,
+            'imei_number' => $imei !== '' ? $imei : null,
             'qty' => $qty,
             'sale_unit_id' => $productSale->sale_unit_id,
             'net_unit_price' => (float) ($line['net_unit_price'] ?? $productSale->net_unit_price),
@@ -210,6 +216,7 @@ class PosExchangeService
         $productCode = (string) ($line['product_code'] ?? $product->code);
         $batchId = $line['product_batch_id'] ?? null;
         $imei = (string) ($line['imei_number'] ?? '');
+        $variantId = (int) ($line['variant_id'] ?? 0);
 
         $saleUnitId = 0;
         $quantity = $qty;
@@ -232,9 +239,11 @@ class PosExchangeService
         $warehouseRow = null;
 
         if ($product->is_variant) {
-            $variantRow = ProductVariant::select('id', 'variant_id', 'qty')
-                ->FindExactProductWithCode($productId, $productCode)
-                ->first();
+            $variantRow = $variantId > 0
+                ? ProductVariant::find($variantId)
+                : ProductVariant::select('id', 'variant_id', 'qty')
+                    ->FindExactProductWithCode($productId, $productCode)
+                    ->first();
             if ($variantRow) {
                 $variantRow->qty -= $quantity;
                 $variantRow->save();
@@ -276,6 +285,9 @@ class PosExchangeService
         ProductExchange::create([
             'exchange_id' => $exchangeId,
             'product_id' => $productId,
+            'variant_id' => $variantId > 0 ? $variantId : null,
+            'product_batch_id' => $batchId,
+            'imei_number' => $imei !== '' ? $imei : null,
             'qty' => $qty,
             'sale_unit_id' => $saleUnitId,
             'net_unit_price' => (float) ($line['net_unit_price'] ?? 0),

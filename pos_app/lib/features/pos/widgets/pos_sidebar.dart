@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/pos_theme.dart';
+import 'pos_brand_logo.dart';
 
 enum PosNavSection {
   dashboard,
@@ -19,7 +20,7 @@ class PosSidebar extends StatelessWidget {
     required this.onDashboard,
     required this.onRegister,
     required this.onInventory,
-    required this.onPrintLastReceipt,
+    this.onPrintLastReceipt,
     required this.onCashRegisterDetails,
     required this.onStaff,
     required this.onHistory,
@@ -27,19 +28,22 @@ class PosSidebar extends StatelessWidget {
     required this.onProfile,
     required this.onLogout,
     this.onReturn,
-    this.onExchange,
     this.onPendingSync,
     this.pendingSyncCount = 0,
+    this.onReverbStatus,
+    this.reverbStatusDotColor,
+    this.reverbTooltip = 'Live stock sync (Reverb)',
     this.syncingSales = false,
     this.busy = false,
     this.syncing = false,
+    this.sidebarLogoPath,
   });
 
   final PosNavSection activeSection;
   final VoidCallback onDashboard;
   final VoidCallback onRegister;
   final VoidCallback onInventory;
-  final VoidCallback onPrintLastReceipt;
+  final VoidCallback? onPrintLastReceipt;
   final VoidCallback onCashRegisterDetails;
   final VoidCallback onStaff;
   final VoidCallback onHistory;
@@ -47,12 +51,15 @@ class PosSidebar extends StatelessWidget {
   final VoidCallback onProfile;
   final VoidCallback onLogout;
   final VoidCallback? onReturn;
-  final VoidCallback? onExchange;
   final VoidCallback? onPendingSync;
   final int pendingSyncCount;
+  final VoidCallback? onReverbStatus;
+  final Color? reverbStatusDotColor;
+  final String reverbTooltip;
   final bool syncingSales;
   final bool busy;
   final bool syncing;
+  final String? sidebarLogoPath;
 
   bool get _enabled => !busy && !syncing;
 
@@ -61,14 +68,22 @@ class PosSidebar extends StatelessWidget {
     final brand = context.posBrand;
     return Material(
       color: brand.sidebarBg,
-      child: Container(
+      child: SizedBox(
         width: 68,
-        decoration: BoxDecoration(
-          border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
-        ),
-        child: Column(
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
+          ),
+          child: Column(
           children: [
-            SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 8),
+              child: PosBrandLogo(
+                logoPath: sidebarLogoPath,
+                size: 44,
+                variant: PosBrandLogoVariant.sidebar,
+              ),
+            ),
             Expanded(
               child: SingleChildScrollView(
                 physics: const ClampingScrollPhysics(),
@@ -119,6 +134,13 @@ class PosSidebar extends StatelessWidget {
                       onTap: _enabled && !syncingSales ? onPendingSync : null,
                       enabled: _enabled && !syncingSales,
                     ),
+                    _NavIcon(
+                      icon: Icons.podcasts_outlined,
+                      tooltip: reverbTooltip,
+                      statusDotColor: reverbStatusDotColor,
+                      onTap: _enabled ? onReverbStatus : null,
+                      enabled: _enabled,
+                    ),
                     if (onReturn != null)
                       _NavIcon(
                         icon: Icons.undo_rounded,
@@ -126,19 +148,13 @@ class PosSidebar extends StatelessWidget {
                         onTap: _enabled ? onReturn : null,
                         enabled: _enabled,
                       ),
-                    if (onExchange != null)
+                    if (onPrintLastReceipt != null)
                       _NavIcon(
-                        icon: Icons.swap_horiz_rounded,
-                        tooltip: 'Sale exchange',
-                        onTap: _enabled ? onExchange : null,
+                        icon: Icons.receipt_long_outlined,
+                        tooltip: 'Print last receipt',
+                        onTap: _enabled ? onPrintLastReceipt : null,
                         enabled: _enabled,
                       ),
-                    _NavIcon(
-                      icon: Icons.receipt_long_outlined,
-                      tooltip: 'Print last receipt',
-                      onTap: _enabled ? onPrintLastReceipt : null,
-                      enabled: _enabled,
-                    ),
                     _NavIcon(
                       icon: Icons.point_of_sale_outlined,
                       tooltip: 'Cash register details',
@@ -179,6 +195,7 @@ class PosSidebar extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -195,6 +212,7 @@ class _NavIcon extends StatelessWidget {
     this.enabled = true,
     this.danger = false,
     this.badgeCount = 0,
+    this.statusDotColor,
   });
 
   final IconData icon;
@@ -205,6 +223,7 @@ class _NavIcon extends StatelessWidget {
   final bool enabled;
   final bool danger;
   final int badgeCount;
+  final Color? statusDotColor;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +305,23 @@ class _NavIcon extends StatelessWidget {
                             fontSize: 9,
                             fontWeight: FontWeight.w800,
                             height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (statusDotColor != null)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: statusDotColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: brand.sidebarBg,
+                            width: 1.5,
                           ),
                         ),
                       ),

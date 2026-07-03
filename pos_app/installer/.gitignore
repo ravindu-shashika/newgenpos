@@ -1,0 +1,4 @@
+# Installer build artifacts
+output/
+linux/staging/
+macos/staging/

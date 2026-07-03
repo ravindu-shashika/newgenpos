@@ -89,6 +89,12 @@ class Product extends Model
 
     protected $casts = [
         'profit_margin_type' => 'string',
+        'cost' => 'decimal:2',
+        'price' => 'decimal:2',
+        'max_price' => 'decimal:2',
+        'wholesale_price' => 'decimal:2',
+        'profit_margin' => 'decimal:2',
+        'promotion_price' => 'decimal:2',
     ];
 
 }

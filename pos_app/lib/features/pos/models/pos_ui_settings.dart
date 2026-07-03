@@ -11,6 +11,8 @@ class PosUiSettings {
     this.enableReturn = true,
     this.enableExchange = false,
     this.enablePointsPayment = false,
+    this.enablePrint = true,
+    this.autoPrintBill = true,
     this.gridColumnCount,
     this.gridPageSize,
     this.saleReferencePrefix = 'posr-',
@@ -24,6 +26,8 @@ class PosUiSettings {
     this.darkMode = false,
     this.fontScale = 1.0,
     this.topBarDateTimeFormat = PosUiSettings.defaultTopBarDateTimeFormat,
+    this.autoSyncUploadMinutes = PosUiSettings.defaultAutoSyncUploadMinutes,
+    this.catalogDownloadBulkMode = false,
   });
 
   final bool enableShipping;
@@ -34,6 +38,14 @@ class PosUiSettings {
   final bool enableReturn;
   final bool enableExchange;
   final bool enablePointsPayment;
+
+  /// Show print bill at checkout and allow receipt printing.
+  final bool enablePrint;
+
+  /// When [enablePrint] is true, print automatically on complete sale.
+  final bool autoPrintBill;
+
+  bool get shouldAutoPrintBill => enablePrint && autoPrintBill;
 
   /// Local override for product grid columns. `null` uses server `product_number`.
   final int? gridColumnCount;
@@ -69,6 +81,24 @@ class PosUiSettings {
 
   /// [intl](https://pub.dev/packages/intl) pattern for the shell top-bar clock.
   final String topBarDateTimeFormat;
+
+  /// Auto-upload pending bills every N minutes. `0` = off.
+  final int autoSyncUploadMinutes;
+
+  /// When true, catalog download uses larger pages/batches (bulk provisioning).
+  final bool catalogDownloadBulkMode;
+
+  static const defaultAutoSyncUploadMinutes = 3;
+
+  static const autoSyncUploadIntervalPresets = [0, 1, 2, 3, 5, 10, 15, 30];
+
+  static int resolveAutoSyncUploadMinutes(int? raw) {
+    final value = raw ?? defaultAutoSyncUploadMinutes;
+    if (!autoSyncUploadIntervalPresets.contains(value)) {
+      return defaultAutoSyncUploadMinutes;
+    }
+    return value;
+  }
 
   static const defaultTopBarDateTimeFormat = "MMM d, yyyy' | 'HH:mm:ss";
 
@@ -126,6 +156,8 @@ class PosUiSettings {
     bool? enableReturn,
     bool? enableExchange,
     bool? enablePointsPayment,
+    bool? enablePrint,
+    bool? autoPrintBill,
     int? gridColumnCount,
     bool clearGridColumnCount = false,
     int? gridPageSize,
@@ -145,6 +177,8 @@ class PosUiSettings {
     bool? darkMode,
     double? fontScale,
     String? topBarDateTimeFormat,
+    int? autoSyncUploadMinutes,
+    bool? catalogDownloadBulkMode,
   }) {
     return PosUiSettings(
       enableShipping: enableShipping ?? this.enableShipping,
@@ -155,6 +189,8 @@ class PosUiSettings {
       enableReturn: enableReturn ?? this.enableReturn,
       enableExchange: enableExchange ?? this.enableExchange,
       enablePointsPayment: enablePointsPayment ?? this.enablePointsPayment,
+      enablePrint: enablePrint ?? this.enablePrint,
+      autoPrintBill: autoPrintBill ?? this.autoPrintBill,
       gridColumnCount: clearGridColumnCount
           ? null
           : (gridColumnCount ?? this.gridColumnCount),
@@ -181,6 +217,10 @@ class PosUiSettings {
       fontScale: fontScale ?? this.fontScale,
       topBarDateTimeFormat:
           topBarDateTimeFormat ?? this.topBarDateTimeFormat,
+      autoSyncUploadMinutes:
+          autoSyncUploadMinutes ?? this.autoSyncUploadMinutes,
+      catalogDownloadBulkMode:
+          catalogDownloadBulkMode ?? this.catalogDownloadBulkMode,
     );
   }
 
@@ -198,6 +238,8 @@ class PosUiSettings {
       enableExchange: _bool(json['enable_exchange'], fallback: false),
       enablePointsPayment:
           _bool(json['enable_points_payment'], fallback: false),
+      enablePrint: _bool(json['enable_print'], fallback: true),
+      autoPrintBill: _bool(json['auto_print_bill'], fallback: true),
       gridColumnCount: _intOrNull(json['grid_column_count']),
       gridPageSize: _intOrNull(json['grid_page_size']),
       saleReferencePrefix:
@@ -221,6 +263,11 @@ class PosUiSettings {
       topBarDateTimeFormat: resolveTopBarDateTimeFormat(
         json['top_bar_datetime_format']?.toString(),
       ),
+      autoSyncUploadMinutes: resolveAutoSyncUploadMinutes(
+        _intOrNull(json['auto_sync_upload_minutes']),
+      ),
+      catalogDownloadBulkMode:
+          _bool(json['catalog_download_bulk_mode'], fallback: false),
     );
   }
 
@@ -233,6 +280,8 @@ class PosUiSettings {
         'enable_return': enableReturn,
         'enable_exchange': enableExchange,
         'enable_points_payment': enablePointsPayment,
+        'enable_print': enablePrint,
+        'auto_print_bill': autoPrintBill,
         if (gridColumnCount != null) 'grid_column_count': gridColumnCount,
         if (gridPageSize != null) 'grid_page_size': gridPageSize,
         'sale_reference_prefix': saleReferencePrefix,
@@ -247,6 +296,8 @@ class PosUiSettings {
         'dark_mode': darkMode,
         'font_scale': fontScale,
         'top_bar_datetime_format': topBarDateTimeFormat,
+        'auto_sync_upload_minutes': autoSyncUploadMinutes,
+        'catalog_download_bulk_mode': catalogDownloadBulkMode,
       };
 
   String encode() => jsonEncode(toJson());

@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Paginated bulk export for Flutter POS (full or delta since last sync).
+ * Uses keyset (cursor) pagination when cursor_id is provided.
  */
 class PosDownloadService
 {
@@ -85,6 +86,7 @@ class PosDownloadService
             'chunk_size' => self::CHUNK_SIZE,
             'total_rows' => $totalRows,
             'resources' => $chunks,
+            'cursor_pagination' => true,
         ];
     }
 
@@ -100,24 +102,27 @@ class PosDownloadService
 
         $perPage = max(1, min(5000, $perPage));
         $page = max(1, $page);
+        $cursorId = isset($options['cursor_id']) ? (int) $options['cursor_id'] : null;
 
-        return match ($resource) {
-            'warehouses' => $this->chunkWarehouses($page, $perPage, $options),
-            'users' => $this->chunkUsers($page, $perPage, $options),
-            'categories' => $this->chunkCategories($page, $perPage, $options),
-            'brands' => $this->chunkBrands($page, $perPage, $options),
-            'taxes' => $this->chunkTaxes($page, $perPage, $options),
-            'units' => $this->chunkUnits($page, $perPage, $options),
-            'customers' => $this->chunkCustomers($page, $perPage, $options),
-            'billers' => $this->chunkBillers($page, $perPage, $options),
-            'coupons' => $this->chunkCoupons($page, $perPage, $options),
-            'products' => $this->chunkProducts($page, $perPage, $options),
-            'product_variants' => $this->chunkProductVariants($page, $perPage, $options),
-            'product_batches' => $this->chunkProductBatches($page, $perPage, $options),
-            'product_stock' => $this->chunkProductStock($page, $perPage, $options),
-            'settings' => $this->chunkSettings($page, $perPage, $options),
+        $result = match ($resource) {
+            'warehouses' => $this->chunkWarehouses($page, $perPage, $options, $cursorId),
+            'users' => $this->chunkUsers($page, $perPage, $options, $cursorId),
+            'categories' => $this->chunkCategories($page, $perPage, $options, $cursorId),
+            'brands' => $this->chunkBrands($page, $perPage, $options, $cursorId),
+            'taxes' => $this->chunkTaxes($page, $perPage, $options, $cursorId),
+            'units' => $this->chunkUnits($page, $perPage, $options, $cursorId),
+            'customers' => $this->chunkCustomers($page, $perPage, $options, $cursorId),
+            'billers' => $this->chunkBillers($page, $perPage, $options, $cursorId),
+            'coupons' => $this->chunkCoupons($page, $perPage, $options, $cursorId),
+            'products' => $this->chunkProducts($page, $perPage, $options, $cursorId),
+            'product_variants' => $this->chunkProductVariants($page, $perPage, $options, $cursorId),
+            'product_batches' => $this->chunkProductBatches($page, $perPage, $options, $cursorId),
+            'product_stock' => $this->chunkProductStock($page, $perPage, $options, $cursorId),
+            'settings' => $this->chunkSettings($page, $perPage, $options, $cursorId),
             default => ['data' => []],
         };
+
+        return $result;
     }
 
     private function normalizeSince(string $mode, ?string $since): ?string
@@ -162,33 +167,34 @@ class PosDownloadService
 
     private function productsQuery(int $warehouseId, ?string $since): Builder
     {
-        $ids = $this->productIdsForWarehouse($warehouseId);
+        $query = Product::query()
+            ->select('products.*')
+            ->join('product_warehouse as pw', 'pw.product_id', '=', 'products.id')
+            ->where('pw.warehouse_id', $warehouseId)
+            ->where('products.is_active', true)
+            ->whereIn('products.type', ['standard', 'combo', 'service', 'digital']);
 
-        $query = Product::where('is_active', true)
-            ->whereIn('id', $ids)
-            ->whereIn('type', ['standard', 'combo', 'service', 'digital']);
-
-        return $this->applySince($query, $since);
+        return $this->applySince($query, $since, 'products');
     }
 
     private function productVariantsQuery(int $warehouseId, ?string $since): Builder
     {
-        $ids = $this->productIdsForWarehouse($warehouseId);
+        $query = ProductVariant::query()
+            ->select('product_variants.*')
+            ->join('product_warehouse as pw', 'pw.product_id', '=', 'product_variants.product_id')
+            ->where('pw.warehouse_id', $warehouseId);
 
-        return $this->applySince(
-            ProductVariant::whereIn('product_id', $ids),
-            $since
-        );
+        return $this->applySince($query, $since, 'product_variants');
     }
 
     private function productBatchesQuery(int $warehouseId, ?string $since): Builder
     {
-        $ids = $this->productIdsForWarehouse($warehouseId);
+        $query = ProductBatch::query()
+            ->select('product_batches.*')
+            ->join('product_warehouse as pw', 'pw.product_id', '=', 'product_batches.product_id')
+            ->where('pw.warehouse_id', $warehouseId);
 
-        return $this->applySince(
-            ProductBatch::whereIn('product_id', $ids),
-            $since
-        );
+        return $this->applySince($query, $since, 'product_batches');
     }
 
     private function activeQuery($query)
@@ -200,13 +206,13 @@ class PosDownloadService
         return $query;
     }
 
-    private function applySince($query, ?string $since)
+    private function applySince($query, ?string $since, ?string $table = null)
     {
         if (!$since) {
             return $query;
         }
 
-        $table = $query->getModel()->getTable();
+        $table = $table ?? $query->getModel()->getTable();
         if (Schema::hasColumn($table, 'updated_at')) {
             $query->where($table . '.updated_at', '>=', $since);
         }
@@ -214,159 +220,225 @@ class PosDownloadService
         return $query;
     }
 
-    private function productIdsForWarehouse(int $warehouseId)
-    {
-        return Product_Warehouse::where('warehouse_id', $warehouseId)->distinct()->pluck('product_id');
+    /**
+     * @return array{data: array, next_cursor_id: ?int, has_more: bool}
+     */
+    private function chunkByCursor(
+        Builder $query,
+        int $perPage,
+        ?int $cursorId,
+        int $page,
+        string $idColumn = 'id'
+    ): array {
+        if ($cursorId !== null && $cursorId > 0) {
+            $query->where($query->getModel()->getTable() . '.' . $idColumn, '>', $cursorId);
+            $rows = $query->orderBy($query->getModel()->getTable() . '.' . $idColumn)
+                ->limit($perPage + 1)
+                ->get();
+        } else {
+            $rows = $query->orderBy($query->getModel()->getTable() . '.' . $idColumn)
+                ->forPage($page, $perPage + 1)
+                ->get();
+        }
+
+        $hasMore = $rows->count() > $perPage;
+        if ($hasMore) {
+            $rows = $rows->take($perPage);
+        }
+
+        $nextCursor = $rows->isNotEmpty() ? (int) $rows->last()->{$idColumn} : null;
+
+        return [
+            'data' => $rows->toArray(),
+            'next_cursor_id' => $hasMore ? $nextCursor : null,
+            'has_more' => $hasMore,
+        ];
     }
 
-    private function chunkWarehouses(int $page, int $perPage, array $opts): array
+    private function chunkWarehouses(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
         $columns = ['id', 'name', 'phone', 'email', 'address'];
         if (Schema::hasColumn('warehouses', 'updated_at')) {
             $columns[] = 'updated_at';
         }
 
-        $rows = $this->applySince($this->activeQuery(Warehouse::query()), $opts['since'] ?? null)
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get($columns);
+        $query = $this->applySince($this->activeQuery(Warehouse::query()), $opts['since'] ?? null);
 
-        return ['data' => $rows->toArray()];
+        return $this->chunkByCursor($query->select($columns), $perPage, $cursorId, $page);
     }
 
-    private function chunkUsers(int $page, int $perPage, array $opts): array
+    private function chunkUsers(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince(User::where('is_active', true), $opts['since'] ?? null)
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get(['id', 'name', 'username', 'email', 'password', 'access_pin', 'warehouse_id', 'role_id', 'biller_id', 'updated_at'])
-            ->map(fn (User $user) => $user->makeVisible(['password', 'access_pin'])->toArray());
+        $query = $this->applySince(User::where('is_active', true), $opts['since'] ?? null);
+        $result = $this->chunkByCursor(
+            $query->select(['id', 'name', 'username', 'email', 'password', 'access_pin', 'warehouse_id', 'role_id', 'biller_id', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
+        $result['data'] = collect($result['data'])->map(function ($row) {
+            $user = new User($row);
+            return $user->makeVisible(['password', 'access_pin'])->toArray();
+        })->values()->all();
 
-        return ['data' => $rows->values()->all()];
+        return $result;
     }
 
-    private function chunkCategories(int $page, int $perPage, array $opts): array
+    private function chunkCategories(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince(Category::where('is_active', true), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'name', 'image', 'updated_at']);
+        $query = $this->applySince(Category::where('is_active', true), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'name', 'image', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkBrands(int $page, int $perPage, array $opts): array
+    private function chunkBrands(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince(Brand::where('is_active', true), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'title as name', 'image', 'updated_at']);
+        $query = $this->applySince(Brand::where('is_active', true), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'title as name', 'image', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkTaxes(int $page, int $perPage, array $opts): array
+    private function chunkTaxes(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince($this->activeQuery(Tax::query()), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'name', 'rate', 'updated_at']);
+        $query = $this->applySince($this->activeQuery(Tax::query()), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'name', 'rate', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkUnits(int $page, int $perPage, array $opts): array
+    private function chunkUnits(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince($this->activeQuery(Unit::query()), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'unit_code', 'unit_name', 'base_unit', 'operator', 'operation_value', 'updated_at']);
+        $query = $this->applySince($this->activeQuery(Unit::query()), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'unit_code', 'unit_name', 'base_unit', 'operator', 'operation_value', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkCustomers(int $page, int $perPage, array $opts): array
+    private function chunkCustomers(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince($this->activeQuery(Customer::query()), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'name', 'phone_number', 'email', 'city', 'customer_group_id', 'deposit', 'points', 'updated_at']);
+        $query = $this->applySince($this->activeQuery(Customer::query()), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'name', 'phone_number', 'email', 'city', 'customer_group_id', 'deposit', 'points', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkBillers(int $page, int $perPage, array $opts): array
+    private function chunkBillers(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince($this->activeQuery(Biller::query()), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'name', 'company_name', 'updated_at']);
+        $query = $this->applySince($this->activeQuery(Biller::query()), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'name', 'company_name', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkCoupons(int $page, int $perPage, array $opts): array
+    private function chunkCoupons(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $rows = $this->applySince(Coupon::where('is_active', true), $opts['since'] ?? null)
-            ->orderBy('id')->forPage($page, $perPage)
-            ->get(['id', 'code', 'type', 'amount', 'minimum_amount', 'quantity', 'used', 'expired_date', 'updated_at']);
+        $query = $this->applySince(Coupon::where('is_active', true), $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select(['id', 'code', 'type', 'amount', 'minimum_amount', 'quantity', 'used', 'expired_date', 'updated_at']),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkProducts(int $page, int $perPage, array $opts): array
-    {
-        $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
-
-        $rows = $this->productsQuery($warehouseId, $opts['since'] ?? null)
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get([
-                'id', 'name', 'code', 'alt_code', 'type', 'brand_id', 'category_id', 'unit_id', 'sale_unit_id',
-                'cost', 'price', 'max_price', 'wholesale_price', 'tax_id', 'tax_method', 'image', 'is_variant', 'is_batch', 'is_imei',
-                'is_embeded', 'featured', 'updated_at',
-            ]);
-
-        return ['data' => $rows];
-    }
-
-    private function chunkProductVariants(int $page, int $perPage, array $opts): array
-    {
-        $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
-
-        $rows = $this->productVariantsQuery($warehouseId, $opts['since'] ?? null)
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get(['id', 'product_id', 'variant_id', 'item_code', 'additional_price', 'updated_at']);
-
-        return ['data' => $rows];
-    }
-
-    private function chunkProductBatches(int $page, int $perPage, array $opts): array
+    private function chunkProducts(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
         $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
 
-        $rows = $this->productBatchesQuery($warehouseId, $opts['since'] ?? null)
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get(['id', 'product_id', 'batch_no', 'expired_date', 'qty', 'updated_at']);
+        $query = $this->productsQuery($warehouseId, $opts['since'] ?? null);
 
-        return ['data' => $rows];
+        return $this->chunkByCursor(
+            $query->select([
+                'products.id', 'products.name', 'products.code', 'products.alt_code', 'products.type',
+                'products.brand_id', 'products.category_id', 'products.unit_id', 'products.sale_unit_id',
+                'products.cost', 'products.price', 'products.max_price', 'products.wholesale_price',
+                'products.tax_id', 'products.tax_method', 'products.image', 'products.is_variant',
+                'products.is_batch', 'products.is_imei', 'products.is_embeded', 'products.featured',
+                'products.updated_at',
+            ]),
+            $perPage,
+            $cursorId,
+            $page,
+            'id'
+        );
     }
 
-    private function chunkProductStock(int $page, int $perPage, array $opts): array
+    private function chunkProductVariants(int $page, int $perPage, array $opts, ?int $cursorId): array
+    {
+        $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
+        $query = $this->productVariantsQuery($warehouseId, $opts['since'] ?? null);
+
+        return $this->chunkByCursor(
+            $query->select(['product_variants.id', 'product_variants.product_id', 'product_variants.variant_id', 'product_variants.item_code', 'product_variants.additional_price', 'product_variants.updated_at']),
+            $perPage,
+            $cursorId,
+            $page,
+            'id'
+        );
+    }
+
+    private function chunkProductBatches(int $page, int $perPage, array $opts, ?int $cursorId): array
+    {
+        $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
+        $query = $this->productBatchesQuery($warehouseId, $opts['since'] ?? null);
+
+        return $this->chunkByCursor(
+            $query->select(['product_batches.id', 'product_batches.product_id', 'product_batches.batch_no', 'product_batches.expired_date', 'product_batches.qty', 'product_batches.updated_at']),
+            $perPage,
+            $cursorId,
+            $page,
+            'id'
+        );
+    }
+
+    private function chunkProductStock(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
         $warehouseId = (int) ($opts['warehouse_id'] ?? 0);
 
-        $rows = $this->applySince(
+        $query = $this->applySince(
             Product_Warehouse::where('warehouse_id', $warehouseId),
             $opts['since'] ?? null
-        )
-            ->orderBy('id')
-            ->forPage($page, $perPage)
-            ->get([
+        );
+
+        return $this->chunkByCursor(
+            $query->select([
                 'id', 'product_id', 'variant_id', 'warehouse_id', 'qty', 'price',
                 'product_batch_id', 'imei_number', 'updated_at',
-            ]);
-
-        return ['data' => $rows];
+            ]),
+            $perPage,
+            $cursorId,
+            $page
+        );
     }
 
-    private function chunkSettings(int $page, int $perPage, array $opts): array
+    private function chunkSettings(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
         $general = GeneralSetting::latest()->first();
         $pos = PosSetting::latest()->first();
@@ -382,6 +454,8 @@ class PosDownloadService
                 'pos_setting' => $pos?->toDeviceArray(),
                 'invoice_setting' => \App\Models\InvoiceSetting::activeDeviceArray(),
             ]],
+            'next_cursor_id' => null,
+            'has_more' => false,
         ];
     }
 }

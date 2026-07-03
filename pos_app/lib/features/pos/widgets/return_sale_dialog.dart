@@ -2,22 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../../../core/repositories/local_return_repository.dart';
 import '../../../core/theme/pos_theme.dart';
+import '../models/return_cart_line.dart';
 import '../models/return_models.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
 
-Future<SavedReturnResult?> showReturnSaleDialog({
+Future<ReturnCheckoutSessionStart?> showReturnSaleDialog({
   required BuildContext context,
   required LocalReturnRepository returnRepo,
   required int warehouseId,
   required int customerId,
+  ReturnSessionMode sessionMode = ReturnSessionMode.returnAndSale,
+  Future<ReturnSaleLookup?> Function(String ref)? serverLookup,
 }) {
-  return showPosDialog<SavedReturnResult>(
+  return showPosDialog<ReturnCheckoutSessionStart>(
     context: context,
     builder: (ctx) => _ReturnSaleDialog(
       returnRepo: returnRepo,
       warehouseId: warehouseId,
       customerId: customerId,
+      sessionMode: sessionMode,
+      serverLookup: serverLookup,
     ),
   );
 }
@@ -27,11 +32,15 @@ class _ReturnSaleDialog extends StatefulWidget {
     required this.returnRepo,
     required this.warehouseId,
     required this.customerId,
+    required this.sessionMode,
+    this.serverLookup,
   });
 
   final LocalReturnRepository returnRepo;
   final int warehouseId;
   final int customerId;
+  final ReturnSessionMode sessionMode;
+  final Future<ReturnSaleLookup?> Function(String ref)? serverLookup;
 
   @override
   State<_ReturnSaleDialog> createState() => _ReturnSaleDialogState();
@@ -66,12 +75,12 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
     try {
       final lookup = await widget.returnRepo.resolveSaleForReturn(
         referenceNo: refNo,
+        serverLookup: widget.serverLookup,
       );
 
       if (lookup == null || lookup.lines.isEmpty) {
         throw StateError(
-          'Sale not found on this terminal. Use the receipt reference or '
-          'sale number from a sale completed here.',
+          'Sale not found. Enter the receipt reference or sale number.',
         );
       }
 
@@ -120,41 +129,39 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
       return;
     }
 
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    final returnLines = selections
+        .map(
+          (row) => ReturnCartLine.fromLookupLine(
+            row.line,
+            qty: row.qty,
+            isDamage: row.isDamage,
+          ),
+        )
+        .toList();
 
-    try {
-      final result = await widget.returnRepo.saveReturn(
-        lookup: lookup,
-        selections: selections,
-        warehouseId: widget.warehouseId,
-        customerId: lookup.customerId > 0 ? lookup.customerId : widget.customerId,
-        saleId: lookup.saleId,
-      );
-      if (!mounted) return;
-      Navigator.pop(context, result);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (!mounted) return;
+    Navigator.pop(
+      context,
+      ReturnCheckoutSessionStart(
+        mode: widget.sessionMode,
+        originalSaleLookup: lookup,
+        returnLines: returnLines,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return PosProfessionalWideDialogShell(
       title: 'Sale return',
-      subtitle: 'Return items for store credit',
+      subtitle: 'Link sale and add return items to checkout',
       icon: Icons.undo_rounded,
       onClose: () {
         if (!_busy) Navigator.pop(context);
       },
       footer: PosProfessionalDialogFooter(
         secondaryLabel: 'Cancel',
-        primaryLabel: 'Create return',
+        primaryLabel: 'Add to return',
         primaryEnabled: !_busy && _lookup != null,
         primaryLoading: _busy,
         onSecondary: _busy ? null : () => Navigator.pop(context),
@@ -196,9 +203,8 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
           Padding(
             padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Text(
-              'Looks up sales saved on this device only. To return one item '
-              'from a multi-item sale, set qty to 0 on lines you are keeping. '
-              'No cash refund — credit can be settled on the next sale. '
+              'Find the original sale, set return qty per line, then add items '
+              'on the register. Credit offsets new sale at checkout. '
               'Damaged items are not added back to stock.',
               style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),

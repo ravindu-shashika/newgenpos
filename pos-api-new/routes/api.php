@@ -149,6 +149,9 @@ Route::middleware($middleware)->name('api.')->group(function () {
     Route::middleware('auth.api.token')->get('labels/print', [LabelsController::class, 'printLabel']);
 
     Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
+            return \Illuminate\Support\Facades\Broadcast::auth($request);
+        });
         // --- Auth bootstrap ---
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/generalsettings', [AuthController::class, 'generalsettings']);

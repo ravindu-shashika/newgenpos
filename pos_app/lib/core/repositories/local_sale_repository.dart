@@ -354,8 +354,6 @@ class LocalSaleRepository {
   Future<List<Map<String, dynamic>>> loadPendingSyncPayloads({
     bool includeFailed = true,
   }) async {
-    // Re-upload `queued`/`failed` on manual retry when server job never ran.
-    // Draft / hold bills (sale_status 3) stay local and are never synced.
     final statuses =
         includeFailed ? ['pending', 'failed', 'queued'] : ['pending'];
     final sales = await (_db.select(_db.localSales)
@@ -364,12 +362,32 @@ class LocalSaleRepository {
           ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
         .get();
 
-    return sales.map((s) {
+    final now = DateTime.now();
+    return sales
+        .where(
+          (s) => s.nextRetryAt == null || !s.nextRetryAt!.isAfter(now),
+        )
+        .map((s) {
       if (s.payloadJson != null && s.payloadJson!.isNotEmpty) {
         return Map<String, dynamic>.from(jsonDecode(s.payloadJson!) as Map);
       }
       return <String, dynamic>{'client_uuid': s.clientUuid};
     }).toList();
+  }
+
+  Future<List<LocalSale>> loadPendingSalesForUi() async {
+    final sales = await (_db.select(_db.localSales)
+          ..where((s) =>
+              s.syncStatus.isIn(['pending', 'failed', 'queued']) &
+              s.saleStatus.equals(1))
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .get();
+    return sales;
+  }
+
+  static Duration backoffForAttempts(int attempts) {
+    final exp = 1 << attempts.clamp(0, 6);
+    return Duration(minutes: exp.clamp(1, 60));
   }
 
   Future<void> markSynced(
@@ -421,6 +439,22 @@ class LocalSaleRepository {
       _ => 'pending',
     };
 
+    final existing = await (_db.select(_db.localSales)
+          ..where((s) => s.clientUuid.equals(update.clientUuid)))
+        .getSingleOrNull();
+
+    final now = DateTime.now();
+    var uploadAttempts = existing?.uploadAttempts ?? 0;
+    DateTime? nextRetryAt = existing?.nextRetryAt;
+
+    if (syncStatus == 'synced') {
+      uploadAttempts = 0;
+      nextRetryAt = null;
+    } else if (syncStatus == 'failed') {
+      uploadAttempts += 1;
+      nextRetryAt = now.add(backoffForAttempts(uploadAttempts));
+    }
+
     for (var attempt = 0; attempt < 12; attempt++) {
       try {
         await (_db.update(_db.localSales)
@@ -433,8 +467,11 @@ class LocalSaleRepository {
               ? const Value(null)
               : Value(update.error),
           syncedAt: syncStatus == 'synced'
-              ? Value(DateTime.now())
+              ? Value(now)
               : const Value.absent(),
+          uploadAttempts: Value(uploadAttempts),
+          nextRetryAt: Value(nextRetryAt),
+          lastUploadAt: Value(now),
         ));
         return;
       } catch (e) {

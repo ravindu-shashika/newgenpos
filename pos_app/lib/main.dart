@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/branding/pos_branding.dart';
 import 'core/database/app_database.dart';
+import 'core/database/local_database_config.dart';
+import 'core/repositories/local_database_settings_repository.dart';
 import 'core/providers/pos_ui_settings_provider.dart';
 import 'core/services/pos_window_service.dart';
 import 'core/providers/app_providers.dart';
@@ -23,7 +25,10 @@ Future<void> main() async {
   await PosWindowService.instance.ensureInitialized();
   PosWindowService.instance.bindNavigator(rootNavigatorKey);
 
-  final db = AppDatabase();
+  final dbSettings = await LocalDatabaseSettingsRepository().load();
+  await LocalDatabaseConfig.migrateDatabaseIfNeeded(dbSettings);
+  final dbPath = await LocalDatabaseConfig.resolveDatabaseFilePath(dbSettings);
+  final db = AppDatabase(databaseFilePath: dbPath);
   final session = SessionService(db);
   await session.ensureLoaded();
   await session.migrateFromSharedPreferencesIfNeeded(); 

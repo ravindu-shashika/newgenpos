@@ -1,0 +1,10 @@
+Package: koobiya-pos
+Version: @VERSION@
+Section: office
+Priority: optional
+Architecture: amd64
+Depends: libgtk-3-0, libblkid1, liblzma5
+Maintainer: KOOBIYA <support@koobiya.com>
+Description: KOOBIYA POS Terminal
+ Offline-first point-of-sale terminal for KOOBIYA / NewGen POS.
+ Connects to your cloud Laravel POS API for catalog sync and sales upload.

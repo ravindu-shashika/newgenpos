@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../features/pos/models/cart_line.dart';
 import '../../features/pos/models/exchange_models.dart';
+import '../../features/pos/models/return_cart_line.dart';
 import '../../features/pos/models/return_models.dart';
 import '../../features/pos/sale_reference.dart';
 import '../database/app_database.dart';
@@ -16,6 +18,69 @@ class LocalExchangeRepository {
   final LocalSaleRepository _saleRepo;
   static const _uuid = Uuid();
 
+  /// Inline checkout: return cart lines + new sale lines in one exchange record.
+  Future<String> saveInlineExchange({
+    required ReturnSaleLookup lookup,
+    required List<ReturnCartLine> returnLines,
+    required List<CartLine> newCartLines,
+    required int warehouseId,
+    String? exchangeNote,
+    String? staffNote,
+    String? paidById,
+    double? paidAmount,
+  }) async {
+    final returnSelections =
+        <({ReturnSaleLookupLine line, double qty})>[];
+    for (final cartLine in returnLines) {
+      if (cartLine.qty <= 0) continue;
+      ReturnSaleLookupLine? saleLine;
+      for (final l in lookup.lines) {
+        if (l.productSaleId == cartLine.productSaleId) {
+          saleLine = l;
+          break;
+        }
+      }
+      if (saleLine == null) {
+        throw StateError(
+          'Return line not found on original sale: ${cartLine.code}',
+        );
+      }
+      returnSelections.add((line: saleLine, qty: cartLine.qty));
+    }
+
+    final newLines = newCartLines
+        .where((l) => l.qty > 0)
+        .map(
+          (l) => ExchangeNewLine(
+            productId: l.productId,
+            variantId: l.variantId,
+            productBatchId: l.productBatchId,
+            code: l.code,
+            name: l.name,
+            qty: l.qty,
+            netUnitPrice: l.netUnitPrice,
+            discount: l.discount,
+            taxRate: l.taxRate,
+            tax: l.lineTax,
+            lineTotal: l.subtotal,
+            saleUnit: l.saleUnit,
+          ),
+        )
+        .toList();
+
+    return saveExchange(
+      lookup: lookup,
+      returnSelections: returnSelections,
+      newLines: newLines,
+      warehouseId: warehouseId,
+      saleId: lookup.saleId,
+      exchangeNote: exchangeNote,
+      staffNote: staffNote,
+      paidById: paidById,
+      paidAmount: paidAmount,
+    );
+  }
+
   Future<String> saveExchange({
     required ReturnSaleLookup lookup,
     required List<({ReturnSaleLookupLine line, double qty})> returnSelections,
@@ -24,6 +89,8 @@ class LocalExchangeRepository {
     int? saleId,
     String? exchangeNote,
     String? staffNote,
+    String? paidById,
+    double? paidAmount,
   }) async {
     if (returnSelections.isEmpty) {
       throw StateError('Select at least one item to return.');
@@ -60,6 +127,7 @@ class LocalExchangeRepository {
         'type': 'return',
         'product_sale_id': line.productSaleId,
         'product_id': line.productId,
+        'variant_id': line.variantId,
         'product_code': line.code,
         'qty': row.qty,
         'net_unit_price': line.netUnitPrice,
@@ -84,6 +152,7 @@ class LocalExchangeRepository {
       linePayloads.add({
         'type': 'new',
         'product_id': line.productId,
+        'variant_id': line.variantId,
         'product_code': line.code,
         'qty': line.qty,
         'net_unit_price': line.netUnitPrice,
@@ -116,6 +185,8 @@ class LocalExchangeRepository {
       'balance': balance,
       'amount': balance.abs(),
       'payment_type': paymentType,
+      if (paidById != null) 'paid_by_id': paidById,
+      if (paidAmount != null) 'paid_amount': paidAmount,
       'item': linePayloads.length,
       'total_qty': totalQty,
       'total_discount': totalDiscount,

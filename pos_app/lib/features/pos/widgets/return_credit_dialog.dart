@@ -191,8 +191,8 @@ class _ReturnCreditDialogState extends ConsumerState<_ReturnCreditDialog> {
     return PosProfessionalDialogShell(
       title: 'Settle return credit',
       subtitle: _scanMode
-          ? 'Scan return bill for this sale'
-          : 'Type return bill for this sale',
+          ? 'Scan a return bill from a previous visit'
+          : 'Enter a return bill from a previous visit',
       icon: Icons.account_balance_wallet_outlined,
       maxWidth: 580,
       maxBodyHeight: _typeMode ? 560 : 280,
@@ -213,7 +213,8 @@ class _ReturnCreditDialogState extends ConsumerState<_ReturnCreditDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Apply up to ${formatPosMoney(widget.maxApply)} against this sale',
+              'Apply up to ${formatPosMoney(widget.maxApply)} from a prior '
+              'return bill. Inline returns on this sale use the Return sidebar.',
               style: TextStyle(
                 fontSize: 13,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

@@ -11,6 +11,7 @@ import '../../core/providers/pos_ui_settings_provider.dart';
 import '../../core/providers/product_grid_provider.dart';
 import '../../core/services/pos_window_service.dart';
 import '../../core/services/session_service.dart';
+import '../../core/realtime/pos_realtime_service.dart';
 import '../../core/sync/download_models.dart';
 import '../../core/theme/pos_theme.dart';
 import '../auth/download_screen.dart';
@@ -19,6 +20,8 @@ import 'models/pos_settings.dart';
 import 'models/pos_ui_settings.dart';
 import 'pos_checkout_defaults.dart';
 import 'pos_checkout_state.dart';
+import 'pos_local_data_settings_screen.dart';
+import 'pos_reverb_settings_screen.dart';
 import 'pos_printer_settings_screen.dart';
 import 'pos_server_settings_screen.dart';
 import 'providers/pos_settings_subpage_provider.dart';
@@ -99,7 +102,7 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
     }
   }
 
-  Future<void> _openSync(PosDownloadMode mode) async {
+  Future<void> _openSync(PosDownloadMode mode, {bool snapshot = false}) async {
     final online = await ref.read(syncServiceProvider).probeOnline();
     if (!mounted) return;
     if (!online) {
@@ -111,7 +114,8 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
         builder: (_) => DownloadScreen(
           mode: mode,
           inApp: true,
-          autoStart: mode == PosDownloadMode.delta,
+          autoStart: mode == PosDownloadMode.delta && !snapshot,
+          useSnapshotImport: snapshot,
         ),
       ),
     );
@@ -130,10 +134,13 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
         ref.invalidate(posDeviceSettingsProvider);
         ref.invalidate(posSettingsProvider);
       } catch (_) {}
+      unawaited(connectPosRealtimeIfConfigured(ref));
       _snack(
-        mode == PosDownloadMode.full
-            ? 'All POS data re-downloaded'
-            : 'Latest data synced',
+        snapshot
+            ? 'Catalog snapshot imported'
+            : mode == PosDownloadMode.full
+                ? 'All POS data re-downloaded'
+                : 'Latest data synced',
         success: true,
       );
     }
@@ -198,6 +205,12 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
     }
     if (subPage == PosSettingsSubPage.server) {
       return const PosServerSettingsScreen();
+    }
+    if (subPage == PosSettingsSubPage.localData) {
+      return const PosLocalDataSettingsScreen();
+    }
+    if (subPage == PosSettingsSubPage.reverb) {
+      return const PosReverbSettingsScreen();
     }
 
     final uiSettings = ref.watch(posUiSettingsProvider);
@@ -276,6 +289,8 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
         child: _MaintenanceActions(
           onRefresh: () => unawaited(_openSync(PosDownloadMode.delta)),
           onFullDownload: () => unawaited(_openSync(PosDownloadMode.full)),
+          onSnapshotImport: () =>
+              unawaited(_openSync(PosDownloadMode.full, snapshot: true)),
           onReboot: () => unawaited(_rebootStation()),
           onLogout: _logout,
         ),
@@ -389,6 +404,20 @@ class _SettingsHub extends StatelessWidget {
           title: 'Printer & receipts',
           subtitle: 'Paper size, receipt layout, logo, direct print',
           onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.printer),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.storage_outlined,
+          title: 'Local data & backup',
+          subtitle: 'Database folder, auto backup, and manual backup',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.localData),
+        ),
+        const SizedBox(height: 10),
+        PosSettingsMenuTile(
+          icon: Icons.podcasts_outlined,
+          title: 'Reverb setup',
+          subtitle: 'App key, host, port, scheme, and live sync',
+          onTap: busy ? () {} : () => onOpen(PosSettingsSubPage.reverb),
         ),
         const SizedBox(height: 10),
         PosSettingsMenuTile(
@@ -799,12 +828,14 @@ class _MaintenanceActions extends StatelessWidget {
   const _MaintenanceActions({
     required this.onRefresh,
     required this.onFullDownload,
+    required this.onSnapshotImport,
     required this.onReboot,
     required this.onLogout,
   });
 
   final VoidCallback onRefresh;
   final VoidCallback onFullDownload;
+  final VoidCallback onSnapshotImport;
   final VoidCallback onReboot;
   final VoidCallback onLogout;
 
@@ -822,8 +853,15 @@ class _MaintenanceActions extends StatelessWidget {
         PosSettingsActionTile(
           icon: Icons.cloud_download_outlined,
           title: 'Full download',
-          subtitle: 'Re-download the complete product catalog',
+          subtitle: 'Re-download catalog via HTTP chunks (preserves pending sales)',
           onTap: onFullDownload,
+        ),
+        const SizedBox(height: 8),
+        PosSettingsActionTile(
+          icon: Icons.archive_outlined,
+          title: 'Snapshot import',
+          subtitle: 'Bulk SQLite import for very large catalogs (10M+ SKUs)',
+          onTap: onSnapshotImport,
         ),
         const PosSettingsDivider(),
         PosSettingsActionTile(
@@ -1092,8 +1130,8 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable return'),
                     subtitle: const Text(
-                      'Return sales; for partial returns set qty to 0 on lines '
-                      'you keep. Settle store credit at checkout.',
+                      'Inline return at checkout offsets new items. Use Settle '
+                      'return only for return bills from a previous visit.',
                       style: TextStyle(fontSize: 12),
                     ),
                     value: uiSettings.enableReturn,
@@ -1103,17 +1141,29 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Enable exchange'),
+                    title: const Text('Enable print bill'),
                     subtitle: const Text(
-                      'Return item → add same product on register → settle '
-                      'with return bill at checkout',
+                      'Allow receipt printing from checkout and sidebar',
                       style: TextStyle(fontSize: 12),
                     ),
-                    value: uiSettings.enableExchange,
+                    value: uiSettings.enablePrint,
                     onChanged: (v) => ref
                         .read(posUiSettingsProvider.notifier)
-                        .patch((s) => s.copyWith(enableExchange: v)),
+                        .patch((s) => s.copyWith(enablePrint: v)),
                   ),
+                  if (uiSettings.enablePrint)
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Auto-print on complete'),
+                      subtitle: const Text(
+                        'Print receipt when completing a sale (no checkbox at checkout)',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: uiSettings.autoPrintBill,
+                      onChanged: (v) => ref
+                          .read(posUiSettingsProvider.notifier)
+                          .patch((s) => s.copyWith(autoPrintBill: v)),
+                    ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Points payment'),
@@ -1167,6 +1217,52 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                                 : s.copyWith(gridPageSize: v),
                           );
                       reloadProductGrid(ref);
+                    },
+                  ),
+                  SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    key: ValueKey(
+                      'auto-sync-${uiSettings.autoSyncUploadMinutes}',
+                    ),
+                    initialValue: uiSettings.autoSyncUploadMinutes,
+                    decoration: const InputDecoration(
+                      labelText: 'Auto-upload pending bills',
+                      helperText:
+                          'How often to sync completed sales to the server',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: PosUiSettings.autoSyncUploadIntervalPresets
+                        .map(
+                          (minutes) => DropdownMenuItem<int>(
+                            value: minutes,
+                            child: Text(
+                              minutes == 0
+                                  ? 'Off'
+                                  : 'Every $minutes minute${minutes == 1 ? '' : 's'}',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      ref.read(posUiSettingsProvider.notifier).patch(
+                            (s) => s.copyWith(autoSyncUploadMinutes: v),
+                          );
+                    },
+                  ),
+                  SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Fast bulk catalog download'),
+                    subtitle: const Text(
+                      'Larger HTTP chunks during full/delta sync. '
+                      'Turn off to keep the UI more responsive.',
+                    ),
+                    value: uiSettings.catalogDownloadBulkMode,
+                    onChanged: (v) {
+                      ref.read(posUiSettingsProvider.notifier).patch(
+                            (s) => s.copyWith(catalogDownloadBulkMode: v),
+                          );
                     },
                   ),
                   SizedBox(height: 12),

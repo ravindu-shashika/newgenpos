@@ -193,7 +193,7 @@ function FormPanel({ title, children }) {
     return (
         <div className="ui-form-card">
             {title && <div className="ui-form-card-title">{title}</div>}
-            {children}
+            <div className="ui-form-card-body">{children}</div>
         </div>
     );
 }
@@ -239,6 +239,13 @@ function TagChip({ label, onRemove, tone = 'default' }) {
     );
 }
 
+function formatDecimal(value, decimals = 2) {
+    if (value === null || value === undefined || value === '') return '';
+    const num = Number(value);
+    if (Number.isNaN(num)) return String(value);
+    return num.toFixed(decimals);
+}
+
 export default function ProductCreate() {
     const navigate = useNavigate();
     const { id: productId } = useParams();
@@ -265,6 +272,7 @@ export default function ProductCreate() {
     });
     const [roleId, setRoleId] = useState(null);
     const submitModeRef = useRef('add');
+    const [recalcPriceFromMargin, setRecalcPriceFromMargin] = useState(false);
 
     const initialFormData = {
         type: 'standard',
@@ -393,6 +401,8 @@ export default function ProductCreate() {
         const initialStockMap = data.initial_stock || {};
         const hasInitialStock = !!data.has_initial_stock || Object.values(initialStockMap).some((qty) => Number(qty) > 0);
 
+        const decimals = data.decimal ?? 2;
+
         setFormData({
             ...initialFormData,
             id: p.id,
@@ -406,12 +416,12 @@ export default function ProductCreate() {
             unit_id: p.unit_id ?? '',
             sale_unit_id: p.sale_unit_id ?? '',
             purchase_unit_id: p.purchase_unit_id ?? '',
-            cost: p.cost ?? '',
+            cost: formatDecimal(p.cost, decimals),
             profit_margin_type: p.profit_margin_type || (data.margin_type == 1 ? 'flat' : 'percentage'),
-            profit_margin: p.profit_margin ?? '0',
-            price: p.price ?? '',
-            max_price: p.max_price ?? '',
-            wholesale_price: p.wholesale_price ?? '',
+            profit_margin: formatDecimal(p.profit_margin, decimals),
+            price: formatDecimal(p.price, decimals),
+            max_price: formatDecimal(p.max_price, decimals),
+            wholesale_price: formatDecimal(p.wholesale_price, decimals),
             daily_sale_objective: p.daily_sale_objective ?? '',
             alert_quantity: p.alert_quantity ?? '',
             tax_id: p.tax_id ?? '',
@@ -429,7 +439,7 @@ export default function ProductCreate() {
             is_imei: bool(p.is_imei),
             is_sync_disable: bool(p.is_sync_disable),
             promotion: bool(p.promotion),
-            promotion_price: p.promotion_price ?? '',
+            promotion_price: formatDecimal(p.promotion_price, decimals),
             starting_date: p.starting_date ? String(p.starting_date).slice(0, 10) : '',
             last_date: p.last_date ? String(p.last_date).slice(0, 10) : '',
             product_details: p.product_details ?? '',
@@ -458,7 +468,11 @@ export default function ProductCreate() {
             setComboProducts(data.combo_products);
         }
         if (data.diff_prices) {
-            setDiffPrices(data.diff_prices);
+            const formattedDiffPrices = {};
+            Object.entries(data.diff_prices).forEach(([warehouseId, value]) => {
+                formattedDiffPrices[warehouseId] = formatDecimal(value, decimals);
+            });
+            setDiffPrices(formattedDiffPrices);
         }
         if (data.related_products_selected?.length) {
             setSelectedRelated(data.related_products_selected);
@@ -468,6 +482,7 @@ export default function ProductCreate() {
         }
         setPreviousImages(data.previous_images || []);
         setExistingDigitalFile(data.existing_file || '');
+        setRecalcPriceFromMargin(false);
     };
 
     const fetchData = async () => {
@@ -546,6 +561,9 @@ export default function ProductCreate() {
     // --- Handlers ---
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        if (['cost', 'profit_margin', 'profit_margin_type'].includes(name)) {
+            setRecalcPriceFromMargin(true);
+        }
         setFormData(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? (checked ? 1 : 0) : value
@@ -582,9 +600,11 @@ export default function ProductCreate() {
         }
     };
 
-    // Calculate profit margin -> price
+    // Recalculate price only when cost or margin is edited — not on initial edit load.
     useEffect(() => {
         if (isCombo || isDigital || isService) return;
+        if (!recalcPriceFromMargin) return;
+
         const cost = parseFloat(formData.cost) || 0;
         const margin = parseFloat(formData.profit_margin) || 0;
         let price = 0;
@@ -593,20 +613,27 @@ export default function ProductCreate() {
         } else {
             price = cost + margin;
         }
-        setFormData(prev => ({ ...prev, price: price.toFixed(2) }));
-    }, [formData.cost, formData.profit_margin, formData.profit_margin_type, formData.type]);
+        setFormData(prev => ({ ...prev, price: price.toFixed(options.decimal ?? 2) }));
+        setRecalcPriceFromMargin(false);
+    }, [formData.cost, formData.profit_margin, formData.profit_margin_type, formData.type, recalcPriceFromMargin, isCombo, isDigital, isService, options.decimal]);
 
-    // Handle price change -> margin
+    // Handle price change -> margin (does not recalculate price back)
     const handlePriceChange = (e) => {
-        const newPrice = parseFloat(e.target.value) || 0;
+        const raw = e.target.value;
+        const newPrice = parseFloat(raw) || 0;
         const cost = parseFloat(formData.cost) || 0;
+        const decimals = options.decimal ?? 2;
         let margin = 0;
         if (formData.profit_margin_type === 'percentage') {
             margin = cost > 0 ? ((newPrice - cost) / cost * 100) : 0;
         } else {
             margin = newPrice - cost;
         }
-        setFormData(prev => ({ ...prev, price: newPrice, profit_margin: margin.toFixed(2) }));
+        setFormData(prev => ({
+            ...prev,
+            price: raw === '' ? '' : raw,
+            profit_margin: margin.toFixed(decimals),
+        }));
     };
 
     // Unit change logic
@@ -1011,7 +1038,7 @@ export default function ProductCreate() {
                     </FormRow>
 
                     <FormRow cols={3}>
-                        <FormField label="Alternate code">
+                        <FormField label="Alternate code" spanFull>
                             <TextInput
                                 name="alt_code"
                                 value={formData.alt_code}
@@ -1053,7 +1080,7 @@ export default function ProductCreate() {
                     {(formData.type === 'standard' || formData.type === 'combo') && (
                         <FormRow cols={3}>
                             <FormField label="Product Unit" required={formData.type === 'standard'}>
-                                <InlineField action={<button type="button" className="ui-btn ghost sm" onClick={() => setUnitModalOpen(true)}>+</button>}>
+                                <InlineField action={<button type="button" className="ui-btn ghost" onClick={() => setUnitModalOpen(true)}>+</button>}>
                                     <SelectInput name="unit_id" value={formData.unit_id} onChange={handleChange} required={formData.type === 'standard'}>
                                         <option value="">Select Unit</option>
                                         {options.units.map(u => <option key={u.id} value={u.id}>{u.unit_name}</option>)}
@@ -1082,25 +1109,24 @@ export default function ProductCreate() {
                 </FormPanel>
 
                 <FormPanel title="Pricing & tax">
-                    <FormRow cols={3}>
-                        {(isStandard || isCombo) && (
+                    {(isStandard || isCombo) && (
+                        <FormRow cols={3}>
                             <FormField label="Product Cost" required={isStandard}>
                                 <NumberInput name="cost" value={formData.cost} onChange={handleChange} required={isStandard} />
                             </FormField>
-                        )}
-                        {!isDigital && !isService && (
-                            <>
-                                <FormField label="Profit Margin Type">
-                                    <SelectInput name="profit_margin_type" value={formData.profit_margin_type} onChange={handleChange}>
-                                        <option value="percentage">Percentage (%)</option>
-                                        <option value="flat">Flat</option>
-                                    </SelectInput>
-                                </FormField>
-                                <FormField label="Profit Margin">
-                                    <TextInput name="profit_margin" value={formData.profit_margin} onChange={handleChange} />
-                                </FormField>
-                            </>
-                        )}
+                            <FormField label="Profit Margin Type">
+                                <SelectInput name="profit_margin_type" value={formData.profit_margin_type} onChange={handleChange}>
+                                    <option value="percentage">Percentage (%)</option>
+                                    <option value="flat">Flat</option>
+                                </SelectInput>
+                            </FormField>
+                            <FormField label="Profit Margin">
+                                <TextInput name="profit_margin" value={formData.profit_margin} onChange={handleChange} />
+                            </FormField>
+                        </FormRow>
+                    )}
+
+                    <FormRow cols={isDigital || isService ? 2 : 3}>
                         <FormField label="Product Price" required>
                             <NumberInput name="price" value={formData.price} onChange={handlePriceChange} required />
                         </FormField>
@@ -1178,19 +1204,21 @@ export default function ProductCreate() {
                         </div>
                     )}
 
-                    <FormRow cols={3}>
-                        <FormField label="Wholesale Price">
-                            <NumberInput name="wholesale_price" value={formData.wholesale_price} onChange={handleChange} />
-                        </FormField>
-                        <FormField label="Daily Sale Objective">
-                            <NumberInput name="daily_sale_objective" value={formData.daily_sale_objective} onChange={handleChange} />
-                        </FormField>
-                        {isStandard && (
-                            <FormField label="Alert Quantity">
-                                <NumberInput name="alert_quantity" value={formData.alert_quantity} onChange={handleChange} />
+                    {!isDigital && !isService && (
+                        <FormRow cols={isStandard ? 3 : 2}>
+                            <FormField label="Wholesale Price">
+                                <NumberInput name="wholesale_price" value={formData.wholesale_price} onChange={handleChange} />
                             </FormField>
-                        )}
-                    </FormRow>
+                            <FormField label="Daily Sale Objective">
+                                <NumberInput name="daily_sale_objective" value={formData.daily_sale_objective} onChange={handleChange} />
+                            </FormField>
+                            {isStandard && (
+                                <FormField label="Alert Quantity">
+                                    <NumberInput name="alert_quantity" value={formData.alert_quantity} onChange={handleChange} />
+                                </FormField>
+                            )}
+                        </FormRow>
+                    )}
 
                     <FormRow cols={2}>
                         <FormField label="Product Tax">

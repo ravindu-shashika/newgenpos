@@ -86,6 +86,29 @@ class AppConfig {
 
   static const Duration queueStatusPollDelay = Duration(seconds: 2);
 
-  static const int downloadPageSize = 500;
-  static const int dbWriteBatchSize = 50;
+  static const int downloadPageSizeResponsive = 500;
+  static const int downloadPageSizeBulk = 2000;
+  static const int dbWriteBatchSizeResponsive = 50;
+  static const int dbWriteBatchSizeBulk = 300;
+  static const int downloadParallelChunksResponsive = 1;
+  static const int downloadParallelChunksBulk = 3;
+  static const Duration downloadReceiveTimeoutResponsive =
+      Duration(seconds: 120);
+  static const Duration downloadReceiveTimeoutBulk = Duration(seconds: 300);
+
+  /// Legacy default — prefer [downloadPageSizeFor].
+  static const int downloadPageSize = downloadPageSizeResponsive;
+  static const int dbWriteBatchSize = dbWriteBatchSizeResponsive;
+
+  static int downloadPageSizeFor({required bool bulk}) =>
+      bulk ? downloadPageSizeBulk : downloadPageSizeResponsive;
+
+  static int dbWriteBatchSizeFor({required bool bulk}) =>
+      bulk ? dbWriteBatchSizeBulk : dbWriteBatchSizeResponsive;
+
+  static int downloadParallelChunksFor({required bool bulk}) =>
+      bulk ? downloadParallelChunksBulk : downloadParallelChunksResponsive;
+
+  static Duration downloadReceiveTimeoutFor({required bool bulk}) =>
+      bulk ? downloadReceiveTimeoutBulk : downloadReceiveTimeoutResponsive;
 }

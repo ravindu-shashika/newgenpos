@@ -21,6 +21,7 @@ use App\Models\Product_Warehouse;
 use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Mail;
 use Spatie\Permission\Models\Permission;
+use App\Http\Controllers\Concerns\BroadcastsPosStockChanges;
 use Illuminate\Support\Facades\Validator;
 
 use App\Helpers\DateHelper;
@@ -28,7 +29,7 @@ use App\Traits\SpaResponse;
 
 class TransferController extends Controller
 {
-    use \App\Traits\MailInfo, SpaResponse;
+    use \App\Traits\MailInfo, SpaResponse, BroadcastsPosStockChanges;
 
     public function index(Request $request)
     {
@@ -356,6 +357,8 @@ class TransferController extends Controller
         $tax = $data['tax'];
         $total = $data['subtotal'];
         $product_transfer = [];
+        $fromStockIds = [];
+        $toStockIds = [];
 
         foreach ($product_id as $i => $id) {
             $lims_purchase_unit_data  = Unit::where('unit_name', $purchase_unit[$i])->first();
@@ -405,6 +408,7 @@ class TransferController extends Controller
             //deduct quantity from sending warehouse
             $lims_product_warehouse_data->qty -= $quantity;
             $lims_product_warehouse_data->save();
+            $fromStockIds[] = (int) $lims_product_warehouse_data->id;
 
             if($data['status'] == 1) {
                 if($lims_product_data->is_variant) {
@@ -442,6 +446,7 @@ class TransferController extends Controller
                 }
 
                 $lims_product_warehouse_data->save();
+                $toStockIds[] = (int) $lims_product_warehouse_data->id;
             }
 
             $product_transfer['transfer_id'] = $lims_transfer_data->id ;
@@ -454,6 +459,21 @@ class TransferController extends Controller
             $product_transfer['tax'] = $tax[$i];
             $product_transfer['total'] = $total[$i];
             ProductTransfer::create($product_transfer);
+        }
+
+        $this->broadcastPosStockChanges(
+            (int) $data['from_warehouse_id'],
+            'transfer',
+            $lims_transfer_data->reference_no,
+            $fromStockIds,
+        );
+        if ((int) $data['to_warehouse_id'] !== (int) $data['from_warehouse_id']) {
+            $this->broadcastPosStockChanges(
+                (int) $data['to_warehouse_id'],
+                'transfer',
+                $lims_transfer_data->reference_no,
+                $toStockIds,
+            );
         }
 
         $message = 'Transfer created successfully';

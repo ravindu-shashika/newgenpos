@@ -116,18 +116,18 @@ Future<PaymentCarouselResult?> showPaymentCarouselDialog({
   required List<LocalCouponRow> coupons,
   String initialSaleNote = '',
   String initialStaffNote = '',
-  bool showPrintInvoiceOption = true,
-  bool defaultPrintInvoice = true,
+  bool printOnComplete = false,
   bool showWhatsappOption = false,
   bool defaultSendWhatsapp = false,
   List<PosPaymentMethod> mixMethods = const [],
   double returnCredit = 0,
-  VoidCallback? onReturnCreditTap,
+  bool allowZeroBalanceComplete = false,
   List<PaymentOrderLine> orderLines = const [],
   double discountTotal = 0,
   double orderTax = 0,
   String stationLabel = 'Station 01',
   String terminalLabel = 'Terminal 01',
+  String orderReference = '',
 }) {
   return showPosDialog<PaymentCarouselResult>(
     context: context,
@@ -145,18 +145,18 @@ Future<PaymentCarouselResult?> showPaymentCarouselDialog({
       coupons: coupons,
       initialSaleNote: initialSaleNote,
       initialStaffNote: initialStaffNote,
-      showPrintInvoiceOption: showPrintInvoiceOption,
-      defaultPrintInvoice: defaultPrintInvoice,
+      printOnComplete: printOnComplete,
       showWhatsappOption: showWhatsappOption,
       defaultSendWhatsapp: defaultSendWhatsapp,
       mixMethods: mixMethods,
       returnCredit: returnCredit,
-      onReturnCreditTap: onReturnCreditTap,
+      allowZeroBalanceComplete: allowZeroBalanceComplete,
       orderLines: orderLines,
       discountTotal: discountTotal,
       orderTax: orderTax,
       stationLabel: stationLabel,
       terminalLabel: terminalLabel,
+      orderReference: orderReference,
     ),
   );
 }
@@ -176,18 +176,18 @@ class _PaymentCarouselDialog extends StatefulWidget {
     required this.coupons,
     required this.initialSaleNote,
     required this.initialStaffNote,
-    required this.showPrintInvoiceOption,
-    required this.defaultPrintInvoice,
+    required this.printOnComplete,
     required this.showWhatsappOption,
     required this.defaultSendWhatsapp,
     required this.mixMethods,
     required this.returnCredit,
-    this.onReturnCreditTap,
+    this.allowZeroBalanceComplete = false,
     this.orderLines = const [],
     this.discountTotal = 0,
     this.orderTax = 0,
     this.stationLabel = 'Station 01',
     this.terminalLabel = 'Terminal 01',
+    this.orderReference = '',
   });
 
   final List<PosPaymentMethod> methods;
@@ -203,18 +203,18 @@ class _PaymentCarouselDialog extends StatefulWidget {
   final List<LocalCouponRow> coupons;
   final String initialSaleNote;
   final String initialStaffNote;
-  final bool showPrintInvoiceOption;
-  final bool defaultPrintInvoice;
+  final bool printOnComplete;
   final bool showWhatsappOption;
   final bool defaultSendWhatsapp;
   final List<PosPaymentMethod> mixMethods;
   final double returnCredit;
-  final VoidCallback? onReturnCreditTap;
+  final bool allowZeroBalanceComplete;
   final List<PaymentOrderLine> orderLines;
   final double discountTotal;
   final double orderTax;
   final String stationLabel;
   final String terminalLabel;
+  final String orderReference;
 
   @override
   State<_PaymentCarouselDialog> createState() => _PaymentCarouselDialogState();
@@ -238,7 +238,6 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   late final TextEditingController _chequeNoCtrl;
   late final TextEditingController _saleNoteCtrl;
   String _cardType = 'Visa';
-  bool _printInvoice = false;
   bool _sendWhatsapp = false;
   late final List<_MixPaymentLineState> _mixLines;
   _MixPaymentLineState? _activeMixLine;
@@ -308,7 +307,6 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     _cardHolderCtrl = TextEditingController();
     _chequeNoCtrl = TextEditingController();
     _saleNoteCtrl = TextEditingController(text: widget.initialSaleNote);
-    _printInvoice = widget.defaultPrintInvoice;
     _sendWhatsapp = widget.defaultSendWhatsapp;
     _mixLines = _buildMixLines();
     _activeMixLine = _mixLines.isNotEmpty ? _mixLines.first : null;
@@ -732,7 +730,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             cardHolderName: '',
             cardType: firstCard?.cardType ?? '',
             chequeNo: '',
-            printInvoice: _printInvoice,
+            printInvoice: widget.printOnComplete,
             sendWhatsapp: _sendWhatsapp,
           ),
           mixPayments: mixPayments,
@@ -764,7 +762,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
               method.key == 'card' ? _cardHolderCtrl.text.trim() : '',
           cardType: method.key == 'card' ? _cardType : '',
           chequeNo: method.key == 'cheque' ? _chequeNoCtrl.text.trim() : '',
-          printInvoice: _printInvoice,
+          printInvoice: widget.printOnComplete,
           sendWhatsapp: _sendWhatsapp,
         ),
       ),
@@ -773,12 +771,10 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
 
   String get _money => formatPosMoney(_grandTotal);
 
-  String get _invoiceLabel =>
-      widget.orderLines.isEmpty
-          ? 'Invoice'
-          : 'Invoice: ${widget.orderLines.length}';
-
   bool get _canCompletePayment {
+    if (widget.allowZeroBalanceComplete && _grandTotal <= 0.009) {
+      return true;
+    }
     final key = _currentTab.key;
     if (key == 'mix') return _mixReady;
     if (key == 'cash' || _currentTab.method?.id == '1') {
@@ -816,7 +812,6 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
       onCouponTap: _onCouponTap,
       couponCode: _couponCode,
       couponDiscountText: _couponDiscountText,
-      onReturnCreditTap: widget.onReturnCreditTap,
     );
   }
 
@@ -990,7 +985,9 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             PaymentProcessingHeader(
-              invoiceLabel: _invoiceLabel,
+              orderReference: widget.orderReference.isNotEmpty
+                  ? widget.orderReference
+                  : 'Order',
               totalText: _money,
               busy: _busy,
               onClose: () => Navigator.pop(context),
@@ -1018,14 +1015,11 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
               ),
             ),
             PaymentFooterBar(
-              showPrintOption: true,
-              printInvoice: _printInvoice,
-              onPrintChanged: (v) => setState(() => _printInvoice = v),
               canComplete: _canCompletePayment,
               busy: _busy,
               onComplete: _completePayment,
               statusHint: _paymentStatusHint,
-              completeLabel: _printInvoice
+              completeLabel: widget.printOnComplete
                   ? 'COMPLETE & PRINT'
                   : 'COMPLETE SALE',
             ),

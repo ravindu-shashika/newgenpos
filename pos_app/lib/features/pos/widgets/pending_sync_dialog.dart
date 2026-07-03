@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/app_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/product_grid_provider.dart';
-import '../../../core/theme/pos_theme.dart';
+import '../../../core/theme/pos_app_styles.dart';
 import 'pos_professional_dialog.dart';
 import 'pos_toast.dart';
 import 'show_pos_dialog.dart';
@@ -42,6 +43,7 @@ class PosPendingSyncActions {
             retryFailed: true,
           );
       ref.invalidate(pendingSyncCountProvider);
+      ref.invalidate(pendingSalesForUiProvider);
       ref.read(syncRevisionProvider.notifier).update((n) => n + 1);
 
       final pendingAfter = await ref.read(pendingSyncCountProvider.future);
@@ -151,10 +153,31 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
     }
   }
 
+  String _statusLabel(String status) {
+    return switch (status) {
+      'queued' => 'Queued on server',
+      'failed' => 'Failed',
+      'pending' => 'Pending upload',
+      _ => status,
+    };
+  }
+
+  Color _statusColor(String status, PosAppStyles s) {
+    return switch (status) {
+      'failed' => s.danger,
+      'queued' => s.accent,
+      _ => s.textMuted,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final pendingAsync = ref.watch(pendingSyncCountProvider);
+    final salesAsync = ref.watch(pendingSalesForUiProvider);
     final pending = pendingAsync.valueOrNull ?? 0;
+    final sales = salesAsync.valueOrNull ?? const <LocalSale>[];
+    final failedOrQueued =
+        sales.where((s) => s.syncStatus == 'failed' || s.syncStatus == 'queued');
     final s = context.posStyles;
     final syncing = _syncing || ref.watch(salesSyncInProgressProvider);
 
@@ -162,8 +185,8 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
       title: 'Pending sync',
       subtitle: 'Sales saved on this device',
       icon: Icons.cloud_upload_outlined,
-      maxWidth: 440,
-      maxBodyHeight: 220,
+      maxWidth: 520,
+      maxBodyHeight: 360,
       onClose: syncing ? () {} : () => Navigator.pop(context),
       footer: Row(
         children: [
@@ -222,7 +245,48 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
               ],
             ),
           ),
-          if (pendingAsync.isLoading) ...[
+          if (failedOrQueued.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Details', style: s.titleMedium),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: failedOrQueued.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final sale = failedOrQueued.elementAt(index);
+                  final refNo = sale.referenceNo ?? sale.clientUuid;
+                  final err = sale.errorMessage;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      refNo,
+                      style: s.body,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: err != null && err.isNotEmpty
+                        ? Text(
+                            err,
+                            style: s.bodyMuted.copyWith(color: s.danger),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : null,
+                    trailing: Text(
+                      _statusLabel(sale.syncStatus),
+                      style: s.caption.copyWith(
+                        color: _statusColor(sale.syncStatus, s),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+          if (pendingAsync.isLoading || salesAsync.isLoading) ...[
             const SizedBox(height: 16),
             const Center(child: CircularProgressIndicator()),
           ],

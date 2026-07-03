@@ -507,32 +507,72 @@ class PosPayButton extends StatelessWidget {
     super.key,
     required this.onPressed,
     this.disabled = false,
+    this.label = 'PAY',
+    this.outlined = false,
+    this.icon,
+    this.backgroundColor,
+    this.foregroundColor,
   });
 
   final VoidCallback? onPressed;
   final bool disabled;
+  final String label;
+  final bool outlined;
+  final IconData? icon;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
     final styles = context.posStyles;
+    final customBg = backgroundColor;
+    final bg = customBg != null
+        ? (disabled ? customBg.withValues(alpha: 0.45) : customBg)
+        : outlined
+            ? Colors.transparent
+            : (disabled
+                ? styles.brand.buttonPrimary.withValues(alpha: 0.4)
+                : styles.brand.buttonPrimary);
+    final fg = foregroundColor ??
+        (outlined
+            ? (disabled ? styles.textMuted : styles.brand.buttonPrimary)
+            : (disabled ? styles.onBrandMuted : styles.onBrand));
+    final borderColor = customBg != null
+        ? (disabled ? styles.border : customBg)
+        : (disabled ? styles.border : styles.brand.buttonPrimary);
+
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: disabled
-            ? styles.brand.buttonPrimary.withValues(alpha: 0.4)
-            : styles.brand.buttonPrimary,
-        borderRadius: BorderRadius.circular(12),
+        color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: outlined || customBg != null
+              ? BorderSide(
+                  color: borderColor,
+                  width: outlined ? 1.5 : 0,
+                )
+              : BorderSide.none,
+        ),
         child: InkWell(
           onTap: disabled ? null : onPressed,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text(
-              'PAY',
-              textAlign: TextAlign.center,
-              style: styles.payButtonLabel.copyWith(
-                color: disabled ? styles.onBrandMuted : styles.onBrand,
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 22, color: fg),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: styles.payButtonLabel.copyWith(color: fg),
+                ),
+              ],
             ),
           ),
         ),

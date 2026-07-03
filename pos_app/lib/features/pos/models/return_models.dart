@@ -1,3 +1,24 @@
+import 'return_cart_line.dart';
+
+enum ReturnSessionMode {
+  none,
+  returnOnly,
+  returnAndSale,
+}
+
+/// Starts an inline return/exchange checkout session on the register.
+class ReturnCheckoutSessionStart {
+  const ReturnCheckoutSessionStart({
+    required this.mode,
+    this.originalSaleLookup,
+    this.returnLines = const [],
+  });
+
+  final ReturnSessionMode mode;
+  final ReturnSaleLookup? originalSaleLookup;
+  final List<ReturnCartLine> returnLines;
+}
+
 class ReturnSaleLookupLine {
   const ReturnSaleLookupLine({
     required this.productSaleId,
@@ -169,47 +190,6 @@ class ReturnReceiptLine {
   final double qty;
   final double unitPrice;
   final double total;
-}
-
-/// Result from the exchange dialog after creating a return bill.
-class ExchangeReturnResult {
-  const ExchangeReturnResult({
-    required this.returnResult,
-    required this.allowedProductIds,
-    this.originalSaleReferenceNo,
-  });
-
-  final SavedReturnResult returnResult;
-  final Set<int> allowedProductIds;
-  final String? originalSaleReferenceNo;
-}
-
-/// Active exchange session: return bill created; replacements go on main cart.
-class ExchangeSession {
-  const ExchangeSession({
-    required this.returnClientUuid,
-    required this.returnReferenceNo,
-    required this.creditRemaining,
-    required this.allowedProductIds,
-    this.originalSaleReferenceNo,
-  });
-
-  final String returnClientUuid;
-  final String returnReferenceNo;
-  final double creditRemaining;
-  final Set<int> allowedProductIds;
-  final String? originalSaleReferenceNo;
-
-  factory ExchangeSession.fromResult(ExchangeReturnResult result) {
-    return ExchangeSession(
-      returnClientUuid: result.returnResult.clientUuid,
-      returnReferenceNo: result.returnResult.referenceNo,
-      creditRemaining: result.returnResult.creditRemaining,
-      allowedProductIds: result.allowedProductIds,
-      originalSaleReferenceNo:
-          result.originalSaleReferenceNo ?? result.returnResult.saleReferenceNo,
-    );
-  }
 }
 
 class AppliedReturnSettlement {

@@ -133,7 +133,36 @@ class PosAppController extends SaleDashboardController
             'sync_version' => now()->toIso8601String(),
             'product_image_base' => url('/images/product'),
             'default_product_image' => url('/images/product/zummXD2dvAtI.png'),
+            'realtime' => $this->realtimeConfig($terminal, $defaultWarehouseId),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function realtimeConfig(?Terminal $terminal, ?int $warehouseId): array
+    {
+        $enabled = filter_var(env('REVERB_ENABLED', false), FILTER_VALIDATE_BOOLEAN)
+            && in_array(config('broadcasting.default'), ['reverb', 'pusher'], true);
+
+        if (!$enabled || !$warehouseId) {
+            return ['enabled' => false];
+        }
+
+        $scheme = env('REVERB_SCHEME', 'http');
+        $host = env('REVERB_HOST', '127.0.0.1');
+        $port = (int) env('REVERB_PORT', 8080);
+
+        return [
+            'enabled' => true,
+            'key' => env('REVERB_APP_KEY'),
+            'host' => $host,
+            'port' => $port,
+            'scheme' => $scheme,
+            'use_tls' => $scheme === 'https',
+            'auth_endpoint' => url('/pos/broadcasting/auth'),
+            'channel' => 'private-pos.warehouse.'.$warehouseId,
+        ];
     }
 
     /**
@@ -325,9 +354,15 @@ class PosAppController extends SaleDashboardController
             }
         }
 
+        $queued = ! $processInline;
+
         return $this->spaJson($request, [
             'results' => $results,
-            'queued' => ! $processInline,
+            'queued' => $queued,
+            'queue' => $queued ? config('pos.sale_sync_queue', 'pos-sales') : null,
+            'queue_worker' => $queued
+                ? 'php artisan queue:work --queue=' . config('pos.sale_sync_queue', 'pos-sales')
+                : null,
             'synced_at' => now()->toIso8601String(),
         ]);
     }

@@ -931,6 +931,12 @@ class $SyncMetaTable extends SyncMeta
   late final GeneratedColumn<String> posSettingsJson = GeneratedColumn<String>(
       'pos_settings_json', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _downloadCheckpointJsonMeta =
+      const VerificationMeta('downloadCheckpointJson');
+  @override
+  late final GeneratedColumn<String> downloadCheckpointJson =
+      GeneratedColumn<String>('download_checkpoint_json', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -940,7 +946,8 @@ class $SyncMetaTable extends SyncMeta
         lastFullDownloadAt,
         defaultCustomerId,
         defaultBillerId,
-        posSettingsJson
+        posSettingsJson,
+        downloadCheckpointJson
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -999,6 +1006,12 @@ class $SyncMetaTable extends SyncMeta
           posSettingsJson.isAcceptableOrUnknown(
               data['pos_settings_json']!, _posSettingsJsonMeta));
     }
+    if (data.containsKey('download_checkpoint_json')) {
+      context.handle(
+          _downloadCheckpointJsonMeta,
+          downloadCheckpointJson.isAcceptableOrUnknown(
+              data['download_checkpoint_json']!, _downloadCheckpointJsonMeta));
+    }
     return context;
   }
 
@@ -1024,6 +1037,9 @@ class $SyncMetaTable extends SyncMeta
           .read(DriftSqlType.int, data['${effectivePrefix}default_biller_id']),
       posSettingsJson: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}pos_settings_json']),
+      downloadCheckpointJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}download_checkpoint_json']),
     );
   }
 
@@ -1042,6 +1058,7 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
   final int? defaultCustomerId;
   final int? defaultBillerId;
   final String? posSettingsJson;
+  final String? downloadCheckpointJson;
   const SyncMetaData(
       {required this.id,
       required this.deviceId,
@@ -1050,7 +1067,8 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
       this.lastFullDownloadAt,
       this.defaultCustomerId,
       this.defaultBillerId,
-      this.posSettingsJson});
+      this.posSettingsJson,
+      this.downloadCheckpointJson});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1071,6 +1089,10 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
     }
     if (!nullToAbsent || posSettingsJson != null) {
       map['pos_settings_json'] = Variable<String>(posSettingsJson);
+    }
+    if (!nullToAbsent || downloadCheckpointJson != null) {
+      map['download_checkpoint_json'] =
+          Variable<String>(downloadCheckpointJson);
     }
     return map;
   }
@@ -1095,6 +1117,9 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
       posSettingsJson: posSettingsJson == null && nullToAbsent
           ? const Value.absent()
           : Value(posSettingsJson),
+      downloadCheckpointJson: downloadCheckpointJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(downloadCheckpointJson),
     );
   }
 
@@ -1112,6 +1137,8 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
       defaultCustomerId: serializer.fromJson<int?>(json['defaultCustomerId']),
       defaultBillerId: serializer.fromJson<int?>(json['defaultBillerId']),
       posSettingsJson: serializer.fromJson<String?>(json['posSettingsJson']),
+      downloadCheckpointJson:
+          serializer.fromJson<String?>(json['downloadCheckpointJson']),
     );
   }
   @override
@@ -1126,6 +1153,8 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
       'defaultCustomerId': serializer.toJson<int?>(defaultCustomerId),
       'defaultBillerId': serializer.toJson<int?>(defaultBillerId),
       'posSettingsJson': serializer.toJson<String?>(posSettingsJson),
+      'downloadCheckpointJson':
+          serializer.toJson<String?>(downloadCheckpointJson),
     };
   }
 
@@ -1137,7 +1166,8 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
           Value<String?> lastFullDownloadAt = const Value.absent(),
           Value<int?> defaultCustomerId = const Value.absent(),
           Value<int?> defaultBillerId = const Value.absent(),
-          Value<String?> posSettingsJson = const Value.absent()}) =>
+          Value<String?> posSettingsJson = const Value.absent(),
+          Value<String?> downloadCheckpointJson = const Value.absent()}) =>
       SyncMetaData(
         id: id ?? this.id,
         deviceId: deviceId ?? this.deviceId,
@@ -1157,6 +1187,9 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
         posSettingsJson: posSettingsJson.present
             ? posSettingsJson.value
             : this.posSettingsJson,
+        downloadCheckpointJson: downloadCheckpointJson.present
+            ? downloadCheckpointJson.value
+            : this.downloadCheckpointJson,
       );
   SyncMetaData copyWithCompanion(SyncMetaCompanion data) {
     return SyncMetaData(
@@ -1179,6 +1212,9 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
       posSettingsJson: data.posSettingsJson.present
           ? data.posSettingsJson.value
           : this.posSettingsJson,
+      downloadCheckpointJson: data.downloadCheckpointJson.present
+          ? data.downloadCheckpointJson.value
+          : this.downloadCheckpointJson,
     );
   }
 
@@ -1192,14 +1228,23 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
           ..write('lastFullDownloadAt: $lastFullDownloadAt, ')
           ..write('defaultCustomerId: $defaultCustomerId, ')
           ..write('defaultBillerId: $defaultBillerId, ')
-          ..write('posSettingsJson: $posSettingsJson')
+          ..write('posSettingsJson: $posSettingsJson, ')
+          ..write('downloadCheckpointJson: $downloadCheckpointJson')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, deviceId, warehouseId, lastCatalogSyncAt,
-      lastFullDownloadAt, defaultCustomerId, defaultBillerId, posSettingsJson);
+  int get hashCode => Object.hash(
+      id,
+      deviceId,
+      warehouseId,
+      lastCatalogSyncAt,
+      lastFullDownloadAt,
+      defaultCustomerId,
+      defaultBillerId,
+      posSettingsJson,
+      downloadCheckpointJson);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1211,7 +1256,8 @@ class SyncMetaData extends DataClass implements Insertable<SyncMetaData> {
           other.lastFullDownloadAt == this.lastFullDownloadAt &&
           other.defaultCustomerId == this.defaultCustomerId &&
           other.defaultBillerId == this.defaultBillerId &&
-          other.posSettingsJson == this.posSettingsJson);
+          other.posSettingsJson == this.posSettingsJson &&
+          other.downloadCheckpointJson == this.downloadCheckpointJson);
 }
 
 class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
@@ -1223,6 +1269,7 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
   final Value<int?> defaultCustomerId;
   final Value<int?> defaultBillerId;
   final Value<String?> posSettingsJson;
+  final Value<String?> downloadCheckpointJson;
   const SyncMetaCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -1232,6 +1279,7 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
     this.defaultCustomerId = const Value.absent(),
     this.defaultBillerId = const Value.absent(),
     this.posSettingsJson = const Value.absent(),
+    this.downloadCheckpointJson = const Value.absent(),
   });
   SyncMetaCompanion.insert({
     this.id = const Value.absent(),
@@ -1242,6 +1290,7 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
     this.defaultCustomerId = const Value.absent(),
     this.defaultBillerId = const Value.absent(),
     this.posSettingsJson = const Value.absent(),
+    this.downloadCheckpointJson = const Value.absent(),
   })  : deviceId = Value(deviceId),
         warehouseId = Value(warehouseId);
   static Insertable<SyncMetaData> custom({
@@ -1253,6 +1302,7 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
     Expression<int>? defaultCustomerId,
     Expression<int>? defaultBillerId,
     Expression<String>? posSettingsJson,
+    Expression<String>? downloadCheckpointJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1264,6 +1314,8 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
       if (defaultCustomerId != null) 'default_customer_id': defaultCustomerId,
       if (defaultBillerId != null) 'default_biller_id': defaultBillerId,
       if (posSettingsJson != null) 'pos_settings_json': posSettingsJson,
+      if (downloadCheckpointJson != null)
+        'download_checkpoint_json': downloadCheckpointJson,
     });
   }
 
@@ -1275,7 +1327,8 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
       Value<String?>? lastFullDownloadAt,
       Value<int?>? defaultCustomerId,
       Value<int?>? defaultBillerId,
-      Value<String?>? posSettingsJson}) {
+      Value<String?>? posSettingsJson,
+      Value<String?>? downloadCheckpointJson}) {
     return SyncMetaCompanion(
       id: id ?? this.id,
       deviceId: deviceId ?? this.deviceId,
@@ -1285,6 +1338,8 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
       defaultCustomerId: defaultCustomerId ?? this.defaultCustomerId,
       defaultBillerId: defaultBillerId ?? this.defaultBillerId,
       posSettingsJson: posSettingsJson ?? this.posSettingsJson,
+      downloadCheckpointJson:
+          downloadCheckpointJson ?? this.downloadCheckpointJson,
     );
   }
 
@@ -1315,6 +1370,10 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
     if (posSettingsJson.present) {
       map['pos_settings_json'] = Variable<String>(posSettingsJson.value);
     }
+    if (downloadCheckpointJson.present) {
+      map['download_checkpoint_json'] =
+          Variable<String>(downloadCheckpointJson.value);
+    }
     return map;
   }
 
@@ -1328,7 +1387,8 @@ class SyncMetaCompanion extends UpdateCompanion<SyncMetaData> {
           ..write('lastFullDownloadAt: $lastFullDownloadAt, ')
           ..write('defaultCustomerId: $defaultCustomerId, ')
           ..write('defaultBillerId: $defaultBillerId, ')
-          ..write('posSettingsJson: $posSettingsJson')
+          ..write('posSettingsJson: $posSettingsJson, ')
+          ..write('downloadCheckpointJson: $downloadCheckpointJson')
           ..write(')'))
         .toString();
   }
@@ -7388,6 +7448,26 @@ class $LocalSalesTable extends LocalSales
   late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
       'error_message', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _uploadAttemptsMeta =
+      const VerificationMeta('uploadAttempts');
+  @override
+  late final GeneratedColumn<int> uploadAttempts = GeneratedColumn<int>(
+      'upload_attempts', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _nextRetryAtMeta =
+      const VerificationMeta('nextRetryAt');
+  @override
+  late final GeneratedColumn<DateTime> nextRetryAt = GeneratedColumn<DateTime>(
+      'next_retry_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _lastUploadAtMeta =
+      const VerificationMeta('lastUploadAt');
+  @override
+  late final GeneratedColumn<DateTime> lastUploadAt = GeneratedColumn<DateTime>(
+      'last_upload_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _localCashRegisterIdMeta =
       const VerificationMeta('localCashRegisterId');
   @override
@@ -7437,6 +7517,9 @@ class $LocalSalesTable extends LocalSales
         serverSaleId,
         serverReferenceNo,
         errorMessage,
+        uploadAttempts,
+        nextRetryAt,
+        lastUploadAt,
         localCashRegisterId,
         createdAt,
         syncedAt
@@ -7590,6 +7673,24 @@ class $LocalSalesTable extends LocalSales
           errorMessage.isAcceptableOrUnknown(
               data['error_message']!, _errorMessageMeta));
     }
+    if (data.containsKey('upload_attempts')) {
+      context.handle(
+          _uploadAttemptsMeta,
+          uploadAttempts.isAcceptableOrUnknown(
+              data['upload_attempts']!, _uploadAttemptsMeta));
+    }
+    if (data.containsKey('next_retry_at')) {
+      context.handle(
+          _nextRetryAtMeta,
+          nextRetryAt.isAcceptableOrUnknown(
+              data['next_retry_at']!, _nextRetryAtMeta));
+    }
+    if (data.containsKey('last_upload_at')) {
+      context.handle(
+          _lastUploadAtMeta,
+          lastUploadAt.isAcceptableOrUnknown(
+              data['last_upload_at']!, _lastUploadAtMeta));
+    }
     if (data.containsKey('local_cash_register_id')) {
       context.handle(
           _localCashRegisterIdMeta,
@@ -7661,6 +7762,12 @@ class $LocalSalesTable extends LocalSales
           DriftSqlType.string, data['${effectivePrefix}server_reference_no']),
       errorMessage: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      uploadAttempts: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}upload_attempts'])!,
+      nextRetryAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}next_retry_at']),
+      lastUploadAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_upload_at']),
       localCashRegisterId: attachedDatabase.typeMapping.read(
           DriftSqlType.int, data['${effectivePrefix}local_cash_register_id']),
       createdAt: attachedDatabase.typeMapping
@@ -7701,6 +7808,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
   final int? serverSaleId;
   final String? serverReferenceNo;
   final String? errorMessage;
+  final int uploadAttempts;
+  final DateTime? nextRetryAt;
+  final DateTime? lastUploadAt;
   final int? localCashRegisterId;
   final DateTime createdAt;
   final DateTime? syncedAt;
@@ -7729,6 +7839,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       this.serverSaleId,
       this.serverReferenceNo,
       this.errorMessage,
+      required this.uploadAttempts,
+      this.nextRetryAt,
+      this.lastUploadAt,
       this.localCashRegisterId,
       required this.createdAt,
       this.syncedAt});
@@ -7772,6 +7885,13 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
     }
     if (!nullToAbsent || errorMessage != null) {
       map['error_message'] = Variable<String>(errorMessage);
+    }
+    map['upload_attempts'] = Variable<int>(uploadAttempts);
+    if (!nullToAbsent || nextRetryAt != null) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt);
+    }
+    if (!nullToAbsent || lastUploadAt != null) {
+      map['last_upload_at'] = Variable<DateTime>(lastUploadAt);
     }
     if (!nullToAbsent || localCashRegisterId != null) {
       map['local_cash_register_id'] = Variable<int>(localCashRegisterId);
@@ -7823,6 +7943,13 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       errorMessage: errorMessage == null && nullToAbsent
           ? const Value.absent()
           : Value(errorMessage),
+      uploadAttempts: Value(uploadAttempts),
+      nextRetryAt: nextRetryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextRetryAt),
+      lastUploadAt: lastUploadAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastUploadAt),
       localCashRegisterId: localCashRegisterId == null && nullToAbsent
           ? const Value.absent()
           : Value(localCashRegisterId),
@@ -7862,6 +7989,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       serverReferenceNo:
           serializer.fromJson<String?>(json['serverReferenceNo']),
       errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      uploadAttempts: serializer.fromJson<int>(json['uploadAttempts']),
+      nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
+      lastUploadAt: serializer.fromJson<DateTime?>(json['lastUploadAt']),
       localCashRegisterId:
           serializer.fromJson<int?>(json['localCashRegisterId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -7896,6 +8026,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       'serverSaleId': serializer.toJson<int?>(serverSaleId),
       'serverReferenceNo': serializer.toJson<String?>(serverReferenceNo),
       'errorMessage': serializer.toJson<String?>(errorMessage),
+      'uploadAttempts': serializer.toJson<int>(uploadAttempts),
+      'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
+      'lastUploadAt': serializer.toJson<DateTime?>(lastUploadAt),
       'localCashRegisterId': serializer.toJson<int?>(localCashRegisterId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
@@ -7927,6 +8060,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           Value<int?> serverSaleId = const Value.absent(),
           Value<String?> serverReferenceNo = const Value.absent(),
           Value<String?> errorMessage = const Value.absent(),
+          int? uploadAttempts,
+          Value<DateTime?> nextRetryAt = const Value.absent(),
+          Value<DateTime?> lastUploadAt = const Value.absent(),
           Value<int?> localCashRegisterId = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent()}) =>
@@ -7959,6 +8095,10 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
             : this.serverReferenceNo,
         errorMessage:
             errorMessage.present ? errorMessage.value : this.errorMessage,
+        uploadAttempts: uploadAttempts ?? this.uploadAttempts,
+        nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
+        lastUploadAt:
+            lastUploadAt.present ? lastUploadAt.value : this.lastUploadAt,
         localCashRegisterId: localCashRegisterId.present
             ? localCashRegisterId.value
             : this.localCashRegisterId,
@@ -8018,6 +8158,14 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
       errorMessage: data.errorMessage.present
           ? data.errorMessage.value
           : this.errorMessage,
+      uploadAttempts: data.uploadAttempts.present
+          ? data.uploadAttempts.value
+          : this.uploadAttempts,
+      nextRetryAt:
+          data.nextRetryAt.present ? data.nextRetryAt.value : this.nextRetryAt,
+      lastUploadAt: data.lastUploadAt.present
+          ? data.lastUploadAt.value
+          : this.lastUploadAt,
       localCashRegisterId: data.localCashRegisterId.present
           ? data.localCashRegisterId.value
           : this.localCashRegisterId,
@@ -8053,6 +8201,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           ..write('serverSaleId: $serverSaleId, ')
           ..write('serverReferenceNo: $serverReferenceNo, ')
           ..write('errorMessage: $errorMessage, ')
+          ..write('uploadAttempts: $uploadAttempts, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastUploadAt: $lastUploadAt, ')
           ..write('localCashRegisterId: $localCashRegisterId, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
@@ -8086,6 +8237,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
         serverSaleId,
         serverReferenceNo,
         errorMessage,
+        uploadAttempts,
+        nextRetryAt,
+        lastUploadAt,
         localCashRegisterId,
         createdAt,
         syncedAt
@@ -8118,6 +8272,9 @@ class LocalSale extends DataClass implements Insertable<LocalSale> {
           other.serverSaleId == this.serverSaleId &&
           other.serverReferenceNo == this.serverReferenceNo &&
           other.errorMessage == this.errorMessage &&
+          other.uploadAttempts == this.uploadAttempts &&
+          other.nextRetryAt == this.nextRetryAt &&
+          other.lastUploadAt == this.lastUploadAt &&
           other.localCashRegisterId == this.localCashRegisterId &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt);
@@ -8148,6 +8305,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
   final Value<int?> serverSaleId;
   final Value<String?> serverReferenceNo;
   final Value<String?> errorMessage;
+  final Value<int> uploadAttempts;
+  final Value<DateTime?> nextRetryAt;
+  final Value<DateTime?> lastUploadAt;
   final Value<int?> localCashRegisterId;
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
@@ -8176,6 +8336,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     this.serverSaleId = const Value.absent(),
     this.serverReferenceNo = const Value.absent(),
     this.errorMessage = const Value.absent(),
+    this.uploadAttempts = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
+    this.lastUploadAt = const Value.absent(),
     this.localCashRegisterId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -8205,6 +8368,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     this.serverSaleId = const Value.absent(),
     this.serverReferenceNo = const Value.absent(),
     this.errorMessage = const Value.absent(),
+    this.uploadAttempts = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
+    this.lastUploadAt = const Value.absent(),
     this.localCashRegisterId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
@@ -8237,6 +8403,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     Expression<int>? serverSaleId,
     Expression<String>? serverReferenceNo,
     Expression<String>? errorMessage,
+    Expression<int>? uploadAttempts,
+    Expression<DateTime>? nextRetryAt,
+    Expression<DateTime>? lastUploadAt,
     Expression<int>? localCashRegisterId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
@@ -8266,6 +8435,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       if (serverSaleId != null) 'server_sale_id': serverSaleId,
       if (serverReferenceNo != null) 'server_reference_no': serverReferenceNo,
       if (errorMessage != null) 'error_message': errorMessage,
+      if (uploadAttempts != null) 'upload_attempts': uploadAttempts,
+      if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
+      if (lastUploadAt != null) 'last_upload_at': lastUploadAt,
       if (localCashRegisterId != null)
         'local_cash_register_id': localCashRegisterId,
       if (createdAt != null) 'created_at': createdAt,
@@ -8298,6 +8470,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       Value<int?>? serverSaleId,
       Value<String?>? serverReferenceNo,
       Value<String?>? errorMessage,
+      Value<int>? uploadAttempts,
+      Value<DateTime?>? nextRetryAt,
+      Value<DateTime?>? lastUploadAt,
       Value<int?>? localCashRegisterId,
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt}) {
@@ -8326,6 +8501,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
       serverSaleId: serverSaleId ?? this.serverSaleId,
       serverReferenceNo: serverReferenceNo ?? this.serverReferenceNo,
       errorMessage: errorMessage ?? this.errorMessage,
+      uploadAttempts: uploadAttempts ?? this.uploadAttempts,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+      lastUploadAt: lastUploadAt ?? this.lastUploadAt,
       localCashRegisterId: localCashRegisterId ?? this.localCashRegisterId,
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
@@ -8407,6 +8585,15 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
     if (errorMessage.present) {
       map['error_message'] = Variable<String>(errorMessage.value);
     }
+    if (uploadAttempts.present) {
+      map['upload_attempts'] = Variable<int>(uploadAttempts.value);
+    }
+    if (nextRetryAt.present) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt.value);
+    }
+    if (lastUploadAt.present) {
+      map['last_upload_at'] = Variable<DateTime>(lastUploadAt.value);
+    }
     if (localCashRegisterId.present) {
       map['local_cash_register_id'] = Variable<int>(localCashRegisterId.value);
     }
@@ -8446,6 +8633,9 @@ class LocalSalesCompanion extends UpdateCompanion<LocalSale> {
           ..write('serverSaleId: $serverSaleId, ')
           ..write('serverReferenceNo: $serverReferenceNo, ')
           ..write('errorMessage: $errorMessage, ')
+          ..write('uploadAttempts: $uploadAttempts, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
+          ..write('lastUploadAt: $lastUploadAt, ')
           ..write('localCashRegisterId: $localCashRegisterId, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt')
@@ -11167,6 +11357,7 @@ typedef $$SyncMetaTableCreateCompanionBuilder = SyncMetaCompanion Function({
   Value<int?> defaultCustomerId,
   Value<int?> defaultBillerId,
   Value<String?> posSettingsJson,
+  Value<String?> downloadCheckpointJson,
 });
 typedef $$SyncMetaTableUpdateCompanionBuilder = SyncMetaCompanion Function({
   Value<int> id,
@@ -11177,6 +11368,7 @@ typedef $$SyncMetaTableUpdateCompanionBuilder = SyncMetaCompanion Function({
   Value<int?> defaultCustomerId,
   Value<int?> defaultBillerId,
   Value<String?> posSettingsJson,
+  Value<String?> downloadCheckpointJson,
 });
 
 class $$SyncMetaTableFilterComposer
@@ -11215,6 +11407,10 @@ class $$SyncMetaTableFilterComposer
 
   ColumnFilters<String> get posSettingsJson => $composableBuilder(
       column: $table.posSettingsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get downloadCheckpointJson => $composableBuilder(
+      column: $table.downloadCheckpointJson,
       builder: (column) => ColumnFilters(column));
 }
 
@@ -11255,6 +11451,10 @@ class $$SyncMetaTableOrderingComposer
   ColumnOrderings<String> get posSettingsJson => $composableBuilder(
       column: $table.posSettingsJson,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get downloadCheckpointJson => $composableBuilder(
+      column: $table.downloadCheckpointJson,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$SyncMetaTableAnnotationComposer
@@ -11289,6 +11489,9 @@ class $$SyncMetaTableAnnotationComposer
 
   GeneratedColumn<String> get posSettingsJson => $composableBuilder(
       column: $table.posSettingsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get downloadCheckpointJson => $composableBuilder(
+      column: $table.downloadCheckpointJson, builder: (column) => column);
 }
 
 class $$SyncMetaTableTableManager extends RootTableManager<
@@ -11322,6 +11525,7 @@ class $$SyncMetaTableTableManager extends RootTableManager<
             Value<int?> defaultCustomerId = const Value.absent(),
             Value<int?> defaultBillerId = const Value.absent(),
             Value<String?> posSettingsJson = const Value.absent(),
+            Value<String?> downloadCheckpointJson = const Value.absent(),
           }) =>
               SyncMetaCompanion(
             id: id,
@@ -11332,6 +11536,7 @@ class $$SyncMetaTableTableManager extends RootTableManager<
             defaultCustomerId: defaultCustomerId,
             defaultBillerId: defaultBillerId,
             posSettingsJson: posSettingsJson,
+            downloadCheckpointJson: downloadCheckpointJson,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -11342,6 +11547,7 @@ class $$SyncMetaTableTableManager extends RootTableManager<
             Value<int?> defaultCustomerId = const Value.absent(),
             Value<int?> defaultBillerId = const Value.absent(),
             Value<String?> posSettingsJson = const Value.absent(),
+            Value<String?> downloadCheckpointJson = const Value.absent(),
           }) =>
               SyncMetaCompanion.insert(
             id: id,
@@ -11352,6 +11558,7 @@ class $$SyncMetaTableTableManager extends RootTableManager<
             defaultCustomerId: defaultCustomerId,
             defaultBillerId: defaultBillerId,
             posSettingsJson: posSettingsJson,
+            downloadCheckpointJson: downloadCheckpointJson,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14396,6 +14603,9 @@ typedef $$LocalSalesTableCreateCompanionBuilder = LocalSalesCompanion Function({
   Value<int?> serverSaleId,
   Value<String?> serverReferenceNo,
   Value<String?> errorMessage,
+  Value<int> uploadAttempts,
+  Value<DateTime?> nextRetryAt,
+  Value<DateTime?> lastUploadAt,
   Value<int?> localCashRegisterId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
@@ -14425,6 +14635,9 @@ typedef $$LocalSalesTableUpdateCompanionBuilder = LocalSalesCompanion Function({
   Value<int?> serverSaleId,
   Value<String?> serverReferenceNo,
   Value<String?> errorMessage,
+  Value<int> uploadAttempts,
+  Value<DateTime?> nextRetryAt,
+  Value<DateTime?> lastUploadAt,
   Value<int?> localCashRegisterId,
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
@@ -14547,6 +14760,16 @@ class $$LocalSalesTableFilterComposer
 
   ColumnFilters<String> get errorMessage => $composableBuilder(
       column: $table.errorMessage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get uploadAttempts => $composableBuilder(
+      column: $table.uploadAttempts,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastUploadAt => $composableBuilder(
+      column: $table.lastUploadAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -14686,6 +14909,17 @@ class $$LocalSalesTableOrderingComposer
       column: $table.errorMessage,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get uploadAttempts => $composableBuilder(
+      column: $table.uploadAttempts,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastUploadAt => $composableBuilder(
+      column: $table.lastUploadAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -14794,6 +15028,15 @@ class $$LocalSalesTableAnnotationComposer
   GeneratedColumn<String> get errorMessage => $composableBuilder(
       column: $table.errorMessage, builder: (column) => column);
 
+  GeneratedColumn<int> get uploadAttempts => $composableBuilder(
+      column: $table.uploadAttempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUploadAt => $composableBuilder(
+      column: $table.lastUploadAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -14891,6 +15134,9 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             Value<int?> serverSaleId = const Value.absent(),
             Value<String?> serverReferenceNo = const Value.absent(),
             Value<String?> errorMessage = const Value.absent(),
+            Value<int> uploadAttempts = const Value.absent(),
+            Value<DateTime?> nextRetryAt = const Value.absent(),
+            Value<DateTime?> lastUploadAt = const Value.absent(),
             Value<int?> localCashRegisterId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
@@ -14920,6 +15166,9 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             serverSaleId: serverSaleId,
             serverReferenceNo: serverReferenceNo,
             errorMessage: errorMessage,
+            uploadAttempts: uploadAttempts,
+            nextRetryAt: nextRetryAt,
+            lastUploadAt: lastUploadAt,
             localCashRegisterId: localCashRegisterId,
             createdAt: createdAt,
             syncedAt: syncedAt,
@@ -14949,6 +15198,9 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             Value<int?> serverSaleId = const Value.absent(),
             Value<String?> serverReferenceNo = const Value.absent(),
             Value<String?> errorMessage = const Value.absent(),
+            Value<int> uploadAttempts = const Value.absent(),
+            Value<DateTime?> nextRetryAt = const Value.absent(),
+            Value<DateTime?> lastUploadAt = const Value.absent(),
             Value<int?> localCashRegisterId = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
@@ -14978,6 +15230,9 @@ class $$LocalSalesTableTableManager extends RootTableManager<
             serverSaleId: serverSaleId,
             serverReferenceNo: serverReferenceNo,
             errorMessage: errorMessage,
+            uploadAttempts: uploadAttempts,
+            nextRetryAt: nextRetryAt,
+            lastUploadAt: lastUploadAt,
             localCashRegisterId: localCashRegisterId,
             createdAt: createdAt,
             syncedAt: syncedAt,

@@ -20,6 +20,7 @@ use App\Models\Unit;
 use App\Models\Variant;
 use App\Models\Warehouse;
 use App\Traits\TenantInfo;
+use App\Http\Controllers\Concerns\BroadcastsPosStockChanges;
 use App\Traits\SpaResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,7 +32,7 @@ use Spatie\Permission\Models\Role;
 
 class ReturnPurchaseController extends Controller
 {
-    use TenantInfo, SpaResponse;
+    use TenantInfo, SpaResponse, BroadcastsPosStockChanges;
 
     public function index(Request $request)
     {
@@ -527,6 +528,8 @@ class ReturnPurchaseController extends Controller
         $tax_rate = $data['tax_rate'];
         $tax = $data['tax'];
         $total = $data['subtotal'];
+        $posStockIds = [];
+        $posBatchIds = [];
 
         foreach ($product_purchase_ids as $product_purchase_id) {
             $key = array_search($product_purchase_id, $data['product_purchase_id']);
@@ -562,6 +565,7 @@ class ReturnPurchaseController extends Controller
                     //increase product batch quantity
                     $lims_product_batch_data->qty -= $quantity;
                     $lims_product_batch_data->save();
+                    $posBatchIds[] = (int) $lims_product_batch_data->id;
                 }
                 else
                     $lims_product_warehouse_data = Product_Warehouse::FindProductWithoutVariant($pro_id, $data['warehouse_id'])->first();
@@ -571,6 +575,7 @@ class ReturnPurchaseController extends Controller
 
                 $lims_product_data->save();
                 $lims_product_warehouse_data->save();
+                $posStockIds[] = (int) $lims_product_warehouse_data->id;
             }
             else {
                 if($lims_product_data->type == 'combo') {
@@ -646,6 +651,13 @@ class ReturnPurchaseController extends Controller
             $product_purchase_data->return_qty += $qty[$key];
             $product_purchase_data->save();
         }
+        $this->broadcastPosStockChanges(
+            (int) $data['warehouse_id'],
+            'return_purchase',
+            $lims_return_data->reference_no,
+            $posStockIds,
+            $posBatchIds,
+        );
         $message = 'Return created successfully';
         if($mail_data['email']){
             try{

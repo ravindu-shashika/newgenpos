@@ -95,7 +95,6 @@ function formatPriceHtml(label, printOptions) {
 
 function labelInnerHtml(label, printOptions, businessName) {
     const barcodeSrc = barcodeImageDataUrl(label.sub_sku, label.barcode_type);
-    const skuText = formatSkuDisplay(label.sub_sku, label.alt_code);
     const parts = [];
 
     if (printOptions.business_name && businessName) {
@@ -110,7 +109,25 @@ function labelInnerHtml(label, printOptions, businessName) {
     if (barcodeSrc) {
         parts.push(`<img class="barcode" src="${barcodeSrc}" alt="${escapeHtml(label.sub_sku)}" />`);
     }
-    parts.push(`<span class="sku">${escapeHtml(skuText)}</span>`);
+
+    const showProductCode = printOptions.product_code !== false;
+    const showAltCode = printOptions.alt_code !== false;
+    const productCode = String(label.sub_sku ?? '').trim();
+    const altCode = String(label.alt_code ?? '').trim();
+
+    if (showProductCode && productCode) {
+        parts.push(`<span class="label-code" style="font-size:${printOptions.product_code_size || 12}px;font-weight:bold;line-height:1;">${escapeHtml(productCode)}</span>`);
+    }
+    if (showAltCode && altCode) {
+        parts.push(`<span class="label-alt-code" style="font-size:${printOptions.alt_code_size || 12}px;font-weight:bold;line-height:1;">${escapeHtml(altCode)}</span>`);
+    }
+    if (!showProductCode && !showAltCode) {
+        const skuText = formatSkuDisplay(label.sub_sku, label.alt_code);
+        if (skuText) {
+            parts.push(`<span class="sku">${escapeHtml(skuText)}</span>`);
+        }
+    }
+
     parts.push(formatPriceHtml(label, printOptions));
 
     return `<div class="zebra-label">${parts.filter(Boolean).join('')}</div>`;

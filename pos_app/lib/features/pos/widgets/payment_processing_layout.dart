@@ -13,13 +13,13 @@ const kPosCashTabQuickAmounts = [20, 50, 100, 500, 1000, 2000, 5000];
 class PaymentProcessingHeader extends StatelessWidget {
   const PaymentProcessingHeader({
     super.key,
-    required this.invoiceLabel,
+    required this.orderReference,
     required this.totalText,
     required this.onClose,
     this.busy = false,
   });
 
-  final String invoiceLabel;
+  final String orderReference;
   final String totalText;
   final VoidCallback onClose;
   final bool busy;
@@ -49,29 +49,14 @@ class PaymentProcessingHeader extends StatelessWidget {
             ),
             child: Icon(Icons.payments_outlined, size: 24, color: s.onBrand),
           ),
-          const SizedBox(width: 14),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Payment', style: s.caption),
-                Text(invoiceLabel, style: s.titleMedium),
-              ],
+            child: Text(
+              orderReference,
+              textAlign: TextAlign.center,
+              style: s.titleMedium.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'AMOUNT DUE',
-                style: s.caption.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              Text(totalText, style: s.moneyLarge.copyWith(fontSize: 32)),
-            ],
-          ),
+          Text(totalText, style: s.moneyLarge.copyWith(fontSize: 32)),
           const SizedBox(width: 8),
           IconButton(
             onPressed: busy ? null : onClose,
@@ -561,7 +546,6 @@ class PaymentBillAdjustments extends StatelessWidget {
     required this.onCouponTap,
     this.couponCode,
     this.couponDiscountText,
-    this.onReturnCreditTap,
   });
 
   final String discountAmountText;
@@ -569,7 +553,6 @@ class PaymentBillAdjustments extends StatelessWidget {
   final VoidCallback onCouponTap;
   final String? couponCode;
   final String? couponDiscountText;
-  final VoidCallback? onReturnCreditTap;
 
   @override
   Widget build(BuildContext context) {
@@ -670,16 +653,6 @@ class PaymentBillAdjustments extends StatelessWidget {
             onTap: onCouponTap,
             valueAccent: hasCoupon,
           ),
-          if (onReturnCreditTap != null) ...[
-            Divider(height: 1, color: s.border),
-            adjustmentRow(
-              icon: Icons.receipt_long_outlined,
-              label: 'Return bill',
-              value: 'Apply credit',
-              onTap: onReturnCreditTap!,
-              valueAccent: false,
-            ),
-          ],
         ],
       ),
     );
@@ -743,9 +716,6 @@ class PaymentKeypadColumn extends StatelessWidget {
 class PaymentFooterBar extends StatelessWidget {
   const PaymentFooterBar({
     super.key,
-    required this.showPrintOption,
-    required this.printInvoice,
-    required this.onPrintChanged,
     required this.canComplete,
     required this.busy,
     required this.onComplete,
@@ -753,9 +723,6 @@ class PaymentFooterBar extends StatelessWidget {
     this.statusHint,
   });
 
-  final bool showPrintOption;
-  final bool printInvoice;
-  final ValueChanged<bool>? onPrintChanged;
   final bool canComplete;
   final bool busy;
   final VoidCallback onComplete;
@@ -766,101 +733,81 @@ class PaymentFooterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.posStyles;
     final brand = context.posBrand;
+    final hasStatusHint = !canComplete && statusHint != null;
+
+    final completeButton = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          onPressed: busy || !canComplete ? null : onComplete,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(double.infinity, 58),
+            backgroundColor: canComplete ? brand.buttonPrimary : null,
+            foregroundColor: s.onBrand,
+            disabledForegroundColor: s.textMuted,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (busy)
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: s.onBrand,
+                  ),
+                )
+              else
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 24,
+                  color: s.onBrand,
+                ),
+              const SizedBox(width: 10),
+              Text(
+                busy ? 'Processing…' : completeLabel,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.4,
+                  color: s.onBrand,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: BoxDecoration(
         color: s.cardBg,
         border: Border(top: BorderSide(color: s.border)),
       ),
-      child: Row(
-        children: [
-          if (showPrintOption)
-            InkWell(
-              onTap: busy
-                  ? null
-                  : () => onPrintChanged?.call(!printInvoice),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Checkbox(
-                      value: printInvoice,
-                      onChanged: busy
-                          ? null
-                          : (v) => onPrintChanged?.call(v ?? false),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                      activeColor: s.accent,
-                    ),
-                    Text(
-                      'Print Bill',
-                      style: s.body.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (!canComplete && statusHint != null)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
+      child: hasStatusHint
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
                   statusHint!,
+                  textAlign: TextAlign.center,
                   style: s.body.copyWith(
                     fontWeight: FontWeight.w600,
                     color: s.danger,
                   ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Center(child: completeButton),
+              ],
             )
-          else
-            const Spacer(),
-          SizedBox(
-            width: 480,
-            child: FilledButton(
-              onPressed: busy || !canComplete ? null : onComplete,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 58),
-                backgroundColor: canComplete ? brand.buttonPrimary : null,
-                foregroundColor: s.onBrand,
-                disabledForegroundColor: s.textMuted,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (busy)
-                    SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: s.onBrand,
-                      ),
-                    )
-                  else
-                    Icon(Icons.check_circle_rounded, size: 24, color: s.onBrand),
-                  const SizedBox(width: 10),
-                  Text(
-                    busy ? 'Processing…' : completeLabel,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.4,
-                      color: s.onBrand,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+          : Center(child: completeButton),
     );
   }
 }
@@ -1043,7 +990,6 @@ class PaymentAmountAdjustmentsRow extends StatelessWidget {
     required this.onCouponTap,
     this.couponCode,
     this.couponDiscountText,
-    this.onReturnCreditTap,
   });
 
   final String amountText;
@@ -1052,7 +998,6 @@ class PaymentAmountAdjustmentsRow extends StatelessWidget {
   final VoidCallback onCouponTap;
   final String? couponCode;
   final String? couponDiscountText;
-  final VoidCallback? onReturnCreditTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1075,7 +1020,6 @@ class PaymentAmountAdjustmentsRow extends StatelessWidget {
             onCouponTap: onCouponTap,
             couponCode: couponCode,
             couponDiscountText: couponDiscountText,
-            onReturnCreditTap: onReturnCreditTap,
           ),
         ),
       ],

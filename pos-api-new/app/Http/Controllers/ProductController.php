@@ -1808,13 +1808,13 @@ class ProductController extends Controller
                         return $query->where('is_active', 1);
                     }),
                 ],
-                'alt_code' => [
-                    'nullable',
-                    'max:191',
-                    Rule::unique('products')->ignore($request->input('id'))->where(function ($query) {
-                        return $query->where('is_active', 1);
-                    }),
-                ],
+                // 'alt_code' => [
+                //     'nullable',
+                //     'max:191',
+                //     Rule::unique('products')->ignore($request->input('id'))->where(function ($query) {
+                //         return $query->where('is_active', 1);
+                //     }),
+                // ],
                 'max_price' => ['nullable', 'numeric', 'min:0'],
             ]);
 

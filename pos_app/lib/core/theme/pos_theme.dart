@@ -567,6 +567,11 @@ ThemeData buildPosTheme([PosUiSettings ui = const PosUiSettings()]) {
     listTileTheme: ListTileThemeData(
       textColor: surface.textPrimary,
       iconColor: surface.textMuted,
+      titleTextStyle: textTheme.titleSmall,
+      subtitleTextStyle: textTheme.bodySmall?.copyWith(
+        color: surface.textMuted,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
@@ -611,15 +616,28 @@ ThemeData buildPosTheme([PosUiSettings ui = const PosUiSettings()]) {
       overlayColor: accentOnSurface.withValues(alpha: 0.12),
     ),
     switchTheme: SwitchThemeData(
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       thumbColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return brand.primary;
-        return null;
+        if (states.contains(WidgetState.selected)) {
+          return Colors.white;
+        }
+        return ui.darkMode ? const Color(0xFFE2E8F0) : Colors.white;
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return brand.primary.withValues(alpha: 0.35);
+          return brand.primary;
         }
-        return null;
+        return ui.darkMode
+            ? const Color(0xFF475569)
+            : const Color(0xFFCBD5E1);
+      }),
+      trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return Colors.transparent;
+        }
+        return ui.darkMode
+            ? const Color(0xFF64748B)
+            : const Color(0xFF94A3B8);
       }),
     ),
     checkboxTheme: CheckboxThemeData(

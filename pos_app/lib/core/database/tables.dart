@@ -64,6 +64,7 @@ class SyncMeta extends Table {
   IntColumn get defaultCustomerId => integer().nullable()();
   IntColumn get defaultBillerId => integer().nullable()();
   TextColumn get posSettingsJson => text().nullable()();
+  TextColumn get downloadCheckpointJson => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -242,6 +243,10 @@ class LocalSales extends Table {
   IntColumn get serverSaleId => integer().nullable()();
   TextColumn get serverReferenceNo => text().nullable()();
   TextColumn get errorMessage => text().nullable()();
+  IntColumn get uploadAttempts =>
+      integer().withDefault(const Constant(0))();
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
+  DateTimeColumn get lastUploadAt => dateTime().nullable()();
   IntColumn get localCashRegisterId =>
       integer().nullable().references(LocalCashRegisters, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();

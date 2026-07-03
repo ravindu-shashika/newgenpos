@@ -350,8 +350,9 @@ export const UI_CSS = `
   .ui-form-grid.two  { grid-template-columns: 1fr 1fr; }
   .ui-form-grid.three { grid-template-columns: repeat(3, 1fr); }
   .ui-form-grid.four  { grid-template-columns: repeat(4, 1fr); }
-  .ui-field { display: flex; flex-direction: column; gap: 5px; }
+  .ui-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
   .ui-field.span2 { grid-column: span 2; }
+  .ui-field.span-full { grid-column: 1 / -1; }
   .ui-label {
     font-size: 0.65rem;
     letter-spacing: 0.1em;
@@ -369,6 +370,8 @@ export const UI_CSS = `
     padding: 8px 11px;
     outline: none;
     width: 100%;
+    box-sizing: border-box;
+    min-height: 38px;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .ui-input:focus, .ui-textarea:focus, .ui-select-field:focus {
@@ -418,6 +421,11 @@ export const UI_CSS = `
     padding-bottom: 8px;
     border-bottom: 1px solid var(--ui-border);
   }
+  .ui-form-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
   .ui-form-hint {
     font-size: 0.72rem;
     color: var(--ui-muted);
@@ -427,11 +435,27 @@ export const UI_CSS = `
   .ui-inline-field {
     display: flex;
     gap: 8px;
-    align-items: stretch;
+    align-items: center;
   }
   .ui-inline-field-main { flex: 1; min-width: 0; }
-  .ui-inline-field-action { flex-shrink: 0; }
-  .ui-inline-field-action .ui-btn { height: 100%; min-width: 42px; justify-content: center; padding: 0 12px; }
+  .ui-inline-field-main .ui-input,
+  .ui-inline-field-main .ui-select-field { width: 100%; }
+  .ui-inline-field-action { flex-shrink: 0; display: flex; align-items: center; }
+  .ui-inline-field-action .ui-btn {
+    min-width: 42px;
+    height: 38px;
+    padding: 0 12px;
+    justify-content: center;
+    align-items: center;
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .ui-inline-field-action .ui-select-field {
+    width: auto;
+    min-width: 88px;
+    height: 38px;
+    padding: 8px 10px;
+  }
   .ui-search-wrap { position: relative; }
   .ui-search-dropdown {
     position: absolute;

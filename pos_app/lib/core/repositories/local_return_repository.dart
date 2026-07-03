@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../features/pos/models/return_cart_line.dart';
 import '../../features/pos/models/return_models.dart';
 import '../../features/pos/models/scanned_product.dart';
 import '../../features/pos/sale_reference.dart';
@@ -109,11 +110,93 @@ class LocalReturnRepository {
     );
   }
 
-  /// Local database only — same fields as server return lookup.
+  /// Local database first, then optional server fallback.
   Future<ReturnSaleLookup?> resolveSaleForReturn({
     required String referenceNo,
+    Future<ReturnSaleLookup?> Function(String ref)? serverLookup,
   }) async {
-    return lookupLocalSaleByReference(referenceNo);
+    final local = await lookupLocalSaleByReference(referenceNo);
+    if (local != null) return local;
+    if (serverLookup != null) {
+      return serverLookup(referenceNo.trim());
+    }
+    return null;
+  }
+
+  Future<SavedReturnResult> saveReturnFromCartLines({
+    required List<ReturnCartLine> lines,
+    required int warehouseId,
+    required int customerId,
+    ReturnSaleLookup? lookup,
+    int? billerId,
+    String? returnNote,
+  }) async {
+    if (lines.isEmpty) {
+      throw StateError('Select at least one item to return.');
+    }
+
+    if (lookup != null) {
+      final selections =
+          <({ReturnSaleLookupLine line, double qty, bool isDamage})>[];
+      for (final cartLine in lines) {
+        if (cartLine.qty <= 0) continue;
+        ReturnSaleLookupLine? saleLine;
+        for (final l in lookup.lines) {
+          if (l.productSaleId == cartLine.productSaleId) {
+            saleLine = l;
+            break;
+          }
+        }
+        if (saleLine == null) {
+          throw StateError(
+            'Return line not found on original sale: ${cartLine.code}',
+          );
+        }
+        selections.add((
+          line: saleLine,
+          qty: cartLine.qty,
+          isDamage: cartLine.isDamage,
+        ));
+      }
+      return saveReturn(
+        lookup: lookup,
+        selections: selections,
+        warehouseId: warehouseId,
+        customerId:
+            lookup.customerId > 0 ? lookup.customerId : customerId,
+        saleId: lookup.saleId,
+        returnNote: returnNote,
+      );
+    }
+
+    final selections =
+        <({ScannedProduct product, double qty, bool isDamage})>[];
+    for (final line in lines) {
+      if (line.qty <= 0) continue;
+      selections.add((
+        product: ScannedProduct(
+          productId: line.productId,
+          variantId: line.variantId,
+          code: line.code,
+          name: line.name,
+          price: line.netUnitPrice,
+          taxRate: line.taxRate,
+          taxMethod: line.taxMethod,
+          warehouseQty: line.stockQty ?? 0,
+          productBatchId: line.productBatchId,
+          batchNo: line.batchNo,
+        ),
+        qty: line.qty,
+        isDamage: line.isDamage,
+      ));
+    }
+    return saveReturnWithoutBill(
+      selections: selections,
+      warehouseId: warehouseId,
+      customerId: customerId,
+      billerId: billerId,
+      returnNote: returnNote,
+    );
   }
 
   Future<SavedReturnResult> saveReturn({

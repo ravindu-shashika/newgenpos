@@ -14,6 +14,7 @@ import '../../features/pos/models/scanned_product.dart';
 import '../services/session_service.dart';
 import '../sync/sync_service.dart';
 import '../sync/catalog_download_service.dart';
+import '../sync/catalog_snapshot_import_service.dart';
 import '../../features/pos/pos_checkout_state.dart';
 import '../../features/pos/services/cash_register_service.dart';
 import 'pos_meta_provider.dart';
@@ -69,6 +70,16 @@ final localAuthRepositoryProvider = Provider<LocalAuthRepository>((ref) {
 
 final catalogDownloadServiceProvider = Provider<CatalogDownloadService>((ref) {
   return CatalogDownloadService(
+    ref.watch(appDatabaseProvider),
+    ref.watch(apiClientProvider),
+    ref.watch(localAuthRepositoryProvider),
+    ref.watch(posSettingsRepositoryProvider),
+  );
+});
+
+final catalogSnapshotImportServiceProvider =
+    Provider<CatalogSnapshotImportService>((ref) {
+  return CatalogSnapshotImportService(
     ref.watch(appDatabaseProvider),
     ref.watch(apiClientProvider),
     ref.watch(localAuthRepositoryProvider),
@@ -190,6 +201,11 @@ final pendingSyncCountProvider = FutureProvider<int>((ref) async {
   ref.watch(syncRevisionProvider);
   final db = ref.watch(appDatabaseProvider);
   return db.countPendingSales();
+});
+
+final pendingSalesForUiProvider = FutureProvider((ref) async {
+  ref.watch(syncRevisionProvider);
+  return ref.watch(localSaleRepositoryProvider).loadPendingSalesForUi();
 });
 
 final isOnlineProvider = FutureProvider<bool>((ref) async {

@@ -17,4 +17,17 @@ return [
 
     'sale_sync_queue' => env('POS_SALE_SYNC_QUEUE', 'pos-sales'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Catalog snapshot export (10M+ initial sync)
+    |--------------------------------------------------------------------------
+    |
+    | Snapshots are written to storage/app/pos-snapshots/{warehouse_id}/.
+    | Old files are removed after snapshot_ttl_hours.
+    |
+    */
+    'snapshot_ttl_hours' => (int) env('POS_SNAPSHOT_TTL_HOURS', 48),
+
+    'snapshot_disk' => env('POS_SNAPSHOT_DISK', 'local'),
+
 ];

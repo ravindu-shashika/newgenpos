@@ -33,12 +33,18 @@ part 'app_database.g.dart';
   LocalCashRegisters,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase({String? databaseFilePath})
+      : _databaseFilePath = databaseFilePath,
+        super(_openConnection(databaseFilePath));
 
-  AppDatabase.forTesting(super.executor);
+  AppDatabase.forTesting(super.executor) : _databaseFilePath = null;
+
+  final String? _databaseFilePath;
+
+  String? get databaseFilePath => _databaseFilePath;
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -108,6 +114,12 @@ class AppDatabase extends _$AppDatabase {
             await _createProductFts(m);
             await m.database.customStatement('DELETE FROM products_fts');
             await m.database.customStatement(ProductCatalogSql.rebuildFtsSql);
+          }
+          if (from < 14) {
+            await m.addColumn(localSales, localSales.uploadAttempts);
+            await m.addColumn(localSales, localSales.nextRetryAt);
+            await m.addColumn(localSales, localSales.lastUploadAt);
+            await m.addColumn(syncMeta, syncMeta.downloadCheckpointJson);
           }
         },
       );
@@ -272,14 +284,10 @@ CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
     return rows.length;
   }
 
-  /// Clears catalog + local transaction queue before a full re-download.
-  /// Device session (login/tokens) is kept so the user stays signed in.
+  /// Clears catalog tables before a full re-download.
+  /// Pending sales/returns/exchanges and device session are preserved.
   Future<void> clearAllLocalDataForFullDownload() async {
     await transaction(() async {
-      await delete(localSaleLines).go();
-      await delete(localSales).go();
-      await delete(localReturns).go();
-      await delete(localExchanges).go();
       await delete(localUsers).go();
       await delete(productStock).go();
       await delete(productBatches).go();
@@ -293,23 +301,42 @@ CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
       await delete(categories).go();
       await delete(warehouses).go();
       await delete(localCoupons).go();
+      await customStatement('DELETE FROM products_fts');
     });
   }
 
   /// @deprecated Use [clearAllLocalDataForFullDownload].
   Future<void> clearCatalogTables() => clearAllLocalDataForFullDownload();
+
+  Future<void> saveDownloadCheckpoint(String? json) async {
+    await (update(syncMeta)..where((t) => t.id.equals(1))).write(
+      SyncMetaCompanion(downloadCheckpointJson: Value(json)),
+    );
+  }
+
+  Future<String?> getDownloadCheckpoint() async {
+    final meta = await getSyncMeta();
+    return meta?.downloadCheckpointJson;
+  }
 }
 
 const kLocalDatabaseFileName = 'newgenpos.sqlite';
 
-LazyDatabase _openConnection() {
+LazyDatabase _openConnection(String? databaseFilePath) {
   return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, kLocalDatabaseFileName));
-    final legacy = File(p.join(dir.path, 'pos.sqlite'));
-    if (!file.existsSync() && legacy.existsSync()) {
-      await legacy.rename(file.path);
+    final file = databaseFilePath != null
+        ? File(databaseFilePath)
+        : File(p.join(
+            (await getApplicationDocumentsDirectory()).path,
+            kLocalDatabaseFileName,
+          ));
+    if (databaseFilePath == null) {
+      final legacy = File(p.join(file.parent.path, 'pos.sqlite'));
+      if (!file.existsSync() && legacy.existsSync()) {
+        await legacy.rename(file.path);
+      }
     }
+    await file.parent.create(recursive: true);
     return NativeDatabase.createInBackground(
       file,
       setup: (rawDb) {

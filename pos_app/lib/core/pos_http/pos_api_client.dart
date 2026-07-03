@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../config/app_config.dart';
 import '../sync/download_models.dart';
 import 'dio_logging_interceptor.dart';
+import 'pos_api_headers.dart';
 
 /// HTTP client for the cloud POS API (`/pos/*` — `routes/pos.php`). Offline data
 /// lives in Drift (`newgenpos.sqlite`); sales sync back when online.
@@ -30,7 +31,7 @@ class PosApiClient {
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: receiveTimeout,
-        headers: {'Accept': 'application/json'},
+        headers: PosApiHeaders.forPosBaseUrl(baseUrl),
       ),
     );
     dio.interceptors.add(DioLoggingInterceptor(tag: tag));
@@ -49,6 +50,14 @@ class PosApiClient {
     final trimmed = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
     _dio.options.baseUrl =
         trimmed.endsWith('/pos') ? trimmed : '$trimmed/pos';
+    _applyClientHeaders(_dio.options.baseUrl);
+  }
+
+  void _applyClientHeaders(String posBaseUrl) {
+    final headers = PosApiHeaders.forPosBaseUrl(posBaseUrl);
+    for (final entry in headers.entries) {
+      _dio.options.headers[entry.key] = entry.value;
+    }
   }
 
   Future<Map<String, dynamic>> health({bool quiet = false}) async {
@@ -260,6 +269,7 @@ class PosApiClient {
     int? warehouseId,
     PosDownloadMode mode = PosDownloadMode.full,
     String? since,
+    Duration? receiveTimeout,
   }) async {
     final res = await _dio.post(
       '/setup/manifest',
@@ -270,6 +280,9 @@ class PosApiClient {
         'mode': mode == PosDownloadMode.delta ? 'delta' : 'full',
         if (since != null) 'since': since,
       },
+      options: receiveTimeout != null
+          ? Options(receiveTimeout: receiveTimeout)
+          : null,
     );
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -279,10 +292,12 @@ class PosApiClient {
     String? password,
     required String resource,
     required int page,
+    int? cursorId,
     int? warehouseId,
     int? perPage,
     PosDownloadMode mode = PosDownloadMode.full,
     String? since,
+    Duration? receiveTimeout,
   }) async {
     final res = await _dio.post(
       '/setup/download',
@@ -291,13 +306,48 @@ class PosApiClient {
         if (password != null) 'password': password,
         'resource': resource,
         'page': page,
+        if (cursorId != null) 'cursor_id': cursorId,
         if (warehouseId != null) 'warehouse_id': warehouseId,
         if (perPage != null) 'per_page': perPage,
         'mode': mode == PosDownloadMode.delta ? 'delta' : 'full',
         if (since != null) 'since': since,
       },
+      options: receiveTimeout != null
+          ? Options(receiveTimeout: receiveTimeout)
+          : null,
     );
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> requestCatalogSnapshot({
+    int? warehouseId,
+  }) async {
+    final res = await _dio.post(
+      '/setup/snapshot/request',
+      data: {
+        if (warehouseId != null) 'warehouse_id': warehouseId,
+      },
+      options: Options(receiveTimeout: const Duration(seconds: 60)),
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> catalogSnapshotStatus(String snapshotId) async {
+    final res = await _dio.get('/setup/snapshot/$snapshotId/status');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<String> downloadCatalogSnapshotFile({
+    required String snapshotId,
+    required String savePath,
+    void Function(int received, int? total)? onProgress,
+  }) async {
+    await _dio.download(
+      '/setup/snapshot/$snapshotId/download',
+      savePath,
+      onReceiveProgress: onProgress,
+    );
+    return savePath;
   }
 
   Future<Map<String, dynamic>> lookupSaleForReturn({

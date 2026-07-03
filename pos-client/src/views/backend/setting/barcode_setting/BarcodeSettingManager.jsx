@@ -581,6 +581,38 @@ const BarcodeSettingManager = ({ controllerName }) => {
                         />
                     </FormField>
                 </FormRow>
+                <FormRow cols={2}>
+                    <FormField label="Product code">
+                        <CheckboxInput
+                            label="Show product code on label"
+                            checked={form.print_options?.product_code !== false}
+                            onChange={(e) => setPrintOption('product_code', e.target.checked)}
+                        />
+                        <NumberInput
+                            className="mt-2"
+                            value={form.print_options?.product_code_size ?? 12}
+                            onChange={(e) => setPrintOption('product_code_size', parseInt(e.target.value, 10) || 12)}
+                            min={8}
+                            max={24}
+                            disabled={form.print_options?.product_code === false}
+                        />
+                    </FormField>
+                    <FormField label="Alt code">
+                        <CheckboxInput
+                            label="Show alternate code on label"
+                            checked={form.print_options?.alt_code !== false}
+                            onChange={(e) => setPrintOption('alt_code', e.target.checked)}
+                        />
+                        <NumberInput
+                            className="mt-2"
+                            value={form.print_options?.alt_code_size ?? 12}
+                            onChange={(e) => setPrintOption('alt_code_size', parseInt(e.target.value, 10) || 12)}
+                            min={8}
+                            max={24}
+                            disabled={form.print_options?.alt_code === false}
+                        />
+                    </FormField>
+                </FormRow>
             </Modal>
             )}
 

@@ -63,19 +63,22 @@ class _TransactionSuccessDialog extends StatelessWidget {
       onClose: () => Navigator.pop(context),
       footer: Row(
         children: [
-          Expanded(
-            child: _SuccessActionButton(
-              icon: Icons.print_outlined,
-              label: 'Print receipt',
-              filled: false,
-              onPressed: () async {
-                Navigator.pop(context);
-                await onPrintReceipt?.call();
-              },
+          if (onPrintReceipt != null) ...[
+            Expanded(
+              child: _SuccessActionButton(
+                icon: Icons.print_outlined,
+                label: 'Print receipt',
+                filled: false,
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await onPrintReceipt?.call();
+                },
+              ),
             ),
-          ),
-          SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
           Expanded(
+            flex: onPrintReceipt != null ? 1 : 2,
             child: _SuccessActionButton(
               icon: Icons.add,
               label: 'New sale',

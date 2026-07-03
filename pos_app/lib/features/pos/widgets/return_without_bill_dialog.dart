@@ -1,64 +1,55 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/repositories/local_return_repository.dart';
 import '../../../core/repositories/product_lookup_repository.dart';
 import '../../../core/theme/pos_theme.dart';
+import '../models/return_cart_line.dart';
 import '../models/return_models.dart';
 import '../models/scanned_product.dart';
 import '../pos_currency.dart';
+import '../services/return_entry_service.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
 
-Future<SavedReturnResult?> showReturnWithoutBillDialog({
+Future<ReturnCheckoutSessionStart?> showReturnWithoutBillDialog({
   required BuildContext context,
-  required LocalReturnRepository returnRepo,
   required ProductLookupRepository productLookup,
   required int warehouseId,
   required int customerId,
-  int? billerId,
+  ReturnSessionMode sessionMode = ReturnSessionMode.returnAndSale,
 }) {
-  return showPosDialog<SavedReturnResult>(
+  return showPosDialog<ReturnCheckoutSessionStart>(
     context: context,
     builder: (ctx) => _ReturnWithoutBillDialog(
-      returnRepo: returnRepo,
       productLookup: productLookup,
       warehouseId: warehouseId,
       customerId: customerId,
-      billerId: billerId,
+      sessionMode: sessionMode,
     ),
   );
 }
 
 class _ReturnLine {
   _ReturnLine({
-    required this.product,
-    required this.qty,
-    this.isDamage = false,
+    required this.cartLine,
   });
 
-  final ScannedProduct product;
-  double qty;
-  bool isDamage;
+  final ReturnCartLine cartLine;
 
-  String get key => '${product.productId}_${product.variantId ?? 0}';
-
-  double get lineTotal => product.price * qty;
+  String get key => cartLine.lineKey;
 }
 
 class _ReturnWithoutBillDialog extends StatefulWidget {
   const _ReturnWithoutBillDialog({
-    required this.returnRepo,
     required this.productLookup,
     required this.warehouseId,
     required this.customerId,
-    this.billerId,
+    required this.sessionMode,
   });
 
-  final LocalReturnRepository returnRepo;
   final ProductLookupRepository productLookup;
   final int warehouseId;
   final int customerId;
-  final int? billerId;
+  final ReturnSessionMode sessionMode;
 
   @override
   State<_ReturnWithoutBillDialog> createState() =>
@@ -68,11 +59,20 @@ class _ReturnWithoutBillDialog extends StatefulWidget {
 class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
   final _scanCtrl = TextEditingController();
   final _lines = <String, _ReturnLine>{};
+  late final ReturnEntryService _entryService;
   String? _error;
   bool _busy = false;
 
-  double get _grandTotal =>
-      _lines.values.fold<double>(0, (s, l) => s + l.lineTotal);
+  double get _grandTotal => _lines.values.fold<double>(
+        0,
+        (s, l) => s + l.cartLine.subtotal,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _entryService = ReturnEntryService(widget.productLookup);
+  }
 
   @override
   void dispose() {
@@ -80,8 +80,8 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
     super.dispose();
   }
 
-  Future<void> _addProduct(String code) async {
-    final term = code.trim();
+  Future<void> _addProduct(String input) async {
+    final term = input.trim();
     if (term.isEmpty) return;
 
     setState(() {
@@ -90,21 +90,37 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
     });
 
     try {
-      final product = await widget.productLookup.lookup(
-        code: term,
+      var match = await _entryService.resolveInput(
+        input: term,
         warehouseId: widget.warehouseId,
         customerId: widget.customerId,
       );
-      if (product == null) {
+
+      if (match == null && term.length >= 2) {
+        final hits = await _entryService.searchByName(
+          query: term,
+          warehouseId: widget.warehouseId,
+        );
+        if (hits.length > 1 && mounted) {
+          final picked = await _pickProduct(hits);
+          if (picked == null) return;
+          match = ReturnProductMatch(product: picked);
+        } else if (hits.length == 1) {
+          match = ReturnProductMatch(product: hits.first);
+        }
+      }
+
+      if (match == null) {
         throw StateError('Product not found: $term');
       }
 
-      final key = '${product.productId}_${product.variantId ?? 0}';
+      final cartLine = _entryService.buildReturnLine(match: match);
+      final key = cartLine.lineKey;
       final existing = _lines[key];
       if (existing != null) {
-        existing.qty += 1;
+        existing.cartLine.qty += 1;
       } else {
-        _lines[key] = _ReturnLine(product: product, qty: 1);
+        _lines[key] = _ReturnLine(cartLine: cartLine);
       }
       _scanCtrl.clear();
     } catch (e) {
@@ -114,40 +130,40 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
     }
   }
 
-  Future<void> _submit() async {
+  Future<ScannedProduct?> _pickProduct(List<ScannedProduct> hits) {
+    return showPosDialog<ScannedProduct>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Select product'),
+        children: [
+          for (final p in hits.take(12))
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, p),
+              child: ListTile(
+                title: Text(p.name),
+                subtitle: Text(
+                  '${p.code} · Stock ${p.warehouseQty.toStringAsFixed(0)}',
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _submit() {
     if (_lines.isEmpty) {
       setState(() => _error = 'Scan at least one product');
       return;
     }
 
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      final result = await widget.returnRepo.saveReturnWithoutBill(
-        selections: _lines.values
-            .map(
-              (l) => (
-                product: l.product,
-                qty: l.qty,
-                isDamage: l.isDamage,
-              ),
-            )
-            .toList(),
-        warehouseId: widget.warehouseId,
-        customerId: widget.customerId,
-        billerId: widget.billerId,
-      );
-      if (!mounted) return;
-      Navigator.pop(context, result);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    Navigator.pop(
+      context,
+      ReturnCheckoutSessionStart(
+        mode: widget.sessionMode,
+        returnLines: _lines.values.map((l) => l.cartLine).toList(),
+      ),
+    );
   }
 
   @override
@@ -156,12 +172,12 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
 
     return PosProfessionalWideDialogShell(
       title: 'Return without bill',
-      subtitle: 'Scan products to issue store credit',
+      subtitle: 'Scan products to add to return checkout',
       icon: Icons.qr_code_scanner,
       onClose: _busy ? null : () => Navigator.pop(context),
       footer: PosProfessionalDialogFooter(
         secondaryLabel: 'Cancel',
-        primaryLabel: 'Create return',
+        primaryLabel: 'Add to return',
         primaryEnabled: !_busy && lineList.isNotEmpty,
         primaryLoading: _busy,
         onSecondary: _busy ? null : () => Navigator.pop(context),
@@ -177,8 +193,8 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                 Expanded(
                   child: TextField(
                     controller: _scanCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Scan barcode or enter code',
+                    decoration: const InputDecoration(
+                      labelText: 'Barcode, code, or product name',
                       prefixIcon: Icon(Icons.qr_code_scanner),
                     ),
                     onSubmitted: _addProduct,
@@ -204,7 +220,7 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
               child: Text(
-                'Credit ${formatPosMoney(_grandTotal)}',
+                'Return credit ${formatPosMoney(_grandTotal)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: context.posBrand.primary,
@@ -215,8 +231,10 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
             child: lineList.isEmpty
                 ? Center(
                     child: Text(
-                      'Scan products to return',
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      'Scan barcode, code, or search by name',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   )
                 : ListView.separated(
@@ -224,7 +242,7 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                     itemCount: lineList.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (_, i) {
-                      final line = lineList[i];
+                      final line = lineList[i].cartLine;
                       return Row(
                         children: [
                           Expanded(
@@ -233,24 +251,36 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  line.product.name,
-                                  style: TextStyle(
+                                  line.name,
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 Text(
-                                  line.product.code,
+                                  line.code,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                   ),
                                 ),
+                                if (line.stockQty != null)
+                                  Text(
+                                    'Stock: ${line.stockQty!.toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
                           Expanded(
                             flex: 2,
-                            child: Text(formatPosMoney(line.lineTotal)),
+                            child: Text(formatPosMoney(line.subtotal)),
                           ),
                           Expanded(
                             flex: 2,
@@ -264,7 +294,7 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                                 ),
                                 Text(
                                   line.qty.toStringAsFixed(0),
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -289,8 +319,9 @@ class _ReturnWithoutBillDialogState extends State<_ReturnWithoutBillDialog> {
                             ),
                           ),
                           IconButton(
-                            onPressed: () =>
-                                setState(() => _lines.remove(line.key)),
+                            onPressed: () => setState(
+                              () => _lines.remove(lineList[i].key),
+                            ),
                             icon: const Icon(Icons.close, size: 18),
                           ),
                         ],

@@ -1,5 +1,6 @@
 // Component container
 export { default as ComponentContainer } from './ComponentContainer';
+export { default as PosStockRealtimeListener } from './PosStockRealtimeListener';
 export { default as CustomerSearchTable } from './CustomerSearchTable';
 
 // Navigation

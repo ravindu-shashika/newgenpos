@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/local_reverb_settings_provider.dart';
 import '../../../core/providers/pos_connectivity_providers.dart';
 import '../../../core/providers/pos_ui_settings_provider.dart';
+import '../../../core/realtime/pos_realtime_service.dart';
 import '../providers/pos_register_actions_provider.dart';
 import 'pending_sync_dialog.dart';
-import 'pos_brand_logo.dart';
+import 'pos_reverb_status_dialog.dart';
 import 'pos_register_header_bar.dart';
 import 'pos_sidebar.dart';
 import 'pos_top_header.dart';
@@ -20,7 +22,7 @@ class PosMainShell extends ConsumerStatefulWidget {
     required this.onDashboard,
     required this.onRegister,
     required this.onInventory,
-    required this.onPrintLastReceipt,
+    this.onPrintLastReceipt,
     required this.onCashRegisterDetails,
     required this.onStaff,
     required this.onHistory,
@@ -36,7 +38,7 @@ class PosMainShell extends ConsumerStatefulWidget {
   final VoidCallback onDashboard;
   final VoidCallback onRegister;
   final VoidCallback onInventory;
-  final VoidCallback onPrintLastReceipt;
+  final VoidCallback? onPrintLastReceipt;
   final VoidCallback onCashRegisterDetails;
   final VoidCallback onStaff;
   final VoidCallback onHistory;
@@ -105,58 +107,58 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
     final pendingAsync = ref.watch(pendingSyncCountProvider);
     final pendingSyncCount = pendingAsync.valueOrNull ?? 0;
     final syncingSales = ref.watch(salesSyncInProgressProvider);
+    final localSettings = ref.watch(localReverbSettingsProvider);
+    final reverbState = ref.watch(posRealtimeConnectionStateProvider);
+    final reverbConfig = ref.watch(posRealtimeConfigProvider);
+    final reverbDot = reverbStatusDotColor(
+      state: reverbState,
+      config: reverbConfig,
+      localEnabled: localSettings.enableLiveStockSync,
+    );
+    final reverbTooltip = reverbStatusTooltip(
+      state: reverbState,
+      config: reverbConfig,
+      localEnabled: localSettings.enableLiveStockSync,
+    );
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
           width: 68,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 10, bottom: 6),
-                child: PosBrandLogo(
-                  logoPath: sidebarLogoPath,
-                  size: 44,
-                  variant: PosBrandLogoVariant.sidebar,
-                ),
-              ),
-              Expanded(
-                child: PosSidebar(
-                  activeSection: widget.activeSection,
-                  onDashboard: widget.onDashboard,
-                  onRegister: widget.onRegister,
-                  onInventory: widget.onInventory,
-                  onPrintLastReceipt: widget.onPrintLastReceipt,
-                  onCashRegisterDetails: widget.onCashRegisterDetails,
-                  onStaff: widget.onStaff,
-                  onHistory: widget.onHistory,
-                  onSettings: widget.onSettings,
-                  onProfile: widget.onProfile,
-                  onLogout: widget.onLogout,
-                  onReturn: uiSettings.enableReturn
-                      ? () => _fireRegisterAction(
-                            ref,
-                            posReturnSaleTriggerProvider,
-                          )
-                      : null,
-                  onExchange: uiSettings.enableExchange
-                      ? () => _fireRegisterAction(
-                            ref,
-                            posExchangeSaleTriggerProvider,
-                          )
-                      : null,
-                  onPendingSync: () => showPendingSyncDialog(
-                    context: context,
-                    ref: ref,
-                  ),
-                  pendingSyncCount: pendingSyncCount,
-                  syncingSales: syncingSales,
-                  busy: widget.busy,
-                  syncing: widget.syncing,
-                ),
-              ),
-            ],
+          child: PosSidebar(
+            activeSection: widget.activeSection,
+            sidebarLogoPath: sidebarLogoPath,
+            onDashboard: widget.onDashboard,
+            onRegister: widget.onRegister,
+            onInventory: widget.onInventory,
+            onPrintLastReceipt: widget.onPrintLastReceipt,
+            onCashRegisterDetails: widget.onCashRegisterDetails,
+            onStaff: widget.onStaff,
+            onHistory: widget.onHistory,
+            onSettings: widget.onSettings,
+            onProfile: widget.onProfile,
+            onLogout: widget.onLogout,
+            onReturn: uiSettings.enableReturn
+                ? () => _fireRegisterAction(
+                      ref,
+                      posReturnSaleTriggerProvider,
+                    )
+                : null,
+            onPendingSync: () => showPendingSyncDialog(
+              context: context,
+              ref: ref,
+            ),
+            pendingSyncCount: pendingSyncCount,
+            onReverbStatus: () => showReverbStatusDialog(
+              context: context,
+              ref: ref,
+            ),
+            reverbStatusDotColor: reverbDot,
+            reverbTooltip: reverbTooltip,
+            syncingSales: syncingSales,
+            busy: widget.busy,
+            syncing: widget.syncing,
           ),
         ),
         Expanded(

@@ -194,6 +194,8 @@ class SyncService {
             maxAttempts: AppConfig.queueStatusPollAttempts,
             delay: AppConfig.queueStatusPollDelay,
           );
+        } else if (stillQueued.isNotEmpty && background) {
+          unawaited(_deferredBackgroundQueuePoll());
         }
         return SyncPendingResult(
           wasOnline: true,
@@ -269,6 +271,8 @@ class SyncService {
           maxAttempts: AppConfig.queueStatusPollAttempts,
           delay: AppConfig.queueStatusPollDelay,
         );
+      } else if (sawQueued && background) {
+        unawaited(_deferredBackgroundQueuePoll());
       }
 
       final remaining = await loadUnsyncedUuids();
@@ -384,6 +388,19 @@ class SyncService {
       } catch (e, stack) {
         AppLogger.error('Sync', 'Exchange sync batch failed', e, stack);
       }
+    }
+  }
+
+  Future<void> _deferredBackgroundQueuePoll() async {
+    await Future<void>.delayed(AppConfig.queueStatusPollDelay);
+    try {
+      await _pollServerSyncStatus(
+        maxAttempts: AppConfig.queueStatusPollAttempts,
+        delay: AppConfig.queueStatusPollDelay,
+      );
+      onSyncComplete?.call();
+    } catch (e, stack) {
+      AppLogger.error('Sync', 'Background queue poll failed', e, stack);
     }
   }
 
