@@ -202,6 +202,9 @@ export default function PurchaseForm() {
                 product_batch_id: isBatch ? (l.product_batch_id || null) : null,
                 batch_no: isBatch ? (l.batch_no || '') : '',
                 expired_date: isBatch ? formatDateForInput(l.expired_date) : '',
+                batch_locked: isBatch && Boolean(l.product_batch_id),
+                batch_options: [],
+                next_batch_no: '',
             };
         });
 
@@ -228,7 +231,9 @@ export default function PurchaseForm() {
                     pay_term_no: purchase.pay_term_no || '',
                     pay_term_period: purchase.pay_term_period || 'days',
                 });
-                setLines(mapEditLines(existing));
+                const editRows = mapEditLines(existing);
+                setLines(editRows);
+                hydrateBatchOptions(editRows).then(setLines);
             } else if (duplicateFrom) {
                 const res = await api.get(`purchases/duplicate/${duplicateFrom}`);
                 const { purchase, lines: existing, meta: m } = res.data;
@@ -252,7 +257,9 @@ export default function PurchaseForm() {
                         ? String(m.accounts.find((a) => a.is_default).id)
                         : (m.accounts?.[0]?.id ? String(m.accounts[0].id) : ''),
                 }));
-                setLines(mapEditLines(existing));
+                const dupRows = mapEditLines(existing);
+                setLines(dupRows);
+                hydrateBatchOptions(dupRows).then(setLines);
             } else {
                 const res = await api.get('purchases/create');
                 const m = res.data;
@@ -413,8 +420,41 @@ export default function PurchaseForm() {
         };
     };
 
+    const fetchBatchOptions = useCallback(async (productId) => {
+        try {
+            const params = new URLSearchParams({ product_id: String(productId) });
+            const res = await api.get(`purchases/product-batches?${params}`);
+            const data = res.data?.data ?? res.data;
+            const batches = Array.isArray(data?.batches) ? data.batches : [];
+            const nextBatchNo = data?.next_batch_no != null ? String(data.next_batch_no) : '';
+            return { batches, nextBatchNo };
+        } catch {
+            return { batches: [], nextBatchNo: '' };
+        }
+    }, []);
+
+    const hydrateBatchOptions = useCallback(async (rows) => {
+        const productIds = [...new Set(rows.filter((r) => r.is_batch).map((r) => r.product_id))];
+        if (!productIds.length) return rows;
+        const optionsByProduct = {};
+        await Promise.all(
+            productIds.map(async (productId) => {
+                optionsByProduct[productId] = await fetchBatchOptions(productId);
+            })
+        );
+        return rows.map((row) => {
+            if (!row.is_batch) return row;
+            const opts = optionsByProduct[row.product_id] || { batches: [], nextBatchNo: '' };
+            return {
+                ...row,
+                batch_options: opts.batches,
+                next_batch_no: opts.nextBatchNo,
+            };
+        });
+    }, [fetchBatchOptions]);
+
     const resolveBatchForLine = useCallback(
-        async (line) => {
+        async (line, { forceAuto = false } = {}) => {
             if (!line.is_batch) return line;
             try {
                 const params = new URLSearchParams({
@@ -424,11 +464,32 @@ export default function PurchaseForm() {
                 });
                 const res = await api.get(`purchases/suggest-batch?${params}`);
                 const data = res.data?.data ?? res.data;
+                const batchNo = data.batch_no || '';
+                // Keep a manually chosen existing batch unless cost/price force a new auto batch
+                if (
+                    !forceAuto
+                    && line.batch_locked
+                    && line.batch_no
+                    && !data.is_new_batch
+                    && String(line.batch_no) === String(batchNo)
+                ) {
+                    return {
+                        ...line,
+                        product_batch_id: data.product_batch_id || line.product_batch_id,
+                        is_new_batch: false,
+                        expired_date: line.expired_date || formatDateForInput(data.expired_date) || '',
+                    };
+                }
+                if (!forceAuto && line.batch_locked && line.product_batch_id && line.batch_no) {
+                    // Manual existing batch: keep number; cost/price already applied by selection
+                    return line;
+                }
                 return {
                     ...line,
-                    batch_no: data.batch_no || '',
+                    batch_no: batchNo,
                     product_batch_id: data.product_batch_id || null,
                     is_new_batch: Boolean(data.is_new_batch),
+                    batch_locked: false,
                     expired_date: line.expired_date || formatDateForInput(data.expired_date) || '',
                 };
             } catch {
@@ -436,6 +497,73 @@ export default function PurchaseForm() {
             }
         },
         []
+    );
+
+    const applyBatchSelection = useCallback(
+        async (lineIdKey, selectedBatchNo) => {
+            const line = lines.find((l) => l._id === lineIdKey);
+            if (!line?.is_batch) return;
+
+            const batchNo = String(selectedBatchNo || '').trim();
+            if (!batchNo || batchNo === '__auto__') {
+                let next = { ...line, batch_locked: false, product_batch_id: null };
+                next = await resolveBatchForLine(next, { forceAuto: true });
+                const { subtotal, tax } = calcLine(next);
+                setLines((prev) =>
+                    prev.map((l) => (l._id === lineIdKey ? { ...next, subtotal, tax } : l))
+                );
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    product_id: String(line.product_id),
+                    batch_no: batchNo,
+                });
+                const res = await api.get(`purchases/lookup-batch?${params}`);
+                const data = res.data?.data ?? res.data;
+                if (data?.found === false || data?.is_new_batch) {
+                    // Unknown batch number — treat as new auto batch label only
+                    let next = {
+                        ...line,
+                        batch_no: batchNo,
+                        product_batch_id: null,
+                        is_new_batch: true,
+                        batch_locked: true,
+                    };
+                    const { subtotal, tax } = calcLine(next);
+                    setLines((prev) =>
+                        prev.map((l) => (l._id === lineIdKey ? { ...next, subtotal, tax } : l))
+                    );
+                    return;
+                }
+
+                const cost = parseFloat(data.net_unit_cost);
+                const price = parseFloat(data.net_unit_price);
+                const margin = parseFloat(data.net_unit_margin);
+                let next = {
+                    ...line,
+                    batch_no: data.batch_no || batchNo,
+                    product_batch_id: data.product_batch_id || null,
+                    is_new_batch: false,
+                    batch_locked: true,
+                    expired_date: formatDateForInput(data.expired_date) || line.expired_date || '',
+                    net_unit_cost: Number.isFinite(cost) ? cost : line.net_unit_cost,
+                    net_unit_price: Number.isFinite(price) ? price : line.net_unit_price,
+                    net_unit_margin: Number.isFinite(margin) ? margin : line.net_unit_margin,
+                    net_unit_margin_type: data.net_unit_margin_type || line.net_unit_margin_type,
+                    base_unit_cost: Number.isFinite(cost) ? cost : line.base_unit_cost,
+                    unit_discount: 0,
+                    discount: 0,
+                };
+                const { subtotal, tax } = calcLine(next);
+                next = { ...next, subtotal, tax };
+                setLines((prev) => prev.map((l) => (l._id === lineIdKey ? next : l)));
+            } catch (err) {
+                showToast(err?.message || 'Failed to load batch.', 'error');
+            }
+        },
+        [lines, resolveBatchForLine, showToast]
     );
 
     const appendLine = async (product, details) => {
@@ -474,9 +602,12 @@ export default function PurchaseForm() {
             subtotal: details.cost,
         };
         const { subtotal, tax } = calcLine(line);
-        let nextLine = { ...line, tax, subtotal };
+        let nextLine = { ...line, tax, subtotal, batch_locked: false, batch_options: [] };
         if (details.isBatch) {
-            nextLine = await resolveBatchForLine(nextLine);
+            const { batches, nextBatchNo } = await fetchBatchOptions(product.id);
+            nextLine.batch_options = batches;
+            nextLine.next_batch_no = nextBatchNo;
+            nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
         }
         setLines((prev) => [...prev, nextLine]);
     };
@@ -804,7 +935,14 @@ export default function PurchaseForm() {
         nextLine = { ...nextLine, subtotal, tax };
 
         if (nextLine.is_batch) {
-            nextLine = await resolveBatchForLine(nextLine);
+            // Cost/price edited → auto-assign batch (increment or reuse matching cost+price)
+            nextLine = { ...nextLine, batch_locked: false };
+            nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
+            if (!nextLine.batch_options?.length) {
+                const { batches, nextBatchNo } = await fetchBatchOptions(nextLine.product_id);
+                nextLine.batch_options = batches;
+                nextLine.next_batch_no = nextBatchNo;
+            }
         }
 
         setLines((prev) => prev.map((l) => (l._id === lineId ? nextLine : l)));
@@ -1159,14 +1297,38 @@ export default function PurchaseForm() {
                                             {hasBatchLines && (
                                                 <td>
                                                     {l.is_batch ? (
-                                                        <input
-                                                            type="text"
-                                                            className="form-control form-control-sm bg-light"
-                                                            value={l.batch_no || ''}
-                                                            placeholder="Auto batch"
-                                                            readOnly
-                                                            title="Batch number is auto-assigned. It increments when unit cost or sale price changes."
-                                                        />
+                                                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', minWidth: 150 }}>
+                                                            <input
+                                                                type="text"
+                                                                className="form-control form-control-sm bg-light"
+                                                                value={l.batch_no || ''}
+                                                                placeholder="Auto"
+                                                                readOnly
+                                                                title="Batch number is set automatically, or by choosing an existing batch"
+                                                                style={{ width: 64, flexShrink: 0 }}
+                                                            />
+                                                            <select
+                                                                className="form-control form-control-sm"
+                                                                value={
+                                                                    l.batch_locked && l.product_batch_id
+                                                                        ? String(l.batch_no)
+                                                                        : '__auto__'
+                                                                }
+                                                                title="Auto-increment, or select an existing batch to load its cost and price"
+                                                                onChange={(e) => applyBatchSelection(l._id, e.target.value)}
+                                                                style={{ minWidth: 88 }}
+                                                            >
+                                                                <option value="__auto__">Auto</option>
+                                                                {(l.batch_options || []).map((b) => (
+                                                                    <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
+                                                                        {b.batch_no}
+                                                                        {b.net_unit_cost != null
+                                                                            ? ` (${Number(b.net_unit_cost).toFixed(2)})`
+                                                                            : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                     ) : (
                                                         <span className="text-muted">—</span>
                                                     )}

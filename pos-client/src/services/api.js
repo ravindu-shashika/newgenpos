@@ -126,6 +126,7 @@ async function axiosRequest(method, url, data, config = {}, base = defaultPath) 
       data,
       ...config,
       headers,
+      withCredentials: true,
     });
     handleForbidden(response);
     return response;

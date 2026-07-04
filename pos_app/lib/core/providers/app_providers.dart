@@ -203,6 +203,14 @@ final pendingSyncCountProvider = FutureProvider<int>((ref) async {
   return db.countPendingSales();
 });
 
+/// Count of held (draft) bills — live badge on sidebar.
+final holdBillsCountProvider = StreamProvider<int>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.localSales)..where((s) => s.saleStatus.equals(3)))
+      .watch()
+      .map((rows) => rows.length);
+});
+
 final pendingSalesForUiProvider = FutureProvider((ref) async {
   ref.watch(syncRevisionProvider);
   return ref.watch(localSaleRepositoryProvider).loadPendingSalesForUi();

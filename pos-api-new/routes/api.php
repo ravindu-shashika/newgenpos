@@ -204,6 +204,8 @@ Route::middleware($middleware)->name('api.')->group(function () {
         // Purchase static paths — register before `purchases/{purchase}` resource
         Route::get('purchases/lims_product_search', [PurchaseController::class, 'limsProductSearch']);
         Route::get('purchases/suggest-batch', [PurchaseController::class, 'suggestPurchaseBatch']);
+        Route::get('purchases/product-batches', [PurchaseController::class, 'listProductBatches']);
+        Route::get('purchases/lookup-batch', [PurchaseController::class, 'lookupPurchaseBatch']);
         Route::get('purchases/product-search', [PurchaseController::class, 'productSearch']);
         Route::get('purchases/products/{productId}/variants', [PurchaseController::class, 'productVariants']);
         Route::get('purchases/create', [PurchaseController::class, 'create']);

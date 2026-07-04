@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, auth, msg } from '../services';
+import { hasToken, restoreSessionToken } from '../services/tokenStorage';
 import {
   isMobile,
   browserName,
@@ -28,7 +29,14 @@ const Login = () => {
   const [branchList, setBranchList] = useState([]);
   const [currentBranch, setCurrentBranch] = useState({ id: '', code: '', name: '' });
 
- 
+  // Already signed in (e.g. reopen browser) → dashboard, not login form
+  useEffect(() => {
+    restoreSessionToken();
+    if (!hasToken()) return;
+    window.location.hash = '#/dashboard';
+    window.location.reload();
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const response = await auth.doUserLogin(credentials);
@@ -39,6 +47,7 @@ const Login = () => {
     if (apiStatus == 200 && body.token) {
       msg.success(body.message || 'Login successful');
       await auth.handleLoginSuccess(response);
+      window.location.hash = '#/dashboard';
       window.location.reload();
     } else if (apiStatus == 409 || apiStatus == 401 || apiStatus == 422) {
       msg.warning(body.message || 'Invalid username or password');

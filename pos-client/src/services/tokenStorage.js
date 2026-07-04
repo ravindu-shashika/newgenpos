@@ -1,7 +1,13 @@
 import CookieService from './cookie';
 
 const TOKEN_KEY = 'access_token';
-const COOKIE_OPTIONS = { path: '/' };
+/** Keep session after browser close (30 days). */
+const TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
+export const PERSISTENT_COOKIE_OPTIONS = {
+  path: '/',
+  maxAge: TOKEN_MAX_AGE,
+  sameSite: 'lax',
+};
 
 /** Read Sanctum Bearer token (cookie first, then localStorage). */
 export function getToken() {
@@ -20,7 +26,7 @@ export function getToken() {
 export function setToken(token) {
   if (!token) return;
   const value = String(token);
-  CookieService.set(TOKEN_KEY, value, COOKIE_OPTIONS);
+  CookieService.set(TOKEN_KEY, value, PERSISTENT_COOKIE_OPTIONS);
   try {
     localStorage.setItem(TOKEN_KEY, value);
   } catch {
@@ -30,7 +36,7 @@ export function setToken(token) {
 
 /** Remove token on logout. */
 export function clearToken() {
-  CookieService.remove(TOKEN_KEY, COOKIE_OPTIONS);
+  CookieService.remove(TOKEN_KEY, { path: '/' });
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {
@@ -38,16 +44,40 @@ export function clearToken() {
   }
 }
 
-/** Keep localStorage in sync when only cookie exists (e.g. after reload). */
-export function syncTokenFromCookie() {
+/**
+ * Restore session on app boot:
+ * - cookie present → sync to localStorage
+ * - cookie missing but localStorage has token → restore cookie (survives browser close)
+ */
+export function restoreSessionToken() {
   const fromCookie = CookieService.get(TOKEN_KEY);
-  if (!fromCookie) return null;
+  if (fromCookie) {
+    const value = String(fromCookie);
+    try {
+      localStorage.setItem(TOKEN_KEY, value);
+    } catch {
+      // ignore
+    }
+    return value;
+  }
+
   try {
-    localStorage.setItem(TOKEN_KEY, String(fromCookie));
+    const fromStorage = localStorage.getItem(TOKEN_KEY);
+    if (fromStorage) {
+      const value = String(fromStorage);
+      CookieService.set(TOKEN_KEY, value, PERSISTENT_COOKIE_OPTIONS);
+      return value;
+    }
   } catch {
     // ignore
   }
-  return String(fromCookie);
+
+  return null;
+}
+
+/** @deprecated use restoreSessionToken */
+export function syncTokenFromCookie() {
+  return restoreSessionToken();
 }
 
 export function hasToken() {
@@ -58,6 +88,8 @@ export default {
   getToken,
   setToken,
   clearToken,
+  restoreSessionToken,
   syncTokenFromCookie,
   hasToken,
+  PERSISTENT_COOKIE_OPTIONS,
 };

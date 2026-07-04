@@ -18,7 +18,15 @@ export {
 } from './routeRegistry';
 export { default as auth } from './auth';
 export { default as cookie } from './cookie';
-export { getToken, setToken, clearToken, hasToken } from './tokenStorage';
+export {
+  getToken,
+  setToken,
+  clearToken,
+  hasToken,
+  restoreSessionToken,
+  syncTokenFromCookie,
+  PERSISTENT_COOKIE_OPTIONS,
+} from './tokenStorage';
 export { getPosLegacyUrl, openPosLegacy, posLegacyBasePath } from './posLegacy';
 export { getPosAppUrl, openPosApp, isPosPathname } from './posApp';
 export { default as txt } from './txt';

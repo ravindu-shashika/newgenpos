@@ -312,6 +312,40 @@
   flex: 1;
   margin-top: 60px;
   min-height: calc(100vh - 60px);
+  align-items: flex-start;
+}
+
+/* Sidebar scrolls independently of the page content */
+.app-sidenav {
+  height: calc(100vh - 60px);
+  max-height: calc(100vh - 60px);
+  position: sticky;
+  top: 60px;
+  align-self: flex-start;
+  overflow: hidden;
+}
+
+.app-sidenav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.app-sidenav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-sidenav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.app-sidenav-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Sidebar: desktop always visible when open; mobile overlay */

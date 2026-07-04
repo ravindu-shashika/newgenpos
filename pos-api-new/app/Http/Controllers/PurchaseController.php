@@ -336,14 +336,19 @@ class PurchaseController extends Controller
                 }
                 $lims_product_data = Product::find($id);
                 $price = $lims_product_data->price;
-                //dealing with product batch
+                // Batch: use client batch when provided; otherwise auto-increment / match cost+price
                 if ($lims_product_data->is_batch) {
-                    $resolvedBatch = $this->resolvePurchaseBatchForLine(
-                        (int) $id,
-                        (float) $net_unit_cost[$i],
-                        (float) $net_unit_price[$i]
-                    );
-                    $batch_no[$i] = $resolvedBatch['batch_no'];
+                    $clientBatch = isset($batch_no[$i]) ? trim((string) $batch_no[$i]) : '';
+                    if ($clientBatch === '') {
+                        $resolvedBatch = $this->resolvePurchaseBatchForLine(
+                            (int) $id,
+                            (float) $net_unit_cost[$i],
+                            (float) $net_unit_price[$i]
+                        );
+                        $batch_no[$i] = $resolvedBatch['batch_no'];
+                    } else {
+                        $batch_no[$i] = $clientBatch;
+                    }
                 }
                 if (!empty($batch_no[$i])) {
                     $lineExpiredDate = !empty($expired_date[$i]) ? $expired_date[$i] : null;
@@ -1627,14 +1632,19 @@ class PurchaseController extends Controller
 
                 $lims_product_data = Product::find($pro_id);
                 $price = null;
-                //dealing with product barch
+                // Batch: use client batch when provided; otherwise auto-increment / match cost+price
                 if ($lims_product_data->is_batch) {
-                    $resolvedBatch = $this->resolvePurchaseBatchForLine(
-                        (int) $pro_id,
-                        (float) $net_unit_cost[$key],
-                        (float) $net_unit_price[$key]
-                    );
-                    $batch_no[$key] = $resolvedBatch['batch_no'];
+                    $clientBatch = isset($batch_no[$key]) ? trim((string) $batch_no[$key]) : '';
+                    if ($clientBatch === '') {
+                        $resolvedBatch = $this->resolvePurchaseBatchForLine(
+                            (int) $pro_id,
+                            (float) $net_unit_cost[$key],
+                            (float) $net_unit_price[$key]
+                        );
+                        $batch_no[$key] = $resolvedBatch['batch_no'];
+                    } else {
+                        $batch_no[$key] = $clientBatch;
+                    }
                 }
                 if($batch_no[$key]) {
                     $lineExpiredDate = !empty($expired_date[$key]) ? $expired_date[$key] : null;
@@ -2940,6 +2950,123 @@ class PurchaseController extends Controller
         );
 
         return $this->spaJson($request, $resolved);
+    }
+
+    /**
+     * Existing batches for a product (with last purchase cost/price) plus next auto batch number.
+     */
+    public function listProductBatches(Request $request)
+    {
+        if (!$this->userCanAccessPurchases('purchases-add') && !$this->userCanAccessPurchases('purchases-edit')) {
+            return $this->spaJson($request, ['message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+
+        $productId = (int) $request->input('product_id');
+        $product = Product::find($productId);
+        if (!$product) {
+            return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
+        }
+
+        $batches = ProductBatch::where('product_id', $productId)
+            ->orderByDesc('id')
+            ->get(['id', 'batch_no', 'expired_date', 'qty']);
+
+        $items = $batches->map(function (ProductBatch $batch) use ($product) {
+            $purchase = ProductPurchase::query()
+                ->where('product_batch_id', $batch->id)
+                ->orderByDesc('id')
+                ->first();
+
+            return [
+                'batch_no' => (string) $batch->batch_no,
+                'product_batch_id' => (int) $batch->id,
+                'is_new_batch' => false,
+                'expired_date' => $batch->expired_date
+                    ? date('Y-m-d', strtotime($batch->expired_date))
+                    : null,
+                'qty' => (float) $batch->qty,
+                'net_unit_cost' => $purchase
+                    ? (float) $purchase->net_unit_cost
+                    : (float) $product->cost,
+                'net_unit_price' => $purchase
+                    ? (float) $purchase->net_unit_price
+                    : (float) $product->price,
+                'net_unit_margin' => $purchase
+                    ? (float) $purchase->net_unit_margin
+                    : (float) ($product->profit_margin ?? 0),
+                'net_unit_margin_type' => $purchase
+                    ? ($purchase->net_unit_margin_type ?: 'percentage')
+                    : ($product->profit_margin_type ?: 'percentage'),
+            ];
+        })->values();
+
+        $nextBatchNo = $this->nextPurchaseBatchNumber($productId);
+
+        return $this->spaJson($request, [
+            'batches' => $items,
+            'next_batch_no' => $nextBatchNo,
+        ]);
+    }
+
+    /**
+     * Load cost/price for an existing batch number (manual batch selection on purchase).
+     */
+    public function lookupPurchaseBatch(Request $request)
+    {
+        if (!$this->userCanAccessPurchases('purchases-add') && !$this->userCanAccessPurchases('purchases-edit')) {
+            return $this->spaJson($request, ['message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+
+        $productId = (int) $request->input('product_id');
+        $batchNo = trim((string) $request->input('batch_no', ''));
+        $product = Product::find($productId);
+        if (!$product) {
+            return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
+        }
+        if ($batchNo === '') {
+            return $this->spaJson($request, ['message' => 'Batch number is required'], 422);
+        }
+
+        $batch = ProductBatch::where('product_id', $productId)
+            ->where('batch_no', $batchNo)
+            ->first();
+
+        if (!$batch) {
+            return $this->spaJson($request, [
+                'batch_no' => $batchNo,
+                'product_batch_id' => null,
+                'is_new_batch' => true,
+                'expired_date' => null,
+                'found' => false,
+            ]);
+        }
+
+        $purchase = ProductPurchase::query()
+            ->where('product_batch_id', $batch->id)
+            ->orderByDesc('id')
+            ->first();
+
+        return $this->spaJson($request, [
+            'batch_no' => (string) $batch->batch_no,
+            'product_batch_id' => (int) $batch->id,
+            'is_new_batch' => false,
+            'found' => true,
+            'expired_date' => $batch->expired_date
+                ? date('Y-m-d', strtotime($batch->expired_date))
+                : null,
+            'net_unit_cost' => $purchase
+                ? (float) $purchase->net_unit_cost
+                : (float) $product->cost,
+            'net_unit_price' => $purchase
+                ? (float) $purchase->net_unit_price
+                : (float) $product->price,
+            'net_unit_margin' => $purchase
+                ? (float) $purchase->net_unit_margin
+                : (float) ($product->profit_margin ?? 0),
+            'net_unit_margin_type' => $purchase
+                ? ($purchase->net_unit_margin_type ?: 'percentage')
+                : ($product->profit_margin_type ?: 'percentage'),
+        ]);
     }
 
     /**

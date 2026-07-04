@@ -328,6 +328,7 @@ class HomeController extends Controller
                 'version_upgrade' => $versionUpgradeData,
                 'restaurant_orders' => $restaurantOrders,
                 'product_image_base' => url('/images/product'),
+                // Placeholder filename only; SPA uses an inline fallback when this file is missing on disk.
                 'default_product_image' => 'zummXD2dvAtI.png',
             ]);
         }

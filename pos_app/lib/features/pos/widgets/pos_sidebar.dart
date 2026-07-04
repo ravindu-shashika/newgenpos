@@ -30,9 +30,8 @@ class PosSidebar extends StatelessWidget {
     this.onReturn,
     this.onPendingSync,
     this.pendingSyncCount = 0,
-    this.onReverbStatus,
-    this.reverbStatusDotColor,
-    this.reverbTooltip = 'Live stock sync (Reverb)',
+    this.onHoldBills,
+    this.holdBillsCount = 0,
     this.syncingSales = false,
     this.busy = false,
     this.syncing = false,
@@ -53,9 +52,8 @@ class PosSidebar extends StatelessWidget {
   final VoidCallback? onReturn;
   final VoidCallback? onPendingSync;
   final int pendingSyncCount;
-  final VoidCallback? onReverbStatus;
-  final Color? reverbStatusDotColor;
-  final String reverbTooltip;
+  final VoidCallback? onHoldBills;
+  final int holdBillsCount;
   final bool syncingSales;
   final bool busy;
   final bool syncing;
@@ -135,10 +133,12 @@ class PosSidebar extends StatelessWidget {
                       enabled: _enabled && !syncingSales,
                     ),
                     _NavIcon(
-                      icon: Icons.podcasts_outlined,
-                      tooltip: reverbTooltip,
-                      statusDotColor: reverbStatusDotColor,
-                      onTap: _enabled ? onReverbStatus : null,
+                      icon: Icons.drafts_outlined,
+                      tooltip: holdBillsCount > 0
+                          ? 'Hold bills ($holdBillsCount)'
+                          : 'Hold bills',
+                      badgeCount: holdBillsCount,
+                      onTap: _enabled ? onHoldBills : null,
                       enabled: _enabled,
                     ),
                     if (onReturn != null)

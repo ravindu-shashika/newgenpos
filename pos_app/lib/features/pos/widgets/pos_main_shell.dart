@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_providers.dart';
-import '../../../core/providers/local_reverb_settings_provider.dart';
 import '../../../core/providers/pos_connectivity_providers.dart';
 import '../../../core/providers/pos_ui_settings_provider.dart';
-import '../../../core/realtime/pos_realtime_service.dart';
 import '../providers/pos_register_actions_provider.dart';
+import 'hold_bills_dialog.dart';
 import 'pending_sync_dialog.dart';
-import 'pos_reverb_status_dialog.dart';
 import 'pos_register_header_bar.dart';
 import 'pos_sidebar.dart';
 import 'pos_top_header.dart';
@@ -107,19 +105,8 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
     final pendingAsync = ref.watch(pendingSyncCountProvider);
     final pendingSyncCount = pendingAsync.valueOrNull ?? 0;
     final syncingSales = ref.watch(salesSyncInProgressProvider);
-    final localSettings = ref.watch(localReverbSettingsProvider);
-    final reverbState = ref.watch(posRealtimeConnectionStateProvider);
-    final reverbConfig = ref.watch(posRealtimeConfigProvider);
-    final reverbDot = reverbStatusDotColor(
-      state: reverbState,
-      config: reverbConfig,
-      localEnabled: localSettings.enableLiveStockSync,
-    );
-    final reverbTooltip = reverbStatusTooltip(
-      state: reverbState,
-      config: reverbConfig,
-      localEnabled: localSettings.enableLiveStockSync,
-    );
+    final holdBillsCount =
+        ref.watch(holdBillsCountProvider).valueOrNull ?? 0;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,12 +137,16 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
               ref: ref,
             ),
             pendingSyncCount: pendingSyncCount,
-            onReverbStatus: () => showReverbStatusDialog(
+            holdBillsCount: holdBillsCount,
+            onHoldBills: () => showHoldBillsDialog(
               context: context,
               ref: ref,
+              onBeforeLoad: () {
+                if (widget.activeSection != PosNavSection.register) {
+                  widget.onRegister();
+                }
+              },
             ),
-            reverbStatusDotColor: reverbDot,
-            reverbTooltip: reverbTooltip,
             syncingSales: syncingSales,
             busy: widget.busy,
             syncing: widget.syncing,

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { NavBar, SideNav, ComponentContainer, PosStockRealtimeListener } from './components';
 import { Login } from './auth';
-import { HashRouter, useLocation, Routes, Route } from 'react-router-dom';
+import { HashRouter, useLocation, useNavigate, Routes, Route } from 'react-router-dom';
 import PosPage from './views/backend/pos/PosPage';
 import {
   flattenMenuTreeToRoutes,
@@ -11,7 +11,7 @@ import {
   cookie,
 } from './services';
 import { isPosPathname } from './services/posApp';
-import { hasToken, syncTokenFromCookie } from './services/tokenStorage';
+import { hasToken, restoreSessionToken, PERSISTENT_COOKIE_OPTIONS } from './services/tokenStorage';
 import authStore from './stores/authStore';
 import roleStore from './stores/roleStore';
 import generalSettingStore from './stores/generalSettingStore';
@@ -78,12 +78,22 @@ function AppContent({
   componentName,
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const isPos = isPosPathname(location.pathname);
+  const path = location.pathname || '/';
 
   useEffect(() => {
     document.body.classList.toggle('pos-standalone-mode', isPos);
     return () => document.body.classList.remove('pos-standalone-mode');
   }, [isPos]);
+
+  // Reopen / empty hash → dashboard (not login, not blank page)
+  useEffect(() => {
+    if (isPos) return;
+    if (path === '/' || path === '' || path === '/home' || path === '/login') {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [path, isPos, navigate]);
 
   if (isPos) {
     return <PosStandaloneRoutes />;
@@ -107,6 +117,8 @@ function App() {
   const permissions = useAppSelector(selectPermissions);
   const user = useAppSelector(selectUser);
   const authLoaded = useAppSelector(selectAuthLoaded);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [navCollapse, setNavCollapse] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 992
@@ -115,7 +127,7 @@ function App() {
   const [selectedComponent, setSelectedComponent] = useState('');
 
   const buildMenu = useCallback(async (perms, authUser) => {
-    if (!hasToken() && !cookie.get('access_token')) return;
+    if (!hasToken()) return;
     try {
       const [menus] = await Promise.all([
         roleStore.fetchMenuByRole(),
@@ -144,19 +156,37 @@ function App() {
   }, []);
 
   useEffect(() => {
-    syncTokenFromCookie();
-    if (!hasToken() && !cookie.get('access_token')) return undefined;
+    const token = restoreSessionToken();
+    const authed = Boolean(token || hasToken());
+    setIsAuthenticated(authed);
+    setSessionReady(true);
+    if (!authed) return undefined;
 
-    authStore.fetchUser();
+    authStore.fetchUser().then((result) => {
+      // Token may have been cleared by a 401 during fetchUser
+      if (!hasToken()) {
+        setIsAuthenticated(false);
+        return;
+      }
+      if (result?.user) {
+        // Refresh role cookies so menu build works after browser reopen
+        const u = result.user;
+        if (u.id != null) cookie.set('user_id', u.id, PERSISTENT_COOKIE_OPTIONS);
+        if (u.name) cookie.set('user_name', u.name, PERSISTENT_COOKIE_OPTIONS);
+        const roleId = u.role_id ?? u.role?.id;
+        if (roleId != null) cookie.set('role_id', roleId, PERSISTENT_COOKIE_OPTIONS);
+        if (u.role?.name) cookie.set('role_name', u.role.name, PERSISTENT_COOKIE_OPTIONS);
+      }
+    });
     return undefined;
   }, []);
 
   useEffect(() => {
-    if (!authLoaded) return;
+    if (!authLoaded || !isAuthenticated) return;
     const hash = typeof window !== 'undefined' ? window.location.hash.replace('#', '') : '';
     if (hash === '/pos' || hash.startsWith('/pos/')) return;
     buildMenu(permissions, user);
-  }, [authLoaded, permissions, user, buildMenu]);
+  }, [authLoaded, permissions, user, buildMenu, isAuthenticated]);
 
   const collapseSideBar = () => {
     setNavCollapse(!navCollapse);
@@ -166,10 +196,18 @@ function App() {
     setSelectedComponent(e);
   };
 
+  if (!sessionReady) {
+    return (
+      <div className="app-root">
+        <div className="p-5 text-center text-muted">Loading…</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root">
       <HashRouter>
-        {hasToken() || cookie.get('access_token') ? (
+        {isAuthenticated ? (
           <AppContent
             menuRoutes={menuRoutes}
             menuTree={menuTree}

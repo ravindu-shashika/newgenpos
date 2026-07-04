@@ -78,11 +78,14 @@ class _ReceiptMetrics {
 }
 
 class ReceiptPrintService {
+  /// Prints a receipt. When [silent] is true (auto-print after sale), uses
+  /// direct print only and never opens the system print dialog.
   static Future<void> printReceipt(
     LocalReceipt receipt, {
     required LocalPrintSettings printSettings,
     String? jobName,
     String? cashierName,
+    bool silent = false,
   }) async {
     final pageFormat = _ReceiptMetrics.pageFormatFor(printSettings);
     final job = jobName ?? 'receipt-${receipt.referenceNo}';
@@ -97,7 +100,8 @@ class ReceiptPrintService {
           cashierName: cashierName,
         );
 
-    if (printSettings.directPrint) {
+    final preferDirect = silent || printSettings.directPrint;
+    if (preferDirect) {
       final printer = await _resolvePrinter(printSettings);
       if (printer != null) {
         final ok = await Printing.directPrintPdf(
@@ -107,6 +111,10 @@ class ReceiptPrintService {
           format: pageFormat,
         );
         if (ok == true) return;
+      }
+      if (silent) {
+        // Auto-print after sale: never fall back to the print dialog.
+        return;
       }
     }
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +12,7 @@ import '../../core/branding/pos_branding.dart';
 import '../../core/theme/pos_theme.dart';
 import '../pos/models/pos_settings.dart';
 import '../pos/pos_app_shell.dart';
+import '../pos/pos_checkout_defaults.dart';
 import '../pos/widgets/pos_professional_dialog.dart';
 import '../pos/widgets/show_pos_dialog.dart';
 import '../../core/sync/download_models.dart';
@@ -147,25 +147,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } catch (_) {}
       settings ??= await ref.read(posSettingsRepositoryProvider).load();
       final syncMeta = await db.getSyncMeta();
-      final billerId =
-          user.billerId ?? settings?.billerId ?? syncMeta?.defaultBillerId;
+      final customers = await db.select(db.customers).get();
+      final billers = await db.select(db.billers).get();
+      final warehouses = await db.select(db.warehouses).get();
+      final ui = ref.read(posUiSettingsProvider);
+      final parties = resolveCheckoutPartyIds(
+        ui: ui,
+        settings: settings,
+        syncMeta: syncMeta,
+        sessionCustomerId: null,
+        sessionBillerId: user.billerId,
+        sessionWarehouseId: warehouseId,
+        customers: customers,
+        billers: billers,
+        warehouses: warehouses,
+        includeSessionFallback: true,
+      );
 
       await session.saveLocalLogin(
         userId: user.id,
         userName: user.name,
-        warehouseId: warehouseId,
-        billerId: billerId,
+        warehouseId: parties.warehouseId ?? warehouseId,
+        billerId: parties.billerId,
       );
-
-      final firstCustomer = await (db.select(db.customers)
-            ..orderBy([(c) => OrderingTerm.asc(c.id)])
-            ..limit(1))
-          .getSingleOrNull();
-      final customerId = settings?.customerId ??
-          syncMeta?.defaultCustomerId ??
-          firstCustomer?.id;
-      if (customerId != null) {
-        await session.setCustomerId(customerId);
+      if (parties.customerId != null) {
+        await session.setCustomerId(parties.customerId!);
       }
 
       if (!mounted) return;

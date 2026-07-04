@@ -40,9 +40,9 @@ class PosSettings {
     }
 
     return PosSettings(
-      customerId: _intOrNull(json['customer_id']),
-      billerId: _intOrNull(json['biller_id']),
-      warehouseId: _intOrNull(json['warehouse_id']),
+      customerId: _positiveId(json['customer_id'] ?? json['default_customer_id']),
+      billerId: _positiveId(json['biller_id'] ?? json['default_biller_id']),
+      warehouseId: _positiveId(json['warehouse_id'] ?? json['default_warehouse_id']),
       productNumber: _int(json['product_number'], fallback: 15),
       keyboardActive: _bool(json['keyboard_active'] ?? json['keybord_active']),
       isTable: _bool(json['is_table']),
@@ -73,7 +73,16 @@ class PosSettings {
   static int? _intOrNull(dynamic v) {
     if (v == null) return null;
     if (v is int) return v;
-    return int.tryParse(v.toString());
+    if (v is num) return v.toInt();
+    final text = v.toString().trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text);
+  }
+
+  static int? _positiveId(dynamic v) {
+    final id = _intOrNull(v);
+    if (id == null || id <= 0) return null;
+    return id;
   }
 
   static int _int(dynamic v, {required int fallback}) {

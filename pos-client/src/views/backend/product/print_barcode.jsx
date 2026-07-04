@@ -8,7 +8,6 @@ import {
     TextInput,
     NumberInput,
     SelectInput,
-    CheckboxInput,
     useToast
 } from '../../../components/ui';
 import { api } from '../../../services';
@@ -73,9 +72,7 @@ export default function BackendProductPrintBarcode() {
 
     useEffect(() => {
         const setting = barcodeSettings.find((s) => String(s.id) === String(selectedSettingId));
-        if (setting?.print_options) {
-            setPrintOptions(normalizeBarcodePrintOptions(setting.print_options));
-        }
+        setPrintOptions(normalizeBarcodePrintOptions(setting?.print_options));
     }, [selectedSettingId, barcodeSettings]);
 
     const fetchInitialData = async () => {
@@ -262,7 +259,7 @@ export default function BackendProductPrintBarcode() {
 
             <FormSection>
                 <p className="text-muted mb-4" style={{ fontSize: '0.85rem' }}>
-                    Select a saved barcode template for paper size and layout. Label content options below can be adjusted per print run.
+                    Select a saved barcode template for paper size, layout, and label content (name, price, codes, and so on). Edit those options under Manage templates.
                 </p>
 
                 <div className="mb-4">
@@ -360,130 +357,6 @@ export default function BackendProductPrintBarcode() {
 
                 <hr className="my-4" />
 
-                <h6 className="ui-section-divider mb-4">Information on Label *</h6>
-                <FormRow cols={3}>
-                    <FormField label="Product Name">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.name}
-                                onChange={(e) => setPrintOptions({ ...printOptions, name: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.name_size}
-                                onChange={(e) => setPrintOptions({ ...printOptions, name_size: parseInt(e.target.value, 10) || 15 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={!printOptions.name}
-                            />
-                        </div>
-                    </FormField>
-                    <FormField label="Price">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.price}
-                                onChange={(e) => setPrintOptions({ ...printOptions, price: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.price_size}
-                                onChange={(e) => setPrintOptions({ ...printOptions, price_size: parseInt(e.target.value, 10) || 15 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={!printOptions.price}
-                            />
-                        </div>
-                    </FormField>
-                    <FormField label="Promotional Price">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.promo_price}
-                                onChange={(e) => setPrintOptions({ ...printOptions, promo_price: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.promo_price_size}
-                                onChange={(e) => setPrintOptions({ ...printOptions, promo_price_size: parseInt(e.target.value, 10) || 15 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={!printOptions.promo_price}
-                            />
-                        </div>
-                    </FormField>
-                </FormRow>
-
-                <FormRow cols={3} className="mt-3">
-                    <FormField label="Business Name">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.business_name}
-                                onChange={(e) => setPrintOptions({ ...printOptions, business_name: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.business_name_size}
-                                onChange={(e) => setPrintOptions({ ...printOptions, business_name_size: parseInt(e.target.value, 10) || 15 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={!printOptions.business_name}
-                            />
-                        </div>
-                    </FormField>
-                    <FormField label="Brand">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.brand_name}
-                                onChange={(e) => setPrintOptions({ ...printOptions, brand_name: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.brand_name_size}
-                                onChange={(e) => setPrintOptions({ ...printOptions, brand_name_size: parseInt(e.target.value, 10) || 15 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={!printOptions.brand_name}
-                            />
-                        </div>
-                    </FormField>
-                </FormRow>
-
-                <FormRow cols={3} className="mt-3">
-                    <FormField label="Product Code">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.product_code !== false}
-                                onChange={(e) => setPrintOptions({ ...printOptions, product_code: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.product_code_size ?? 12}
-                                onChange={(e) => setPrintOptions({ ...printOptions, product_code_size: parseInt(e.target.value, 10) || 12 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={printOptions.product_code === false}
-                            />
-                        </div>
-                    </FormField>
-                    <FormField label="Alt Code">
-                        <div className="d-flex align-items-center gap-2">
-                            <CheckboxInput
-                                checked={printOptions.alt_code !== false}
-                                onChange={(e) => setPrintOptions({ ...printOptions, alt_code: e.target.checked })}
-                            />
-                            <TextInput
-                                type="number"
-                                value={printOptions.alt_code_size ?? 12}
-                                onChange={(e) => setPrintOptions({ ...printOptions, alt_code_size: parseInt(e.target.value, 10) || 12 })}
-                                placeholder="Size"
-                                style={{ width: '80px' }}
-                                disabled={printOptions.alt_code === false}
-                            />
-                        </div>
-                    </FormField>
-                </FormRow>
-
-                <hr className="my-4" />
-
                 <h6 className="ui-section-divider mb-4">Barcode template *</h6>
                 <FormRow cols={2}>
                     <FormField label="Label template">
@@ -519,6 +392,23 @@ export default function BackendProductPrintBarcode() {
                                         {selectedSetting.paper_width}&quot; × {selectedSetting.paper_height}&quot;
                                     </>
                                 )}
+                                {(() => {
+                                    const fields = [
+                                        printOptions.business_name && 'Business name',
+                                        printOptions.name && 'Product name',
+                                        printOptions.brand_name && 'Brand',
+                                        printOptions.product_code !== false && 'Product code',
+                                        printOptions.alt_code !== false && 'Alt code',
+                                        printOptions.price && 'Price',
+                                        printOptions.promo_price && 'Promo price',
+                                    ].filter(Boolean);
+                                    return fields.length > 0 ? (
+                                        <>
+                                            <br />
+                                            Label fields: {fields.join(', ')}
+                                        </>
+                                    ) : null;
+                                })()}
                             </p>
                         )}
                     </FormField>

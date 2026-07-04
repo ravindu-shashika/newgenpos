@@ -34,6 +34,12 @@ class PosSettingsRepository {
   Future<void> saveDeviceSettings(PosDeviceSettings settings) async {
     final blob = <String, dynamic>{
       'pos_setting': settings.pos.toJson(),
+      if (settings.pos.customerId != null)
+        'default_customer_id': settings.pos.customerId,
+      if (settings.pos.billerId != null)
+        'default_biller_id': settings.pos.billerId,
+      if (settings.pos.warehouseId != null)
+        'default_warehouse_id': settings.pos.warehouseId,
       if (settings.invoice != null) 'invoice_setting': settings.invoice!.toJson(),
       if (settings.siteTitle != null && settings.siteTitle!.isNotEmpty)
         'general_setting': {'site_title': settings.siteTitle},
@@ -45,7 +51,14 @@ class PosSettingsRepository {
       defaultCustomerId: settings.pos.customerId,
       defaultBillerId: settings.pos.billerId,
     );
-    if (updated > 0) return;
+    if (updated > 0) {
+      AppLogger.info(
+        'PosSettings',
+        'Cached defaults',
+        'customer=${settings.pos.customerId} biller=${settings.pos.billerId}',
+      );
+      return;
+    }
 
     final session = await _db.getDeviceSession();
     final existing = await _db.getSyncMeta();
@@ -100,11 +113,13 @@ class PosSettingsRepository {
       posMap.addAll(Map<String, dynamic>.from(pos));
     }
 
+    // Top-level bootstrap defaults win when present (admin POS settings).
     void merge(String bootstrapKey, String settingKey) {
       final value = data[bootstrapKey];
-      if (value != null) {
-        posMap[settingKey] = value;
-      }
+      if (value == null) return;
+      final text = value.toString().trim();
+      if (text.isEmpty || text == '0') return;
+      posMap[settingKey] = value;
     }
 
     merge('default_customer_id', 'customer_id');

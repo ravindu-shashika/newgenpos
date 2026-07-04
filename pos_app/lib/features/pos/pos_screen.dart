@@ -156,9 +156,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
       } else {
         settings = await ref.read(posSettingsProvider.future);
       }
-      await _applyPosSettings(settings, persistSession: false);
+      // Apply admin/server defaults (and local UI overrides) to register + session.
+      await _applyPosSettings(settings, persistSession: true);
       await _ensureCashRegisterOpen(settings);
-    } catch (_) {}
+    } catch (_) {
+      try {
+        final settings = await ref.read(posSettingsProvider.future);
+        await _applyPosSettings(settings, persistSession: true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _ensureCashRegisterOpen(PosSettings? settings) async {
@@ -1484,6 +1490,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                 receipt,
                 printSettings: printSettings,
                 cashierName: cashierName,
+                silent: true,
               );
             }
           } catch (_) {}
@@ -1495,7 +1502,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
           refId: clientUuid,
           changeDue: changeDue,
           cashReceived: changeDue > 0.009 ? tendered : null,
-          onPrintReceipt: ui.enablePrint ? () => _printLastReceipt() : null,
+          // Silent/auto-print already sent the receipt — only show New bill.
+          onPrintReceipt: (ui.enablePrint && !autoPrint)
+              ? () => _printLastReceipt()
+              : null,
         );
       }
 
@@ -2100,7 +2110,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       context: context,
       builder: (ctx) => PosProfessionalDialogShell(
         title: 'Recent transactions',
-        subtitle: 'Drafts and completed sales at this terminal',
+        subtitle: 'Tap a draft to load it into the cart (cart must be empty)',
         icon: Icons.receipt_long_outlined,
         maxWidth: 560,
         maxBodyHeight: 420,
@@ -2118,7 +2128,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                 unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 indicatorColor: context.posBrand.primary,
                 tabs: const [
-                  Tab(text: 'Drafts'),
+                  Tab(text: 'Drafts / Hold'),
                   Tab(text: 'Sales'),
                 ],
               ),
@@ -2126,7 +2136,14 @@ class _PosScreenState extends ConsumerState<PosScreen>
               Expanded(
                 child: TabBarView(
                   children: [
-                    _recentList(drafts, empty: 'No drafts'),
+                    _recentList(
+                      drafts,
+                      empty: 'No held bills',
+                      onDraftTap: (sale) {
+                        Navigator.pop(ctx);
+                        unawaited(_resumeHeldSale(sale));
+                      },
+                    ),
                     _recentList(completed, empty: 'No sales yet'),
                   ],
                 ),
@@ -2136,6 +2153,95 @@ class _PosScreenState extends ConsumerState<PosScreen>
         ),
       ),
     );
+  }
+
+  /// Restore a held (draft) bill into the cart. Cart must be empty.
+  Future<void> _resumeHeldSale(LocalSale sale) async {
+    final cartBusy = _checkout.lines.isNotEmpty ||
+        _checkout.returnLines.isNotEmpty ||
+        _checkout.hasReturnSession;
+    if (cartBusy) {
+      await showPosInfoDialog(
+        context: context,
+        title: 'Cart is not empty',
+        message:
+            'Cannot load hold bill until the cart is empty. Clear or complete the current sale first.',
+        icon: Icons.shopping_cart_outlined,
+      );
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final held = await ref
+          .read(localSaleRepositoryProvider)
+          .loadHeldSale(sale.clientUuid);
+      if (held == null || held.lines.isEmpty) {
+        if (mounted) {
+          _showSnack('Could not load hold bill', error: true);
+        }
+        return;
+      }
+
+      await ref
+          .read(localSaleRepositoryProvider)
+          .deleteHeldSale(held.clientUuid);
+
+      final session = ref.read(sessionServiceProvider);
+      if (held.customerId > 0) {
+        await session.setCustomerId(held.customerId);
+      }
+      if (held.billerId != null && held.billerId! > 0) {
+        await session.setBillerId(held.billerId!);
+      }
+
+      _setCheckout(
+        PosCheckoutState(
+          lines: held.lines
+              .map(
+                (l) => CartLine(
+                  productId: l.productId,
+                  variantId: l.variantId,
+                  productBatchId: l.productBatchId,
+                  batchNo: l.batchNo,
+                  code: l.code,
+                  name: l.name,
+                  qty: l.qty,
+                  netUnitPrice: l.netUnitPrice,
+                  discount: l.discount,
+                  taxRate: l.taxRate,
+                  taxMethod: l.taxMethod,
+                  saleUnit: l.saleUnit,
+                  stockQty: l.stockQty,
+                ),
+              )
+              .toList(),
+          customerId: held.customerId,
+          billerId: held.billerId,
+          warehouseId: held.warehouseId,
+          orderTaxRate: held.orderTaxRate,
+          orderDiscountValue: held.orderDiscount,
+          shippingCost: held.shippingCost,
+          couponDiscount: held.couponDiscount,
+          saleNote: held.saleNote,
+          staffNote: held.staffNote,
+          draftClientUuid: held.clientUuid,
+          saleDate: DateTime.now(),
+        ),
+      );
+
+      if (mounted) {
+        setState(() {});
+        final label = formatSaleReferenceDisplay(
+          held.referenceNo ?? held.clientUuid,
+        );
+        _showSnack('Hold bill $label loaded to cart', success: true);
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Failed to load hold bill: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _clearCart() async {
@@ -2151,13 +2257,18 @@ class _PosScreenState extends ConsumerState<PosScreen>
     if (ok == true) await _resetCheckoutForNewSale();
   }
 
-  Widget _recentList(List<LocalSale> items, {required String empty}) {
+  Widget _recentList(
+    List<LocalSale> items, {
+    required String empty,
+    void Function(LocalSale sale)? onDraftTap,
+  }) {
     if (items.isEmpty) return Center(child: Text(empty));
     return ListView.builder(
       itemCount: items.length,
       itemBuilder: (_, i) {
         final s = items[i];
-        final ref = formatSaleReferenceDisplay(
+        final isDraft = s.saleStatus == 3;
+        final refNo = formatSaleReferenceDisplay(
           resolveLocalSaleReference(
             clientUuid: s.clientUuid,
             referenceNo: s.referenceNo,
@@ -2165,10 +2276,14 @@ class _PosScreenState extends ConsumerState<PosScreen>
           ),
         );
         return ListTile(
-          title: Text(ref.isNotEmpty ? ref : s.clientUuid),
-          subtitle:
-              Text('${s.syncStatus} · ${s.saleStatus == 3 ? 'draft' : 'sale'}'),
+          title: Text(refNo.isNotEmpty ? refNo : s.clientUuid),
+          subtitle: Text(
+            isDraft
+                ? 'Hold bill · tap to load'
+                : '${s.syncStatus} · sale',
+          ),
           trailing: Text(formatPosMoney(s.grandTotal)),
+          onTap: isDraft && onDraftTap != null ? () => onDraftTap(s) : null,
         );
       },
     );

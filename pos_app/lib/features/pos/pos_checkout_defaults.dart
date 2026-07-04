@@ -8,6 +8,8 @@ typedef CheckoutPartyIds = ({
   int? warehouseId,
 });
 
+int? _positiveId(int? id) => (id != null && id > 0) ? id : null;
+
 /// Resolves register customer / biller / warehouse for a new sale.
 ///
 /// Priority: local UI default → server POS settings → sync meta → optional
@@ -24,24 +26,25 @@ CheckoutPartyIds resolveCheckoutPartyIds({
   required List<Warehouse> warehouses,
   bool includeSessionFallback = true,
 }) {
-  int? customerId = ui.defaultCustomerId ??
-      settings?.customerId ??
-      syncMeta?.defaultCustomerId;
+  int? customerId = _positiveId(ui.defaultCustomerId) ??
+      _positiveId(settings?.customerId) ??
+      _positiveId(syncMeta?.defaultCustomerId);
   if (includeSessionFallback) {
-    customerId ??= sessionCustomerId;
+    customerId ??= _positiveId(sessionCustomerId);
   }
 
-  int? billerId = ui.defaultBillerId ??
-      settings?.billerId ??
-      syncMeta?.defaultBillerId;
+  int? billerId = _positiveId(ui.defaultBillerId) ??
+      _positiveId(settings?.billerId) ??
+      _positiveId(syncMeta?.defaultBillerId);
   if (includeSessionFallback) {
-    billerId ??= sessionBillerId;
+    billerId ??= _positiveId(sessionBillerId);
   }
 
-  int? warehouseId = sessionWarehouseId ??
-      settings?.warehouseId ??
-      syncMeta?.warehouseId;
+  int? warehouseId = _positiveId(sessionWarehouseId) ??
+      _positiveId(settings?.warehouseId) ??
+      _positiveId(syncMeta?.warehouseId);
 
+  // Prefer catalog rows that match resolved ids; otherwise first active row.
   customerId ??= customers.isNotEmpty ? customers.first.id : null;
   billerId ??= billers.isNotEmpty ? billers.first.id : null;
   warehouseId ??= warehouses.isNotEmpty ? warehouses.first.id : null;

@@ -211,10 +211,19 @@ class SaleDashboardController extends Controller
 
     protected function posSettingDefaults(?PosSetting $posSetting, $user): array
     {
+        $customerId = $posSetting?->customer_id ? (int) $posSetting->customer_id : null;
+        // Prefer POS setting defaults; fall back to the signed-in user's assignments.
+        $billerId = $posSetting?->biller_id
+            ? (int) $posSetting->biller_id
+            : ($user?->biller_id ? (int) $user->biller_id : null);
+        $warehouseId = $posSetting?->warehouse_id
+            ? (int) $posSetting->warehouse_id
+            : ($user?->warehouse_id ? (int) $user->warehouse_id : null);
+
         return [
-            'default_customer_id' => $posSetting?->customer_id,
-            'default_biller_id' => $user?->biller_id ?: $posSetting?->biller_id,
-            'default_warehouse_id' => $user?->warehouse_id ?: $posSetting?->warehouse_id,
+            'default_customer_id' => $customerId,
+            'default_biller_id' => $billerId,
+            'default_warehouse_id' => $warehouseId,
         ];
     }
 

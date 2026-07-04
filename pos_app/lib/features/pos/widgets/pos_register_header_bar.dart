@@ -90,6 +90,7 @@ class _RegisterHeaderRow extends StatelessWidget {
     for (final c in customers) {
       if (c.id == checkout.customerId) return c.name;
     }
+    if (checkout.customerId != null) return 'Customer #${checkout.customerId}';
     return 'Select';
   }
 

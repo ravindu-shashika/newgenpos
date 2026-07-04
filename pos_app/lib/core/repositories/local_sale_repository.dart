@@ -271,6 +271,121 @@ class LocalSaleRepository {
     };
   }
 
+  /// Load a held (draft) sale for restore into the cart. Does not delete it.
+  Future<HeldSaleCart?> loadHeldSale(String clientUuid) async {
+    final sale = await (_db.select(_db.localSales)
+          ..where(
+            (s) =>
+                s.clientUuid.equals(clientUuid) & s.saleStatus.equals(3),
+          ))
+        .getSingleOrNull();
+    if (sale == null) return null;
+
+    Map<String, dynamic>? payload;
+    if (sale.payloadJson != null && sale.payloadJson!.isNotEmpty) {
+      try {
+        payload = Map<String, dynamic>.from(
+          jsonDecode(sale.payloadJson!) as Map,
+        );
+      } catch (_) {}
+    }
+
+    final lines = <CartLine>[];
+    final payloadLines = payload?['lines'] ?? payload?['products'];
+    if (payloadLines is List && payloadLines.isNotEmpty) {
+      for (final raw in payloadLines) {
+        if (raw is! Map) continue;
+        final map = Map<String, dynamic>.from(raw);
+        final productId = (map['product_id'] as num?)?.toInt();
+        if (productId == null) continue;
+        final qty = (map['qty'] as num?)?.toDouble() ?? 0;
+        if (qty <= 0) continue;
+        lines.add(
+          CartLine(
+            productId: productId,
+            variantId: (map['variant_id'] as num?)?.toInt() ??
+                (map['product_variant_id'] as num?)?.toInt(),
+            productBatchId: (map['product_batch_id'] as num?)?.toInt(),
+            batchNo: map['batch_no']?.toString(),
+            code: map['code']?.toString() ??
+                map['product_code']?.toString() ??
+                '',
+            name: map['name']?.toString() ?? 'Product',
+            qty: qty,
+            netUnitPrice: (map['net_unit_price'] as num?)?.toDouble() ?? 0,
+            discount: (map['discount'] as num?)?.toDouble() ?? 0,
+            taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0,
+            taxMethod: (map['tax_method'] as num?)?.toInt() ?? 1,
+            saleUnit: map['sale_unit']?.toString() ?? 'pc',
+          ),
+        );
+      }
+    }
+
+    if (lines.isEmpty) {
+      final dbLines = await (_db.select(_db.localSaleLines)
+            ..where((l) => l.localSaleId.equals(sale.id)))
+          .get();
+      for (final l in dbLines) {
+        if (l.qty <= 0) continue;
+        lines.add(
+          CartLine(
+            productId: l.productId,
+            variantId: l.variantId,
+            productBatchId: l.productBatchId,
+            code: l.code ?? '',
+            name: l.name ?? 'Product',
+            qty: l.qty,
+            netUnitPrice: l.netUnitPrice,
+            discount: l.discount,
+            taxRate: l.taxRate,
+            taxMethod: 1,
+            saleUnit: 'pc',
+          ),
+        );
+      }
+    }
+
+    if (lines.isEmpty) return null;
+
+    return HeldSaleCart(
+      clientUuid: sale.clientUuid,
+      referenceNo: sale.referenceNo,
+      warehouseId: sale.warehouseId,
+      customerId: sale.customerId,
+      billerId: sale.billerId,
+      lines: lines,
+      orderTaxRate: (payload?['order_tax_rate'] as num?)?.toDouble() ??
+          sale.orderTaxRate,
+      orderDiscount: (payload?['order_discount'] as num?)?.toDouble() ??
+          sale.orderDiscount,
+      shippingCost: (payload?['shipping_cost'] as num?)?.toDouble() ??
+          sale.shippingCost,
+      couponDiscount: (payload?['coupon_discount'] as num?)?.toDouble() ?? 0,
+      saleNote: payload?['sale_note']?.toString() ?? '',
+      staffNote: payload?['staff_note']?.toString() ?? '',
+    );
+  }
+
+  /// Remove a held draft after it has been restored to the cart.
+  Future<void> deleteHeldSale(String clientUuid) async {
+    final sale = await (_db.select(_db.localSales)
+          ..where(
+            (s) =>
+                s.clientUuid.equals(clientUuid) & s.saleStatus.equals(3),
+          ))
+        .getSingleOrNull();
+    if (sale == null) return;
+
+    await _db.transaction(() async {
+      await (_db.delete(_db.localSaleLines)
+            ..where((l) => l.localSaleId.equals(sale.id)))
+          .go();
+      await (_db.delete(_db.localSales)..where((s) => s.id.equals(sale.id)))
+          .go();
+    });
+  }
+
   /// Latest completed sale (not draft) for reprint.
   Future<LocalReceipt?> getLastReceipt({String? cashierName}) async {
     final sale = await (_db.select(_db.localSales)
@@ -580,6 +695,37 @@ class LocalSaleRepository {
       payloadJson: Value(jsonEncode(payload)),
     ));
   }
+}
+
+/// Held (draft) sale ready to restore into the register cart.
+class HeldSaleCart {
+  const HeldSaleCart({
+    required this.clientUuid,
+    required this.warehouseId,
+    required this.customerId,
+    required this.lines,
+    this.referenceNo,
+    this.billerId,
+    this.orderTaxRate = 0,
+    this.orderDiscount = 0,
+    this.shippingCost = 0,
+    this.couponDiscount = 0,
+    this.saleNote = '',
+    this.staffNote = '',
+  });
+
+  final String clientUuid;
+  final String? referenceNo;
+  final int warehouseId;
+  final int customerId;
+  final int? billerId;
+  final List<CartLine> lines;
+  final double orderTaxRate;
+  final double orderDiscount;
+  final double shippingCost;
+  final double couponDiscount;
+  final String saleNote;
+  final String staffNote;
 }
 
 class LocalSyncStatusUpdate {

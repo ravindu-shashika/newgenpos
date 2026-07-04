@@ -80,7 +80,8 @@ function formatPriceHtml(label, printOptions) {
     const price = hasPromo ? promo : label.product_price;
     const currency = String(label.currency ?? '').trim();
     const position = label.currency_position === 'suffix' ? 'suffix' : 'prefix';
-    const priceText = `${price}/=`;
+    const priceNum = Number(price);
+    const priceText = Number.isFinite(priceNum) ? priceNum.toFixed(2) : String(price ?? '');
 
     if (position === 'suffix') {
         return `<span class="label-price" style="font-size:${printOptions.price_size || 12}px;font-weight:bold;">

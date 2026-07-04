@@ -61,7 +61,8 @@ class PosBillerPicker extends StatelessWidget {
       return PosHeaderSelectChip(
         icon: Icons.badge_outlined,
         label: 'Biller',
-        value: selected?.name ?? 'Select',
+        value: selected?.name ??
+            (value != null ? 'Biller #$value' : 'Select'),
         onTap: () => _open(context),
       );
     }
@@ -78,13 +79,13 @@ class PosBillerPicker extends StatelessWidget {
           border: OutlineInputBorder(),
         ),
         child: Text(
-          selected?.name ?? 'Select biller',
+          selected?.name ?? (value != null ? 'Biller #$value' : 'Select biller'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 14,
             color:
-                selected == null ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
+                selected == null && value == null ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ),

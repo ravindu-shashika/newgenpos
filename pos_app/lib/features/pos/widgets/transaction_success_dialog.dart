@@ -81,7 +81,7 @@ class _TransactionSuccessDialog extends StatelessWidget {
             flex: onPrintReceipt != null ? 1 : 2,
             child: _SuccessActionButton(
               icon: Icons.add,
-              label: 'New sale',
+              label: 'New bill',
               filled: true,
               onPressed: () => Navigator.pop(context),
             ),

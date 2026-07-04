@@ -61,9 +61,25 @@ export default function Sidebar() {
     });
   };
 
+  const asideStyle = {
+    width: 260,
+    background: '#1f2130',
+    color: '#fff',
+    padding: '16px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100vh - 60px)',
+    maxHeight: 'calc(100vh - 60px)',
+    position: 'sticky',
+    top: 60,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+    flexShrink: 0,
+  };
+
   if (!menuTree.length) {
     return (
-      <aside style={{ width: 260, background: '#1f2130', color: '#fff', padding: '16px 12px' }}>
+      <aside style={asideStyle}>
         <div style={{ fontWeight: 700, marginBottom: 20, fontSize: 16 }}>POS Admin</div>
         <p style={{ fontSize: 13, opacity: 0.7 }}>No menu items for your role.</p>
       </aside>
@@ -71,9 +87,12 @@ export default function Sidebar() {
   }
 
   return (
-    <aside style={{ width: 260, background: '#1f2130', color: '#fff', padding: '16px 12px', overflowY: 'auto' }}>
-      <div style={{ fontWeight: 700, marginBottom: 20, fontSize: 16 }}>POS Admin</div>
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <aside style={asideStyle} className="app-sidenav">
+      <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 16, flexShrink: 0 }}>POS Admin</div>
+      <nav
+        className="app-sidenav-scroll"
+        style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+      >
         {menuTree.map((section) => {
           const label = section.main_menu;
           const icon = SECTION_ICONS[label] ?? '•';

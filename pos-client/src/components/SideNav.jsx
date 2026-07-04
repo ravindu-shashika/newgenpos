@@ -13,16 +13,31 @@ const S = {
     background: '#1f2130',
     color: '#fff',
     padding: '16px 12px',
-    overflowY: 'auto',
-    minHeight: '100vh',
     flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    height: 'calc(100vh - 60px)',
+    maxHeight: 'calc(100vh - 60px)',
+    position: 'sticky',
+    top: 60,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
   },
   brand: {
     fontWeight: 700,
-    marginBottom: 20,
+    marginBottom: 12,
     fontSize: 16,
     color: '#fff',
     display: 'block',
+    flexShrink: 0,
+  },
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    paddingBottom: 16,
+    WebkitOverflowScrolling: 'touch',
   },
   nav: {
     display: 'flex',
@@ -574,15 +589,16 @@ const SideNav = ({
       top: 60,
       left: 0,
       bottom: 0,
+      height: 'auto',
+      maxHeight: 'none',
       zIndex: 1025,
       transform: sideBarCollapsed ? 'translateX(-100%)' : 'translateX(0)',
       transition: 'transform 0.25s ease',
       boxShadow: sideBarCollapsed ? 'none' : '4px 0 20px rgba(0,0,0,0.3)',
     } : {
-      // desktop: collapse to 0 width
+      // desktop: collapse to 0 width; menu scrolls inside aside
       width: sideBarCollapsed ? 0 : 260,
       minWidth: sideBarCollapsed ? 0 : 260,
-      overflow: 'hidden',
       transition: 'width 0.25s ease, min-width 0.25s ease',
       padding: sideBarCollapsed ? 0 : '16px 12px',
     }),
@@ -590,11 +606,13 @@ const SideNav = ({
 
   return (
     <>
-      <aside style={asideStyle}>
+      <aside style={asideStyle} className="app-sidenav">
         {!sideBarCollapsed && (
           <>
             <span style={S.brand}>POS Admin</span>
-            {content}
+            <div style={S.scroll} className="app-sidenav-scroll">
+              {content}
+            </div>
           </>
         )}
       </aside>

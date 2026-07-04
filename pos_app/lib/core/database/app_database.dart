@@ -250,6 +250,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
   }
 
   /// Update cached POS settings without requiring deviceId/warehouseId on insert.
+  /// Only overwrites default customer/biller when a positive id is provided.
   Future<int> updateSyncMetaPosSettings({
     required String posSettingsJson,
     int? defaultCustomerId,
@@ -258,8 +259,12 @@ CREATE VIRTUAL TABLE IF NOT EXISTS products_fts USING fts5(
     return (update(syncMeta)..where((t) => t.id.equals(1))).write(
       SyncMetaCompanion(
         posSettingsJson: Value(posSettingsJson),
-        defaultCustomerId: Value(defaultCustomerId),
-        defaultBillerId: Value(defaultBillerId),
+        defaultCustomerId: defaultCustomerId != null && defaultCustomerId > 0
+            ? Value(defaultCustomerId)
+            : const Value.absent(),
+        defaultBillerId: defaultBillerId != null && defaultBillerId > 0
+            ? Value(defaultBillerId)
+            : const Value.absent(),
       ),
     );
   }

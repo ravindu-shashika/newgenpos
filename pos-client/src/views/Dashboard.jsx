@@ -116,9 +116,29 @@ function formatDateInput(value, dateFormat = 'd-m-Y') {
         .replace('Y', String(year));
 }
 
+/** Local placeholder — avoids 404 on missing server default (zummXD2dvAtI.png). */
+const PRODUCT_IMAGE_PLACEHOLDER =
+    'data:image/svg+xml,' +
+    encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">' +
+            '<rect fill="#eceae4" width="80" height="80"/>' +
+            '<text x="40" y="44" text-anchor="middle" fill="#9a958c" font-size="11" font-family="sans-serif">No image</text>' +
+            '</svg>'
+    );
+
 function productImageUrl(base, images, fallback) {
-    const first = images ? String(images).split(',')[0] : fallback;
-    return `${base}/${first}`;
+    const first = images ? String(images).split(',')[0].trim() : '';
+    if (!first || first === 'zummXD2dvAtI.png') {
+        if (fallback && String(fallback).startsWith('http') && !String(fallback).includes('zummXD2dvAtI.png')) {
+            return fallback;
+        }
+        return PRODUCT_IMAGE_PLACEHOLDER;
+    }
+    if (first.startsWith('http://') || first.startsWith('https://') || first.startsWith('data:')) {
+        return first;
+    }
+    const root = String(base || '').replace(/\/$/, '');
+    return root ? `${root}/${first}` : PRODUCT_IMAGE_PLACEHOLDER;
 }
 
 function parseFilterStats(data) {
@@ -465,7 +485,10 @@ function BestSellerPanel({ title, endpoint, valueKey, valueLabel, imageBase, fal
                                     <img
                                         src={productImageUrl(imageBase, r.product_images, fallbackImage)}
                                         alt=""
-                                        onError={(e) => { e.target.src = `${imageBase}/${fallbackImage}`; }}
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = PRODUCT_IMAGE_PLACEHOLDER;
+                                        }}
                                     />
                                     <span>{r.product_name} [{r.product_code}]</span>
                                 </div>

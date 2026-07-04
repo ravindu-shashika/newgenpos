@@ -22,24 +22,27 @@ class PosRealtimeService {
     required AppDatabase db,
     required void Function(PosRealtimeConnectionState state) onStateChanged,
     required void Function(DateTime at) onEventReceived,
+    required void Function(String message) onConnectionFailed,
   })  : _stockHandler = PosStockSyncHandler(db),
         _onStateChanged = onStateChanged,
-        _onEventReceived = onEventReceived;
+        _onEventReceived = onEventReceived,
+        _onConnectionFailed = onConnectionFailed;
 
   final PosStockSyncHandler _stockHandler;
   final void Function(PosRealtimeConnectionState state) _onStateChanged;
   final void Function(DateTime at) _onEventReceived;
+  final void Function(String message) _onConnectionFailed;
 
   PusherChannelsClient? _client;
   PrivateChannel? _channel;
   StreamSubscription<void>? _connectionSub;
   StreamSubscription<ChannelReadEvent>? _eventSub;
-  Timer? _reconnectTimer;
 
   PosRealtimeConfig _config = PosRealtimeConfig.disabled();
   String? _token;
   int? _warehouseId;
   bool _disposed = false;
+  bool _handlingFailure = false;
 
   PosRealtimeConnectionState _state = PosRealtimeConnectionState.disabled;
 
@@ -53,13 +56,14 @@ class PosRealtimeService {
     _config = config;
     _token = posToken;
     _warehouseId = warehouseId;
+    _handlingFailure = false;
 
     if (!config.isValid) {
       _setState(PosRealtimeConnectionState.disabled);
       return;
     }
 
-    await disconnect();
+    await _tearDownClient(notifyDisconnected: false);
     _setState(PosRealtimeConnectionState.connecting);
 
     final wsScheme = config.useTls ? 'wss' : 'ws';
@@ -73,10 +77,8 @@ class PosRealtimeService {
     _client = PusherChannelsClient.websocket(
       options: options,
       connectionErrorHandler: (exception, trace, refresh) {
-        AppLogger.warning('PosRealtime', 'Connection error', exception);
-        _setState(PosRealtimeConnectionState.polling);
-        _scheduleReconnect();
-        refresh();
+        // Do not call refresh() — that auto-retries forever.
+        unawaited(_handleConnectionFailure(exception));
       },
     );
 
@@ -103,6 +105,7 @@ class PosRealtimeService {
     });
 
     _connectionSub = _client!.onConnectionEstablished.listen((_) {
+      _handlingFailure = false;
       _channel?.subscribeIfNotUnsubscribed();
       _setState(PosRealtimeConnectionState.live);
     });
@@ -117,38 +120,55 @@ class PosRealtimeService {
     return channel;
   }
 
-  void _scheduleReconnect() {
-    _reconnectTimer?.cancel();
-    if (_disposed || !_config.isValid || _token == null || _warehouseId == null) {
-      return;
-    }
-    _reconnectTimer = Timer(const Duration(seconds: 30), () {
-      unawaited(
-        connect(
-          config: _config,
-          posToken: _token!,
-          warehouseId: _warehouseId!,
-        ),
-      );
-    });
+  Future<void> _handleConnectionFailure(Object exception) async {
+    if (_handlingFailure || _disposed) return;
+    _handlingFailure = true;
+
+    final endpoint = _config.wsUrl;
+    AppLogger.warning(
+      'PosRealtime',
+      'Connection failed — auto-retry stopped ($endpoint)',
+      exception,
+    );
+
+    await _tearDownClient(notifyDisconnected: false);
+    _setState(PosRealtimeConnectionState.disconnected);
+    _onConnectionFailed(_userFacingFailureMessage(exception, endpoint));
+  }
+
+  String _userFacingFailureMessage(Object exception, String endpoint) {
+    final detail = AppLogger.userMessage(exception);
+    final refused = detail.toLowerCase().contains('refused') ||
+        detail.toLowerCase().contains('connection');
+    final reason = refused
+        ? 'The Reverb server is not reachable at $endpoint.'
+        : 'Could not connect to Reverb at $endpoint.';
+    return '$reason Auto-retry is off. Use Connect in Reverb status or Settings when the server is ready.';
   }
 
   void markPolling() => _setState(PosRealtimeConnectionState.polling);
 
-  Future<void> disconnect() async {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
+  void markDisconnected() => _setState(PosRealtimeConnectionState.disconnected);
+
+  Future<void> _tearDownClient({required bool notifyDisconnected}) async {
     await _eventSub?.cancel();
     _eventSub = null;
     await _connectionSub?.cancel();
     _connectionSub = null;
     _channel?.unsubscribe();
     _channel = null;
-    _client?.dispose();
+    try {
+      _client?.dispose();
+    } catch (_) {}
     _client = null;
-    if (!_disposed && _config.enabled) {
+    if (notifyDisconnected && !_disposed && _config.enabled) {
       _setState(PosRealtimeConnectionState.disconnected);
     }
+  }
+
+  Future<void> disconnect() async {
+    _handlingFailure = false;
+    await _tearDownClient(notifyDisconnected: true);
   }
 
   Future<void> dispose() async {
@@ -174,6 +194,9 @@ final posRealtimeConnectionStateProvider =
 
 final posRealtimeLastEventProvider = StateProvider<DateTime?>((ref) => null);
 
+/// One-shot failure message for UI alert (cleared after shown).
+final posRealtimeFailureProvider = StateProvider<String?>((ref) => null);
+
 final posRealtimeServiceProvider = Provider<PosRealtimeService>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final service = PosRealtimeService(
@@ -184,6 +207,9 @@ final posRealtimeServiceProvider = Provider<PosRealtimeService>((ref) {
     onEventReceived: (at) {
       ref.read(posRealtimeLastEventProvider.notifier).state = at;
       ref.read(productGridProvider.notifier).reload();
+    },
+    onConnectionFailed: (message) {
+      ref.read(posRealtimeFailureProvider.notifier).state = message;
     },
   );
   ref.onDispose(() {
@@ -211,6 +237,8 @@ Future<void> connectPosRealtimeIfConfigured(WidgetRef ref) async {
   final warehouseId = session.warehouseId;
   if (warehouseId == null) return;
 
+  ref.read(posRealtimeFailureProvider.notifier).state = null;
+
   try {
     final bootstrap = await ref.read(apiClientProvider).bootstrap();
     final realtimeRaw = bootstrap['realtime'];
@@ -234,7 +262,9 @@ Future<void> connectPosRealtimeIfConfigured(WidgetRef ref) async {
         );
   } catch (e, stack) {
     AppLogger.error('PosRealtime', 'Connect failed', e, stack);
-    ref.read(posRealtimeServiceProvider).markPolling();
+    ref.read(posRealtimeServiceProvider).markDisconnected();
+    ref.read(posRealtimeFailureProvider.notifier).state =
+        'Live stock sync could not start. Auto-retry is off. Use Connect in Reverb status or Settings when ready.';
   }
 }
 
@@ -281,7 +311,7 @@ String reverbStatusTooltip({
     case PosRealtimeConnectionState.polling:
       return 'Reverb down — polling stock every 15 min';
     case PosRealtimeConnectionState.disconnected:
-      return 'Reverb disconnected';
+      return 'Reverb disconnected — connect manually when ready';
     case PosRealtimeConnectionState.disabled:
       return 'Reverb not configured';
   }

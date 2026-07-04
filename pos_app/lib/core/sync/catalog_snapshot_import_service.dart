@@ -171,7 +171,14 @@ class CatalogSnapshotImportService {
     await _db.rebuildProductSearchIndex();
 
     final syncAt = DateTime.now().toIso8601String();
-    final settings = await _posSettings.load();
+    var settings = await _posSettings.load();
+    try {
+      final device = await _posSettings.refreshFromBootstrap(_api);
+      settings = device.pos;
+    } catch (e, stack) {
+      AppLogger.error('SnapshotImport', 'Bootstrap refresh failed', e, stack);
+    }
+
     await _db.upsertSyncMeta(SyncMetaCompanion.insert(
       id: const Value(1),
       deviceId: deviceId,
@@ -181,12 +188,6 @@ class CatalogSnapshotImportService {
       defaultCustomerId: Value(settings?.customerId),
       defaultBillerId: Value(settings?.billerId),
     ));
-
-    try {
-      await _posSettings.refreshFromBootstrap(_api);
-    } catch (e, stack) {
-      AppLogger.error('SnapshotImport', 'Bootstrap refresh failed', e, stack);
-    }
 
     try {
       await File(gzPath).delete();

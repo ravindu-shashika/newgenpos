@@ -1,11 +1,9 @@
 import api from './api';
 import CookieService from './cookie';
-import { setToken, clearToken } from './tokenStorage';
+import { setToken, clearToken, PERSISTENT_COOKIE_OPTIONS } from './tokenStorage';
 import authStore from '../stores/authStore';
 
-const options = {
-  path: '/',
-};
+const options = { ...PERSISTENT_COOKIE_OPTIONS };
 
 class AuthService {
   async doUserLogin(credentials) {
@@ -55,14 +53,17 @@ class AuthService {
   async clearLocalStorage() {
     authStore.clearAuth();
     clearToken();
-    CookieService.remove('user_id', options);
-    CookieService.remove('user_email', options);
-    CookieService.remove('user_branch', options);
-    CookieService.remove('user_branch_name', options);
-    CookieService.remove('user_name', options);
-    CookieService.remove('user_roles', options);
-    CookieService.remove('user_role_name', options);
-    CookieService.remove('permissions', options);
+    const removeOpts = { path: '/' };
+    CookieService.remove('user_id', removeOpts);
+    CookieService.remove('user_email', removeOpts);
+    CookieService.remove('user_branch', removeOpts);
+    CookieService.remove('user_branch_name', removeOpts);
+    CookieService.remove('user_name', removeOpts);
+    CookieService.remove('user_roles', removeOpts);
+    CookieService.remove('user_role_name', removeOpts);
+    CookieService.remove('permissions', removeOpts);
+    CookieService.remove('role_id', removeOpts);
+    CookieService.remove('role_name', removeOpts);
   }
 }
 

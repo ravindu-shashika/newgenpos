@@ -26,6 +26,7 @@ import 'widgets/database_backup_reminder_banner.dart';
 import 'widgets/pos_main_shell.dart';
 import 'widgets/pos_sidebar.dart';
 import 'widgets/pos_professional_dialog.dart';
+import 'widgets/pos_reverb_status_dialog.dart';
 import 'widgets/pos_window_title_bar.dart';
 
 /// Single host after login — persistent sidebar + sliding page content.
@@ -174,6 +175,27 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
         unawaited(connectPosRealtimeIfConfigured(ref));
       },
     );
+
+    // One alert when Reverb fails — no auto-retry spam.
+    ref.listen<String?>(posRealtimeFailureProvider, (previous, next) {
+      if (next == null || next.isEmpty) return;
+      ref.read(posRealtimeFailureProvider.notifier).state = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final connect = await showPosConfirmDialog(
+          context: context,
+          title: 'Live stock sync offline',
+          subtitle: 'Reverb connection failed',
+          message: next,
+          icon: Icons.wifi_off_rounded,
+          confirmLabel: 'Connect',
+          cancelLabel: 'OK',
+        );
+        if (connect == true && mounted) {
+          await showReverbStatusDialog(context: context, ref: ref);
+        }
+      });
+    });
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

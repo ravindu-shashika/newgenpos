@@ -19,9 +19,9 @@ class PosSetting extends Model
             : ['cash', 'card', 'cheque', 'deposit'];
 
         return [
-            'customer_id' => $this->customer_id,
-            'biller_id' => $this->biller_id,
-            'warehouse_id' => $this->warehouse_id,
+            'customer_id' => $this->customer_id ? (int) $this->customer_id : null,
+            'biller_id' => $this->biller_id ? (int) $this->biller_id : null,
+            'warehouse_id' => $this->warehouse_id ? (int) $this->warehouse_id : null,
             'product_number' => (int) ($this->product_number ?: 15),
             'keyboard_active' => (bool) $this->keybord_active,
             'is_table' => (bool) ($this->is_table ?? false),

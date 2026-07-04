@@ -9,6 +9,7 @@ import '../database/app_database.dart';
 import '../logging/app_logger.dart';
 import '../repositories/local_auth_repository.dart';
 import '../repositories/pos_settings_repository.dart';
+import '../../features/pos/models/pos_settings.dart';
 import 'download_models.dart';
 
 class _DownloadTuning {
@@ -207,9 +208,25 @@ class CatalogDownloadService {
     }
 
     final syncAt = DateTime.now().toIso8601String();
-    final settings = await _posSettings.load();
+    PosSettings? settings = await _posSettings.load();
+    try {
+      final device = await _posSettings.refreshFromBootstrap(_api);
+      settings = device.pos;
+    } catch (e, stack) {
+      AppLogger.error(
+        'Download',
+        'POS settings bootstrap refresh failed',
+        e,
+        stack,
+      );
+    }
+
     final firstCustomer = await (_db.select(_db.customers)
           ..orderBy([(c) => OrderingTerm.asc(c.id)])
+          ..limit(1))
+        .getSingleOrNull();
+    final firstBiller = await (_db.select(_db.billers)
+          ..orderBy([(b) => OrderingTerm.asc(b.id)])
           ..limit(1))
         .getSingleOrNull();
 
@@ -222,19 +239,8 @@ class CatalogDownloadService {
           ? Value(syncAt)
           : const Value.absent(),
       defaultCustomerId: Value(settings?.customerId ?? firstCustomer?.id),
-      defaultBillerId: Value(settings?.billerId),
+      defaultBillerId: Value(settings?.billerId ?? firstBiller?.id),
     ));
-
-    try {
-      await _posSettings.refreshFromBootstrap(_api);
-    } catch (e, stack) {
-      AppLogger.error(
-        'Download',
-        'POS settings bootstrap refresh failed',
-        e,
-        stack,
-      );
-    }
 
     if (productsDownloaded && !incrementalFtsDuringDownload) {
       try {
