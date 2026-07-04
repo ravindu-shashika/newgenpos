@@ -36,6 +36,7 @@ class PosSidebar extends StatelessWidget {
     this.busy = false,
     this.syncing = false,
     this.sidebarLogoPath,
+    this.displayAppName,
   });
 
   final PosNavSection activeSection;
@@ -58,6 +59,7 @@ class PosSidebar extends StatelessWidget {
   final bool busy;
   final bool syncing;
   final String? sidebarLogoPath;
+  final String? displayAppName;
 
   bool get _enabled => !busy && !syncing;
 
@@ -78,6 +80,7 @@ class PosSidebar extends StatelessWidget {
               padding: const EdgeInsets.only(top: 10, bottom: 8),
               child: PosBrandLogo(
                 logoPath: sidebarLogoPath,
+                appName: displayAppName,
                 size: 44,
                 variant: PosBrandLogoVariant.sidebar,
               ),

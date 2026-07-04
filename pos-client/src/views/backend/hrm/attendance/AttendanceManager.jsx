@@ -59,7 +59,6 @@ const AttendanceManager = ({ controllerName }) => {
     const [employees, setEmployees] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [defaults, setDefaults] = useState({ checkin: '', checkout: '' });
-    const [userVerified, setUserVerified] = useState(true);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
     const [page, setPage] = useState(1);
@@ -100,7 +99,6 @@ const AttendanceManager = ({ controllerName }) => {
             setEmployees(res.data?.employees || []);
             setWarehouses(res.data?.warehouses || []);
             setDefaults(res.data?.defaults || { checkin: '', checkout: '' });
-            setUserVerified(res.data?.user_verified !== false);
         } catch (err) {
             showToast(err.response?.data?.message || 'Failed to load attendance.', 'error');
         } finally {
@@ -280,11 +278,6 @@ const AttendanceManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!userVerified) {
-            showToast('This feature is disabled for demo.', 'error');
-            return;
-        }
-
         const attendanceSelectedArray = [...selected].map((key) => {
             const [date, employeeId] = key.split('|');
             return [date, Number(employeeId)];

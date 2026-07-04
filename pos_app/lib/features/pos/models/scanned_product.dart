@@ -80,6 +80,7 @@ class ScannedProduct {
       isBatch: map['is_batch'] == true || map['is_batch'] == 1,
       productBatchId: _intOrNull(map['batch_id'] ?? map['product_batch_id']),
       batchNo: map['batch_no']?.toString(),
+      maxPrice: map['max_price'] != null ? _dbl(map['max_price']) : null,
     );
   }
 

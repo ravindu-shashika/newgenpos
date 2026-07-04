@@ -169,7 +169,6 @@ class PayrollController extends Controller
             'employees' => Employee::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'accounts' => Account::where('is_active', true)->orderBy('name')->get(['id', 'name', 'account_no', 'is_default']),
             'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
         ];
     }
 
@@ -222,7 +221,6 @@ class PayrollController extends Controller
             'lims_payroll_all'
         ));
     }
-
 
     public function create()
     {
@@ -350,7 +348,6 @@ class PayrollController extends Controller
         }
     }
 
-
     public function deleteBySelection(Request $request)
     {
         if (!$this->userCanAccessPayroll()) {
@@ -395,7 +392,6 @@ class PayrollController extends Controller
         $employeeId = $request->employee_id;
         $month = $request->month;
 
-
         $dummyData = [
             1 => ['salary' => 25000, 'transactions' => 1200, 'commission' => 800],
             2 => ['salary' => 30000, 'transactions' => 2500, 'commission' => 1500],
@@ -404,9 +400,7 @@ class PayrollController extends Controller
             5 => ['salary' => 27000, 'transactions' => 500, 'commission' => 1200],
         ];
 
-
         $data = $dummyData[$employeeId] ?? ['salary' => 20000, 'transactions' => 2500, 'commission' => 1500];
-
 
         if ($month == '2025-01') {
             $data['commission'] += 500;
@@ -436,8 +430,6 @@ class PayrollController extends Controller
 
         return response()->json($query->orderBy('name')->get(['id', 'name']));
     }
-
-
 
     public function storeMultiple(Request $request)
     {
@@ -478,7 +470,6 @@ class PayrollController extends Controller
                     'overtime' => $overtime,
                     'total' => $total,
                 ];
-
 
                 // ✅ Check if payroll for this employee & month already exists
                 $existingPayroll = Payroll::where('employee_id', $payrollData['employee_id'])

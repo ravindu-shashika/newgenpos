@@ -240,16 +240,6 @@ class TaxController extends Controller
             return $this->denyAccess($request);
         }
 
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         $tax_id = $request->input('taxIdArray', []);
         foreach ($tax_id as $id) {
             $lims_tax_data = Tax::find($id);

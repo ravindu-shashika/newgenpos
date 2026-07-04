@@ -214,7 +214,8 @@ export default function TerminalManager({ controllerName }) {
 
     const handleActivate = async (id) => {
         try {
-            await api.post(`terminal/${id}/activate`);
+            // Empty body required — api.post(url) alone returns a .values() helper and does not send.
+            await api.post(`terminal/${id}/activate`, {});
             fetchRows();
             showToast('Terminal activated.', 'success');
         } catch (err) {
@@ -224,7 +225,7 @@ export default function TerminalManager({ controllerName }) {
 
     const handleDeactivate = async (id) => {
         try {
-            await api.post(`terminal/${id}/deactivate`);
+            await api.post(`terminal/${id}/deactivate`, {});
             fetchRows();
             showToast('Terminal deactivated.', 'success');
         } catch (err) {
@@ -234,7 +235,7 @@ export default function TerminalManager({ controllerName }) {
 
     const handleRegenerateToken = async (row) => {
         try {
-            const res = await api.post(`terminal/${row.id}/regenerate-token`);
+            const res = await api.post(`terminal/${row.id}/regenerate-token`, {});
             fetchRows();
             const data = res.data?.data;
             if (data?.activation_token_plain || data?.activation_token) {

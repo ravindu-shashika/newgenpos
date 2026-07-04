@@ -75,7 +75,6 @@ const CategoryManager = ({ controllerName }) => {
 
     // -- General settings (from generalSettingStore via hook) --------------------
     const setting = useGeneralSetting();
-    const userVerified = import.meta.env.VITE_USER_VERIFIED === '1';
     const modules = (setting?.modules ?? '').split(',').map(m => m.trim());
     // const hasEcommerce = modules.includes('ecommerce');
     // const hasRestaurant = modules.includes('restaurant');
@@ -237,7 +236,6 @@ const CategoryManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!userVerified) { setBulkDeleteOpen(false); return; }
         try {
             await api.post('category/deletebyselection', {
                 categoryIdArray: [...selected],
@@ -416,7 +414,7 @@ const CategoryManager = ({ controllerName }) => {
                     {selected.size > 0 && (
                         <button
                             className="ui-btn danger"
-                            onClick={() => { if (userVerified) setBulkDeleteOpen(true); }}
+                            onClick={() => setBulkDeleteOpen(true)}
                         >
                             🗑 Delete Selected ({selected.size})
                         </button>

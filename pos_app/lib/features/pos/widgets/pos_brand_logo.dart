@@ -18,11 +18,13 @@ class PosBrandLogo extends StatelessWidget {
   const PosBrandLogo({
     super.key,
     this.logoPath,
+    this.appName,
     this.size = 48,
     this.variant = PosBrandLogoVariant.sidebar,
   });
 
   final String? logoPath;
+  final String? appName;
   final double size;
   final PosBrandLogoVariant variant;
 
@@ -77,7 +79,7 @@ class PosBrandLogo extends StatelessWidget {
     if (_isSidebar) {
       return Center(
         child: Text(
-          PosBranding.fallbackInitial,
+          PosBranding.fallbackInitialFor(appName),
           style: TextStyle(
             color: brand.primary,
             fontSize: size * 0.38,
@@ -105,7 +107,7 @@ class PosBrandLogo extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(
-        PosBranding.fallbackInitial,
+        PosBranding.fallbackInitialFor(appName),
         style: TextStyle(
           color: fg,
           fontSize: size * 0.42,
@@ -174,10 +176,12 @@ class PosBrandHeader extends StatelessWidget {
   const PosBrandHeader({
     super.key,
     this.logoPath,
+    this.appName,
     this.logoSize = 72,
   });
 
   final String? logoPath;
+  final String? appName;
   final double logoSize;
 
   @override
@@ -186,12 +190,13 @@ class PosBrandHeader extends StatelessWidget {
       children: [
         PosBrandLogo(
           logoPath: logoPath,
+          appName: appName,
           size: logoSize,
           variant: PosBrandLogoVariant.light,
         ),
         SizedBox(height: 14),
         Text(
-          PosBranding.appName,
+          PosBranding.effectiveAppName(appName),
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,

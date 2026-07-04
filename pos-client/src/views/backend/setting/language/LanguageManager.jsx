@@ -199,7 +199,7 @@ const LanguageManager = ({ controllerName }) => {
 
     const handleSetDefault = async (id) => {
         try {
-            const res = await api.post(`languages/${id}/set-default`);
+            const res = await api.post(`languages/${id}/set-default`, {});
             showToast(res.data?.message || res.data?.success || 'Default language updated.', 'success');
             fetchLanguages();
         } catch (err) {

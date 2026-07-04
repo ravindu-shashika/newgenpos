@@ -16,6 +16,7 @@ class PosWindowService with WindowListener {
   bool _kioskActive = false;
   bool _windowMinimized = false;
   bool _listenerAttached = false;
+  String _appTitle = PosBranding.appName;
   GlobalKey<NavigatorState>? _navigatorKey;
   Future<bool> Function(BuildContext context)? _beforeExit;
 
@@ -42,7 +43,7 @@ class PosWindowService with WindowListener {
   Future<void> ensureInitialized() async {
     if (!isSupported) return;
     await windowManager.ensureInitialized();
-    await windowManager.setTitle(PosBranding.appName);
+    await windowManager.setTitle(_appTitle);
     if (!_listenerAttached) {
       windowManager.addListener(this);
       _listenerAttached = true;
@@ -56,6 +57,14 @@ class PosWindowService with WindowListener {
     if (!isSupported) return;
     await ensureInitialized();
     await windowManager.setBackgroundColor(color);
+  }
+
+  Future<void> setAppTitle(String title) async {
+    final trimmed = title.trim();
+    _appTitle = trimmed.isEmpty ? PosBranding.appName : trimmed;
+    if (!isSupported) return;
+    await ensureInitialized();
+    await windowManager.setTitle(_appTitle);
   }
 
   Future<void> enterKioskMode() async {
@@ -116,12 +125,12 @@ class PosWindowService with WindowListener {
       barrierDismissible: false,
       builder: (dialogContext) => PosProfessionalDialogShell(
         title: 'Close application?',
-        subtitle: PosBranding.appName,
+        subtitle: _appTitle,
         icon: Icons.logout_rounded,
         maxWidth: 440,
         maxBodyHeight: 80,
         body: Text(
-          'Are you sure you want to exit ${PosBranding.appName}?',
+          'Are you sure you want to exit $_appTitle?',
           style: TextStyle(
             fontSize: 14,
             height: 1.5,

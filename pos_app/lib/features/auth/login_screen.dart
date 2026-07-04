@@ -8,7 +8,6 @@ import '../../core/logging/app_logger.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/pos_meta_provider.dart';
 import '../../core/providers/pos_ui_settings_provider.dart';
-import '../../core/branding/pos_branding.dart';
 import '../../core/theme/pos_theme.dart';
 import '../pos/models/pos_settings.dart';
 import '../pos/pos_app_shell.dart';
@@ -172,6 +171,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       );
       if (parties.customerId != null) {
         await session.setCustomerId(parties.customerId!);
+      } else {
+        await session.clearCustomerId();
+      }
+      if (parties.billerId == null) {
+        await session.clearBillerId();
       }
 
       if (!mounted) return;
@@ -268,7 +272,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (name != null && name.isNotEmpty) return name.toUpperCase();
     final code = session.terminalCode?.trim();
     if (code != null && code.isNotEmpty) return code.toUpperCase();
-    return PosBranding.appName.toUpperCase();
+    return ref.read(posUiSettingsProvider).effectiveAppName.toUpperCase();
   }
 
   String get _healthLabel {
@@ -663,10 +667,9 @@ class _CredentialField extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onSubmitted;
 
-  static const _fieldFill = PosColors.loginFieldFill;
-
   @override
   Widget build(BuildContext context) {
+    final surface = context.posSurface;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -676,12 +679,12 @@ class _CredentialField extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
-            color: context.posSurface.loginTextMuted,
+            color: surface.loginTextMuted,
           ),
         ),
         SizedBox(height: 8),
         Material(
-          color: _fieldFill,
+          color: surface.loginFieldFill,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             onTap: onTap,
@@ -693,7 +696,7 @@ class _CredentialField extends StatelessWidget {
                 border: Border.all(
                   color: active
                       ? PosColors.loginAccent
-                      : context.posSurface.loginFieldBorder,
+                      : surface.loginFieldBorder,
                   width: 1.5,
                 ),
               ),
@@ -712,12 +715,12 @@ class _CredentialField extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: context.posSurface.loginText,
+                        color: surface.loginText,
                       ),
                       decoration: InputDecoration(
                         hintText: hint,
                         hintStyle: TextStyle(
-                          color: context.posSurface.loginTextMuted,
+                          color: surface.loginTextMuted,
                         ),
                         border: InputBorder.none,
                         isDense: true,
@@ -729,7 +732,7 @@ class _CredentialField extends StatelessWidget {
                   Icon(
                     trailing,
                     size: 20,
-                    color: context.posSurface.loginTextMuted,
+                    color: surface.loginTextMuted,
                   ),
                 ],
               ),
@@ -819,12 +822,14 @@ class _NumpadKey extends StatelessWidget {
   final VoidCallback onTap;
   final bool small;
 
-  static const _numpadFill = PosColors.loginNumpadFill;
-
   @override
   Widget build(BuildContext context) {
+    final surface = context.posSurface;
+    // Theme-aware fill + text so digits stay readable in light and dark mode.
+    final fill = surface.loginNumpadFill;
+    final ink = surface.loginText;
     return Material(
-      color: _numpadFill,
+      color: fill,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -834,13 +839,13 @@ class _NumpadKey extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.posSurface.loginNumpadBorder),
+            border: Border.all(color: surface.loginNumpadBorder),
           ),
           child: label == '⌫'
               ? Icon(
                   Icons.backspace_outlined,
                   size: 20,
-                  color: context.posSurface.loginText,
+                  color: ink,
                 )
               : Text(
                   label,
@@ -848,7 +853,7 @@ class _NumpadKey extends StatelessWidget {
                     fontSize: small ? 12 : 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: small ? 0.6 : 0,
-                    color: context.posSurface.loginText,
+                    color: ink,
                   ),
                 ),
         ),

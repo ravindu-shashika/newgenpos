@@ -10,10 +10,17 @@ typedef CheckoutPartyIds = ({
 
 int? _positiveId(int? id) => (id != null && id > 0) ? id : null;
 
+int? _idInCatalog(int? id, Iterable<int> catalogIds) {
+  final value = _positiveId(id);
+  if (value == null) return null;
+  return catalogIds.contains(value) ? value : null;
+}
+
 /// Resolves register customer / biller / warehouse for a new sale.
 ///
-/// Priority: local UI default → server POS settings → sync meta → optional
-/// session fallback → first catalog row.
+/// Only IDs present in the downloaded catalog are used. Defaults come from
+/// local UI override → server POS settings → sync meta (never invents a
+/// missing "Customer #N").
 CheckoutPartyIds resolveCheckoutPartyIds({
   required PosUiSettings ui,
   PosSettings? settings,
@@ -26,29 +33,33 @@ CheckoutPartyIds resolveCheckoutPartyIds({
   required List<Warehouse> warehouses,
   bool includeSessionFallback = true,
 }) {
-  int? customerId = _positiveId(ui.defaultCustomerId) ??
-      _positiveId(settings?.customerId) ??
-      _positiveId(syncMeta?.defaultCustomerId);
+  final customerIds = customers.map((c) => c.id).toSet();
+  final billerIds = billers.map((b) => b.id).toSet();
+  final warehouseIds = warehouses.map((w) => w.id).toSet();
+
+  // Prefer configured defaults, but only if they exist in downloaded data.
+  int? customerId = _idInCatalog(ui.defaultCustomerId, customerIds) ??
+      _idInCatalog(settings?.customerId, customerIds) ??
+      _idInCatalog(syncMeta?.defaultCustomerId, customerIds);
   if (includeSessionFallback) {
-    customerId ??= _positiveId(sessionCustomerId);
+    customerId ??= _idInCatalog(sessionCustomerId, customerIds);
   }
 
-  int? billerId = _positiveId(ui.defaultBillerId) ??
-      _positiveId(settings?.billerId) ??
-      _positiveId(syncMeta?.defaultBillerId);
+  int? billerId = _idInCatalog(ui.defaultBillerId, billerIds) ??
+      _idInCatalog(settings?.billerId, billerIds) ??
+      _idInCatalog(syncMeta?.defaultBillerId, billerIds);
   if (includeSessionFallback) {
-    billerId ??= _positiveId(sessionBillerId);
+    billerId ??= _idInCatalog(sessionBillerId, billerIds);
   }
 
-  int? warehouseId = _positiveId(sessionWarehouseId) ??
-      _positiveId(settings?.warehouseId) ??
-      _positiveId(syncMeta?.warehouseId);
+  int? warehouseId = _idInCatalog(sessionWarehouseId, warehouseIds) ??
+      _idInCatalog(settings?.warehouseId, warehouseIds) ??
+      _idInCatalog(syncMeta?.warehouseId, warehouseIds);
 
-  // Prefer catalog rows that match resolved ids; otherwise first active row.
-  customerId ??= customers.isNotEmpty ? customers.first.id : null;
-  billerId ??= billers.isNotEmpty ? billers.first.id : null;
+  // Warehouse is required for stock — fall back to first downloaded warehouse.
   warehouseId ??= warehouses.isNotEmpty ? warehouses.first.id : null;
 
+  // Do not invent a customer/biller when defaults are missing or not downloaded.
   return (
     customerId: customerId,
     billerId: billerId,

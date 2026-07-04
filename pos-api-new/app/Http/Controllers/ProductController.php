@@ -303,8 +303,6 @@ class ProductController extends Controller
                 }
             });
 
-
-
             // FIX: distinct() without column
             $totalFiltered = $search ? (clone $query)->distinct()->count('products.id') : $totalData;
 
@@ -391,7 +389,6 @@ class ProductController extends Controller
 
             $nestedData['stock_worth'] = $stock_worth_price.' / '.$stock_worth_cost;
 
-
             // Custom fields values
             foreach($field_names as $field_name) {
                 $nestedData[$field_name] = $product->$field_name;
@@ -443,7 +440,6 @@ class ProductController extends Controller
             </div>';
                 }
             }
-
 
             // Extra product details
             $tax = $product->tax_id ? (Tax::find($product->tax_id)->name ?? "N/A") : "N/A";
@@ -856,7 +852,6 @@ class ProductController extends Controller
             }
         }
 
-
         if($data['type'] == 'combo' || (isset($data['is_recipe']) && $data['is_recipe'] == 1)) {
 
             $data['product_list'] = implode(",", $data['product_id'] ?? []);
@@ -917,7 +912,6 @@ class ProductController extends Controller
                 } else {
                     $imageName = $this->getTenantId() . '_' . $imageName . '.' . $ext;
                 }
-
 
                 $image->move(public_path('images/product'), $imageName);
 
@@ -1792,13 +1786,6 @@ class ProductController extends Controller
     public function updateProduct(Request $request)
     {
 
-        if(!env('USER_VERIFIED')) {
-            if ($request->ajax() || $this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['message' => __('db.This feature is disable for demo!')], 403);
-            }
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         DB::beginTransaction();
         try {
             $this->validate($request, [
@@ -1873,7 +1860,6 @@ class ProductController extends Controller
                         : $request->menu_type;
                 }
             }
-
 
             if($data['type'] == 'combo') {
                 $data['product_list'] = implode(",", $data['product_id'] ?? []);
@@ -2849,29 +2835,21 @@ class ProductController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        if(!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['message' => __('db.This feature is disable for demo!')], 403);
+        $lims_product_data = Product::findOrFail($id);
+        $lims_product_data->is_active = false;
+        if ($lims_product_data->image != 'zummXD2dvAtI.png') {
+            $images = explode(",", $lims_product_data->image);
+            foreach ($images as $key => $image) {
+                $this->deleteImageFromStorage($image);
             }
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
-        else {
-            $lims_product_data = Product::findOrFail($id);
-            $lims_product_data->is_active = false;
-            if($lims_product_data->image != 'zummXD2dvAtI.png') {
-                $images = explode(",", $lims_product_data->image);
-                foreach ($images as $key => $image) {
-                    $this->deleteImageFromStorage($image);
-                }
-            }
-            $lims_product_data->save();
-            $this->cacheForget('product_list');
-            $this->cacheForget('product_list_with_variant');
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['message' => __('db.Product deleted successfully')]);
-            }
-            return redirect()->back()->with('message', __('db.Product deleted successfully'));
+        $lims_product_data->save();
+        $this->cacheForget('product_list');
+        $this->cacheForget('product_list_with_variant');
+        if ($this->wantsSpaResponse($request)) {
+            return $this->spaJson($request, ['message' => __('db.Product deleted successfully')]);
         }
+        return redirect()->back()->with('message', __('db.Product deleted successfully'));
     }
 
     public function getProductPrice($id)

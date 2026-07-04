@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use App\Models\landlord\Tenant;
 
-
 class AddonInstallController extends Controller
 {
     public function saasInstall(Request $request)
@@ -66,10 +65,6 @@ class AddonInstallController extends Controller
         if(!config('database.connections.saleprosaas_landlord')) {
             $db_str = 'db.';
         }
-        if(!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __($db_str.'This feature is disable for demo!'));
-        }
-
         $url = 'https://lion-coders.com/api/addon-install/';
         $ch = curl_init(); // Initialize cURL
         curl_setopt($ch, CURLOPT_URL, $url);

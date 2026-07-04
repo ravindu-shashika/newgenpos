@@ -59,7 +59,6 @@ const OvertimeManager = ({ controllerName }) => {
 
     const [allRows, setAllRows] = useState([]);
     const [employees, setEmployees] = useState([]);
-    const [userVerified, setUserVerified] = useState(true);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
     const [page, setPage] = useState(1);
@@ -90,7 +89,6 @@ const OvertimeManager = ({ controllerName }) => {
             const res = await api.get('overtime');
             setAllRows(res.data?.overtimes || []);
             setEmployees(res.data?.employees || []);
-            setUserVerified(res.data?.user_verified !== false);
         } catch (err) {
             showToast(err.response?.data?.message || 'Failed to load overtime records.', 'error');
         } finally {
@@ -269,10 +267,6 @@ const OvertimeManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!userVerified) {
-            showToast('This feature is disabled for demo.', 'error');
-            return;
-        }
         try {
             const res = await api.post('overtime/deletebyselection', {
                 overtimeIdArray: [...selected],

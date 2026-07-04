@@ -15,6 +15,7 @@ class ReturnSessionPanel extends StatelessWidget {
     required this.onRemoveLine,
     required this.onUpdateQty,
     required this.onCancelSession,
+    this.onReturnCreditTap,
     this.busy = false,
     this.showScanField = true,
     this.title = 'Return items',
@@ -27,6 +28,7 @@ class ReturnSessionPanel extends StatelessWidget {
   final ValueChanged<String> onRemoveLine;
   final void Function(String lineKey, double qty) onUpdateQty;
   final VoidCallback onCancelSession;
+  final VoidCallback? onReturnCreditTap;
   final bool busy;
   final bool showScanField;
   final String title;
@@ -90,6 +92,8 @@ class ReturnSessionPanel extends StatelessWidget {
                     'Return credit',
                     totals.returnCreditFromSession,
                     brand.primary,
+                    onTap: busy ? null : onReturnCreditTap,
+                    hint: onReturnCreditTap != null ? 'Tap to edit' : null,
                   ),
                   const SizedBox(width: 8),
                   _summaryChip(
@@ -207,37 +211,70 @@ class ReturnSessionPanel extends StatelessWidget {
     BuildContext context,
     String label,
     double amount,
-    Color color,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Theme.of(context).dividerColor),
+    Color color, {
+    VoidCallback? onTap,
+    String? hint,
+  }) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: onTap != null
+              ? color.withValues(alpha: 0.55)
+              : Theme.of(context).dividerColor,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (onTap != null)
+                Icon(Icons.edit_outlined, size: 12, color: color),
+            ],
+          ),
+          Text(
+            formatPosMoney(amount),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          if (hint != null)
             Text(
-              label,
+              hint,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-            Text(
-              formatPosMoney(amount),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: color,
+        ],
+      ),
+    );
+
+    return Expanded(
+      child: onTap == null
+          ? chip
+          : Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: chip,
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }

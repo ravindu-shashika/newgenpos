@@ -54,27 +54,50 @@ class LocalAuthRepository {
   }
 
   Future<void> _upsertOne(Map<String, dynamic> m) async {
-    final passHash = m['password']?.toString().trim();
-    final pinHash = m['access_pin']?.toString().trim();
-    if ((passHash == null || passHash.isEmpty) &&
-        (pinHash == null || pinHash.isEmpty)) {
-      return;
+    final id = _int(m['id']);
+    if (id <= 0) return;
+
+    // API may send password / access_pin (hashes) or *_hash keys from snapshots.
+    final passHash = (m['password'] ?? m['password_hash'])?.toString().trim();
+    final pinHash =
+        (m['access_pin'] ?? m['access_pin_hash'])?.toString().trim();
+    final hasPass = passHash != null && passHash.isNotEmpty;
+    final hasPin = pinHash != null && pinHash.isNotEmpty;
+    if (!hasPass && !hasPin) {
+      // Still store the user so the device shows operators; PIN can be set later.
+      // Without either hash they cannot sign in until the next sync with PIN.
     }
 
     await _db.into(_db.localUsers).insertOnConflictUpdate(
           LocalUsersCompanion.insert(
-            id: Value(_int(m['id'])),
-            name: m['name']?.toString() ?? '',
+            id: Value(id),
+            name: m['name']?.toString() ??
+                m['username']?.toString() ??
+                'User $id',
             username: Value(m['username']?.toString()),
             email: Value(m['email']?.toString()),
-            passwordHash: passHash ?? '',
-            accessPinHash: Value(pinHash),
+            passwordHash: hasPass ? passHash! : '',
+            accessPinHash: Value(hasPin ? pinHash : null),
             warehouseId: Value(_intOrNull(m['warehouse_id'])),
             roleId: Value(_intOrNull(m['role_id'])),
             billerId: Value(_intOrNull(m['biller_id'])),
             updatedAt: Value(m['updated_at']?.toString()),
           ),
         );
+  }
+
+  Future<int> countUsers() async {
+    final rows = await _db.select(_db.localUsers).get();
+    return rows.length;
+  }
+
+  Future<int> countUsersWithPin() async {
+    final rows = await _db.select(_db.localUsers).get();
+    return rows.where((u) {
+      final pin = u.accessPinHash?.trim();
+      if (pin != null && pin.isNotEmpty) return true;
+      return u.passwordHash.trim().isNotEmpty;
+    }).length;
   }
 
   int _int(dynamic v, {int fallback = 0}) {

@@ -420,8 +420,14 @@ class CatalogDownloadService {
 
     switch (resource) {
       case 'users':
-        await _localAuth.upsertUsers(
-          rows.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        final maps =
+            rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        await _localAuth.upsertUsers(maps);
+        AppLogger.info(
+          'Download',
+          'Users chunk imported',
+          'rows=${maps.length} total=${await _localAuth.countUsers()} '
+              'with_pin=${await _localAuth.countUsersWithPin()}',
         );
         return;
       case 'warehouses':

@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/branding/pos_branding.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/local_print_settings_provider.dart';
 import '../../core/providers/pos_meta_provider.dart';
@@ -244,7 +245,7 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
     } else if (subPage == PosSettingsSubPage.appearance) {
       body = PosSettingsSubPageShell(
         title: 'Appearance & theme',
-        subtitle: 'Brand colors, dark mode, font size, and sidebar logo',
+        subtitle: 'Display name, brand colors, dark mode, font size, and sidebar logo',
         onBack: () => closePosSettingsSubPage(ref),
         child: Column(
           children: [
@@ -256,6 +257,7 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
             const SizedBox(height: 16),
             _SidebarLogoCard(
               logoPath: uiSettings.sidebarLogoPath,
+              displayAppName: uiSettings.displayAppName,
               onPick: () => unawaited(_pickSidebarLogo()),
               onRemove: () => ref.read(posUiSettingsProvider.notifier).patch(
                     (s) => s.copyWith(clearSidebarLogo: true),
@@ -581,10 +583,33 @@ class _VisualsCard extends StatelessWidget {
     return PosSettingsSectionCard(
       icon: Icons.palette_outlined,
       title: 'Visuals & theme',
-      subtitle: 'Brand colors, appearance, and font size',
+        subtitle: 'Brand name, colors, appearance, and font size',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          TextFormField(
+            key: ValueKey(uiSettings.displayAppName),
+            initialValue: uiSettings.displayAppName,
+            decoration: InputDecoration(
+              labelText: 'Display name',
+              hintText: PosBranding.appName,
+              helperText: 'Window title, login screen, and exit dialog',
+            ),
+            onFieldSubmitted: (value) => unawaited(
+              onPatch((s) => s.copyWith(displayAppName: value.trim())),
+            ),
+          ),
+          if (uiSettings.displayAppName.trim().isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => unawaited(
+                  onPatch((s) => s.copyWith(clearDisplayAppName: true)),
+                ),
+                child: Text('Reset to ${PosBranding.appName}'),
+              ),
+            ),
+          SizedBox(height: 20),
           PosColorPresetPicker(
             label: 'Theme color',
             selectedHex: uiSettings.themePrimaryColor,
@@ -724,11 +749,13 @@ class _VisualsCard extends StatelessWidget {
 class _SidebarLogoCard extends StatelessWidget {
   const _SidebarLogoCard({
     required this.logoPath,
+    required this.displayAppName,
     required this.onPick,
     required this.onRemove,
   });
 
   final String? logoPath;
+  final String displayAppName;
   final VoidCallback onPick;
   final VoidCallback onRemove;
 
@@ -744,6 +771,7 @@ class _SidebarLogoCard extends StatelessWidget {
           Center(
             child: PosBrandLogo(
               logoPath: logoPath,
+              appName: displayAppName,
               size: 72,
               variant: PosBrandLogoVariant.sidebar,
             ),

@@ -120,14 +120,39 @@ class ProductGridNotifier extends StateNotifier<ProductGridState> {
 
       final filter = _ref.read(productFilterProvider);
       final priceType = _ref.read(posCheckoutProvider).priceType;
-      final page = await _ref.read(productLookupRepositoryProvider).listInStockPage(
-            warehouseId: warehouseId,
-            filter: filter.filter,
-            filterId: filter.filterId,
-            priceType: priceType,
-            offset: append ? state.products.length : 0,
-            limit: _pageSize(),
-          );
+      final lookup = _ref.read(productLookupRepositoryProvider);
+
+      // Manual search: show matches in the product grid (not a dropdown overlay).
+      if (filter.isSearching) {
+        if (append) {
+          state = state.copyWith(isLoading: false, isLoadingMore: false);
+          return;
+        }
+        final items = await lookup.searchLocal(
+          query: filter.searchQuery.trim(),
+          warehouseId: warehouseId,
+          priceType: priceType,
+          limit: 100,
+        );
+        if (generation != _generation) return;
+        state = ProductGridState(
+          products: items,
+          totalCount: items.length,
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+        );
+        return;
+      }
+
+      final page = await lookup.listInStockPage(
+        warehouseId: warehouseId,
+        filter: filter.filter,
+        filterId: filter.filterId,
+        priceType: priceType,
+        offset: append ? state.products.length : 0,
+        limit: _pageSize(),
+      );
 
       if (generation != _generation) return;
 

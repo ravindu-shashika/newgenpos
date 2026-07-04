@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/pos_theme.dart';
 import '../../../core/theme/pos_app_styles.dart';
+import '../cart_line_calc.dart';
 import '../pos_currency.dart';
 import '../models/scanned_product.dart';
 import '../pos_product_image.dart';
@@ -249,7 +250,7 @@ class PosProductCard extends ConsumerWidget {
                   ],
                   const SizedBox(height: 6),
                   Text(
-                    formatPosMoney(product.price),
+                    formatPosMoney(listUnitPrice(product)),
                     style: styles.productPrice,
                   ),
                 ],
@@ -654,14 +655,18 @@ class PosCartLineCard extends StatelessWidget {
     required this.lineTotal,
     required this.onDecrement,
     required this.onIncrement,
+    this.unitDiscount = 0,
     this.onEdit,
     this.enabled = true,
   });
 
   final String name;
+  /// List / real unit price (before item discount).
   final double unitPrice;
   final double qty;
   final double lineTotal;
+  /// Per-unit item discount (max_price − price).
+  final double unitDiscount;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
   final VoidCallback? onEdit;
@@ -761,11 +766,27 @@ class PosCartLineCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '${formatPosMoney(unitPrice)} × $qtyLabel',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: styles.caption.copyWith(fontSize: 13),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${formatPosMoney(unitPrice)} × $qtyLabel',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: styles.caption.copyWith(fontSize: 13),
+                          ),
+                          if (unitDiscount > 0.009)
+                            Text(
+                              'Item discount ${formatPosMoney(unitDiscount)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: styles.caption.copyWith(
+                                fontSize: 12,
+                                color: styles.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     SizedBox(width: 8),

@@ -101,7 +101,6 @@ class SaleAgentController extends Controller
             'lims_designation_list' => Designation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'number_of_employee' => Employee::where('is_active', true)->count(),
             'project_enabled' => in_array('project', $modules, true),
-            'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
         ];
     }
 

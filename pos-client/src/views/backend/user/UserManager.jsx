@@ -16,8 +16,8 @@ import {
     SelectionBar,
 } from '../../../components/ui';
 import api from '../../../services/api';
-import authStore from '../../../stores/authStore';
-import usePermissions from '../../../stores/usePermissions';
+import usePermissions, { usePermissionNames } from '../../../stores/usePermissions';
+import { hasPermission } from '../../../config/permissions';
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
@@ -45,9 +45,14 @@ const INITIAL_FORM = {
     service_staff: false,
 };
 
+/** Spatie names are plural (`users-index`); accept singular aliases too. */
 function hasUserPermission(permissions, key) {
-    const list = Array.isArray(permissions) ? permissions : [];
-    return list.includes(`users-${key}`);
+    return (
+        hasPermission(`users-${key}`, permissions)
+        || hasPermission(`user-${key}`, permissions)
+        || hasPermission(`users.${key}`, permissions)
+        || hasPermission(`user.${key}`, permissions)
+    );
 }
 
 function toOptions(items) {
@@ -67,13 +72,14 @@ function roleIsCustomer(roleId) {
 }
 
 const UserManager = ({ controllerName }) => {
-    const ctrl = controllerName === 'users' ? 'user' : (controllerName || 'user');
-    const authPerms = authStore.getPermissions();
+    // Permissions are `users-*` (plural), same as sidebarMenuConfig.
+    const ctrl = controllerName === 'user' ? 'users' : (controllerName || 'users');
+    const permissionNames = usePermissionNames();
     const perms = usePermissions(ctrl);
-    const canView = perms.canView || hasUserPermission(authPerms, 'index');
-    const canAdd = perms.canAdd || hasUserPermission(authPerms, 'add');
-    const canEdit = perms.canEdit || hasUserPermission(authPerms, 'edit');
-    const canDelete = perms.canDelete || hasUserPermission(authPerms, 'delete');
+    const canView = perms.canView || hasUserPermission(permissionNames, 'index');
+    const canAdd = perms.canAdd || hasUserPermission(permissionNames, 'add');
+    const canEdit = perms.canEdit || hasUserPermission(permissionNames, 'edit');
+    const canDelete = perms.canDelete || hasUserPermission(permissionNames, 'delete');
 
     const [allUsers, setAllUsers] = useState([]);
     const [metadata, setMetadata] = useState({
@@ -82,7 +88,6 @@ const UserManager = ({ controllerName }) => {
         lims_warehouse_list: [],
         lims_account_list: [],
         lims_customer_group_list: [],
-        user_verified: true,
         restaurant_enabled: false,
     });
     const [loading, setLoading] = useState(true);
@@ -122,7 +127,6 @@ const UserManager = ({ controllerName }) => {
                 lims_warehouse_list: data.lims_warehouse_list || [],
                 lims_account_list: data.lims_account_list || [],
                 lims_customer_group_list: data.lims_customer_group_list || [],
-                user_verified: data.user_verified !== false,
                 restaurant_enabled: !!data.restaurant_enabled,
             });
         } catch (err) {
@@ -350,10 +354,6 @@ const UserManager = ({ controllerName }) => {
     };
 
     const handleToggleStatus = async (row, checked) => {
-        if (!metadata.user_verified) {
-            showToast('This feature is disabled for demo.', 'error');
-            return;
-        }
         try {
             await api.post('user/toggle-status', { id: row.id, is_active: checked ? 1 : 0 });
             setAllUsers((prev) =>
@@ -367,11 +367,6 @@ const UserManager = ({ controllerName }) => {
     };
 
     const handleDelete = async () => {
-        if (!metadata.user_verified) {
-            showToast('This feature is disabled for demo.', 'error');
-            setDeleteId(null);
-            return;
-        }
         try {
             const res = await api.delete(`user/${deleteId}`);
             setDeleteId(null);
@@ -387,11 +382,6 @@ const UserManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!metadata.user_verified) {
-            showToast('This feature is disabled for demo.', 'error');
-            setBulkDeleteOpen(false);
-            return;
-        }
         try {
             await api.post('user/deletebyselection', { userIdArray: Array.from(selected) });
             setBulkDeleteOpen(false);
@@ -440,7 +430,7 @@ const UserManager = ({ controllerName }) => {
                     type="checkbox"
                     className="ui-chk"
                     checked={!!row.is_active}
-                    disabled={!canEdit || !metadata.user_verified}
+                    disabled={!canEdit}
                     onChange={(e) => handleToggleStatus(row, e.target.checked)}
                 />
             ),
@@ -455,8 +445,8 @@ const UserManager = ({ controllerName }) => {
                     setOpenId={setOpenMenu}
                     items={[
                         canEdit && { label: '✎ Edit', onClick: () => openEdit(row) },
-                        canDelete && metadata.user_verified && { divider: true },
-                        canDelete && metadata.user_verified && {
+                        canDelete && { divider: true },
+                        canDelete && {
                             label: '🗑 Delete',
                             danger: true,
                             onClick: () => setDeleteId(row.id),
@@ -638,7 +628,7 @@ const UserManager = ({ controllerName }) => {
             actions={
                 <>
                     {canAdd && <button type="button" className="ui-btn primary" onClick={openAdd}>+ Add User</button>}
-                    {selected.size > 0 && canDelete && metadata.user_verified && (
+                    {selected.size > 0 && canDelete && (
                         <button type="button" className="ui-btn danger" onClick={() => setBulkDeleteOpen(true)}>
                             🗑 Delete Selected ({selected.size})
                         </button>
@@ -669,7 +659,7 @@ const UserManager = ({ controllerName }) => {
                 sortCol={sortCol}
                 sortDir={sortDir}
                 onSort={(k) => { setSortCol(k); setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); }}
-                selected={canDelete && metadata.user_verified ? selected : undefined}
+                selected={canDelete ? selected : undefined}
                 onToggleRow={toggleRow}
                 onToggleAll={toggleAll}
             />

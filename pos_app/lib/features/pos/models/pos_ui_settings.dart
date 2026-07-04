@@ -1,8 +1,11 @@
 import 'dart:convert';
 
+import '../../../core/branding/pos_branding.dart';
+
 /// Local POS checkout UI options (shipping, tax, whatsapp).
 class PosUiSettings {
   const PosUiSettings({
+    this.displayAppName = '',
     this.enableShipping = true,
     this.enableTax = true,
     this.enableWhatsapp = false,
@@ -29,6 +32,11 @@ class PosUiSettings {
     this.autoSyncUploadMinutes = PosUiSettings.defaultAutoSyncUploadMinutes,
     this.catalogDownloadBulkMode = false,
   });
+
+  /// Custom app title shown in the window, login, and sidebar. Empty = [PosBranding.appName].
+  final String displayAppName;
+
+  String get effectiveAppName => PosBranding.effectiveAppName(displayAppName);
 
   final bool enableShipping;
   final bool enableTax;
@@ -148,6 +156,8 @@ class PosUiSettings {
   }
 
   PosUiSettings copyWith({
+    String? displayAppName,
+    bool clearDisplayAppName = false,
     bool? enableShipping,
     bool? enableTax,
     bool? enableWhatsapp,
@@ -181,6 +191,9 @@ class PosUiSettings {
     bool? catalogDownloadBulkMode,
   }) {
     return PosUiSettings(
+      displayAppName: clearDisplayAppName
+          ? ''
+          : (displayAppName ?? this.displayAppName),
       enableShipping: enableShipping ?? this.enableShipping,
       enableTax: enableTax ?? this.enableTax,
       enableWhatsapp: enableWhatsapp ?? this.enableWhatsapp,
@@ -228,6 +241,7 @@ class PosUiSettings {
 
   factory PosUiSettings.fromJson(Map<String, dynamic> json) {
     return PosUiSettings(
+      displayAppName: json['display_app_name']?.toString() ?? '',
       enableShipping: _bool(json['enable_shipping'], fallback: true),
       enableTax: _bool(json['enable_tax'], fallback: true),
       enableWhatsapp: _bool(json['enable_whatsapp'], fallback: false),
@@ -272,6 +286,8 @@ class PosUiSettings {
   }
 
   Map<String, dynamic> toJson() => {
+        if (displayAppName.trim().isNotEmpty)
+          'display_app_name': displayAppName.trim(),
         'enable_shipping': enableShipping,
         'enable_tax': enableTax,
         'enable_whatsapp': enableWhatsapp,

@@ -134,10 +134,6 @@ class ThemeSettingController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (config('database.connections.saleprosaas_landlord') && !tenant()) {
             $routePrefix = 'superadminSetting.';
         } else {
@@ -169,10 +165,6 @@ class ThemeSettingController extends Controller
 
     public function update(Request $request, ThemeSetting $themeSetting): RedirectResponse
     {
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (config('database.connections.saleprosaas_landlord') && !tenant()) {
             $routePrefix = 'superadminSetting.';
         } else {
@@ -197,13 +189,8 @@ class ThemeSettingController extends Controller
         }
     }
 
-
     public function destroy(ThemeSetting $themeSetting): RedirectResponse
     {
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (config('database.connections.saleprosaas_landlord') && !tenant()) {
             $routePrefix = 'superadminSetting.';
         } else {
@@ -221,14 +208,6 @@ class ThemeSettingController extends Controller
 
     public function updateActiveFor(Request $request, ThemeSetting $themeSetting): JsonResponse
     {
-        if (!env('USER_VERIFIED')) {
-            return response()->json([
-                'success' => false,
-                'debug_bar' => env('APP_DEBUG', false) ? true : false,
-                'message' => __('db.This feature is disable for demo!'),
-            ], 403);
-        }
-
         $validated = $request->validate([
             'active_for' => ['required', 'array', 'min:1'],
             'active_for.*' => ['required', 'string', 'in:' . implode(',', self::ACTIVE_FOR_OPTIONS)],

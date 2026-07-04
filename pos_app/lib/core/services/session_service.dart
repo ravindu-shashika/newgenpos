@@ -82,6 +82,20 @@ class SessionService {
   bool get isRegistered => _row?.deviceRegistered ?? false;
   bool get isLoggedIn => userId != null;
 
+  /// Registered with a usable server URL (loopback only allowed in dev builds).
+  bool get hasUsableServerUrl {
+    if (!AppConfig.hasStoredPosBaseUrl(posBaseUrl)) return false;
+    if (AppConfig.isLoopbackPosUrl(posBaseUrl)) {
+      return AppConfig.isDevelopment;
+    }
+    return true;
+  }
+
+  /// Effective POS API URL from device session (never invents localhost when
+  /// a URL is already stored — including a bad loopback value we must fix).
+  String get effectivePosBaseUrl =>
+      AppConfig.resolvePosBaseUrl(posBaseUrl);
+
   Future<void> ensureDeviceId() async {
     await ensureLoaded();
     final needsDeviceId =
@@ -181,32 +195,33 @@ class SessionService {
   }
 
   Future<void> savePosToken(String token) async {
+    // Do not touch posBaseUrl — keep the URL the user set at first-time setup.
     await _persist(
       DeviceSessionCompanion(
         id: const Value(1),
         posToken: Value(token),
-        posBaseUrl: Value(AppConfig.posBaseUrl),
       ),
     );
   }
 
   Future<void> savePosBaseUrl(String? url) async {
+    final normalized = url == null || url.trim().isEmpty
+        ? null
+        : AppConfig.normalizePosBaseUrlInput(url);
     await _persist(
       DeviceSessionCompanion(
         id: const Value(1),
-        posBaseUrl: url == null || url.trim().isEmpty
-            ? const Value(null)
-            : Value(url.trim()),
+        posBaseUrl: Value(normalized),
       ),
     );
   }
 
   Future<void> markDeviceRegistered() async {
+    // Preserve configured server URL (never reset to build-time localhost).
     await _persist(
-      DeviceSessionCompanion(
-        id: const Value(1),
-        deviceRegistered: const Value(true),
-        posBaseUrl: Value(AppConfig.posBaseUrl),
+      const DeviceSessionCompanion(
+        id: Value(1),
+        deviceRegistered: Value(true),
       ),
     );
   }
@@ -230,22 +245,48 @@ class SessionService {
   }
 
   Future<void> resetProvision() async {
+    await resetDeviceRegistration();
+  }
+
+  /// Full wipe of registration / tokens so the app shows Register again.
+  /// Keeps [deviceId] so the terminal can be recognized if re-registered.
+  Future<void> resetDeviceRegistration() async {
+    await ensureLoaded();
+    final deviceId = _row?.deviceId;
     await _persist(
-      const DeviceSessionCompanion(
-        id: Value(1),
-        deviceRegistered: Value(false),
-        isProvisioned: Value(false),
-        posBaseUrl: Value(null),
-        terminalId: Value(null),
-        terminalCode: Value(null),
-        terminalName: Value(null),
-        posToken: Value(null),
-        activationToken: Value(null),
-        macAddress: Value(null),
-        clientToken: Value(null),
+      DeviceSessionCompanion(
+        id: const Value(1),
+        deviceRegistered: const Value(false),
+        isProvisioned: const Value(false),
+        posBaseUrl: const Value(null),
+        terminalId: const Value(null),
+        terminalCode: const Value(null),
+        terminalName: const Value(null),
+        posToken: const Value(null),
+        activationToken: const Value(null),
+        macAddress: const Value(null),
+        clientToken: const Value(null),
+        authToken: const Value(null),
+        userName: const Value(null),
+        userId: const Value(null),
+        billerId: const Value(null),
+        customerId: const Value(null),
+        warehouseId: const Value(null),
+        deviceId: deviceId == null || deviceId.isEmpty
+            ? const Value.absent()
+            : Value(deviceId),
       ),
     );
-    await clear();
+  }
+
+  /// If an old build stored localhost after register, clear registration so
+  /// the user must enter the real server URL again.
+  Future<bool> repairInvalidServerUrlRegistration() async {
+    await ensureLoaded();
+    if (!isRegistered) return false;
+    if (hasUsableServerUrl) return false;
+    await resetDeviceRegistration();
+    return true;
   }
 
   Future<void> setWarehouseId(int id) async {
@@ -260,9 +301,27 @@ class SessionService {
     );
   }
 
+  Future<void> clearCustomerId() async {
+    await _persist(
+      const DeviceSessionCompanion(
+        id: Value(1),
+        customerId: Value(null),
+      ),
+    );
+  }
+
   Future<void> setBillerId(int id) async {
     await _persist(
       DeviceSessionCompanion(id: const Value(1), billerId: Value(id)),
+    );
+  }
+
+  Future<void> clearBillerId() async {
+    await _persist(
+      const DeviceSessionCompanion(
+        id: Value(1),
+        billerId: Value(null),
+      ),
     );
   }
 

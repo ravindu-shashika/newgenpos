@@ -269,19 +269,38 @@ class PosDownloadService
 
     private function chunkUsers(int $page, int $perPage, array $opts, ?int $cursorId): array
     {
-        $query = $this->applySince(User::where('is_active', true), $opts['since'] ?? null);
-        $result = $this->chunkByCursor(
-            $query->select(['id', 'name', 'username', 'email', 'password', 'access_pin', 'warehouse_id', 'role_id', 'biller_id', 'updated_at']),
-            $perPage,
-            $cursorId,
-            $page
-        );
-        $result['data'] = collect($result['data'])->map(function ($row) {
-            $user = new User($row);
+        // Keep Eloquent models until after makeVisible — toArray() on hidden
+        // attributes would strip password/access_pin and POS would import zero users.
+        $query = $this->applySince(User::where('is_active', true), $opts['since'] ?? null)
+            ->select([
+                'id', 'name', 'username', 'email', 'password', 'access_pin',
+                'warehouse_id', 'role_id', 'biller_id', 'updated_at',
+            ]);
+
+        $table = (new User)->getTable();
+        if ($cursorId !== null && $cursorId > 0) {
+            $query->where($table.'.id', '>', $cursorId);
+            $rows = $query->orderBy($table.'.id')->limit($perPage + 1)->get();
+        } else {
+            $rows = $query->orderBy($table.'.id')->forPage($page, $perPage + 1)->get();
+        }
+
+        $hasMore = $rows->count() > $perPage;
+        if ($hasMore) {
+            $rows = $rows->take($perPage);
+        }
+
+        $data = $rows->map(function (User $user) {
             return $user->makeVisible(['password', 'access_pin'])->toArray();
         })->values()->all();
 
-        return $result;
+        $nextCursor = $rows->isNotEmpty() ? (int) $rows->last()->id : null;
+
+        return [
+            'data' => $data,
+            'next_cursor_id' => $hasMore ? $nextCursor : null,
+            'has_more' => $hasMore,
+        ];
     }
 
     private function chunkCategories(int $page, int $perPage, array $opts, ?int $cursorId): array

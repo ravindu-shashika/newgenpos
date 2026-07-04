@@ -130,6 +130,7 @@ class LocalReturnRepository {
     ReturnSaleLookup? lookup,
     int? billerId,
     String? returnNote,
+    double? creditAmount,
   }) async {
     if (lines.isEmpty) {
       throw StateError('Select at least one item to return.');
@@ -166,6 +167,7 @@ class LocalReturnRepository {
             lookup.customerId > 0 ? lookup.customerId : customerId,
         saleId: lookup.saleId,
         returnNote: returnNote,
+        creditAmount: creditAmount,
       );
     }
 
@@ -196,6 +198,7 @@ class LocalReturnRepository {
       customerId: customerId,
       billerId: billerId,
       returnNote: returnNote,
+      creditAmount: creditAmount,
     );
   }
 
@@ -207,6 +210,7 @@ class LocalReturnRepository {
     required int customerId,
     int? saleId,
     String? returnNote,
+    double? creditAmount,
   }) async {
     final clientUuid = _uuid.v4();
     var totalQty = 0.0;
@@ -253,8 +257,10 @@ class LocalReturnRepository {
 
     final orderTax =
         (totalPrice - lookup.orderDiscount) * (lookup.orderTaxRate / 100);
-    final grandTotal =
-        totalPrice + orderTax - lookup.orderDiscount;
+    final computedTotal = totalPrice + orderTax - lookup.orderDiscount;
+    final grandTotal = creditAmount == null
+        ? computedTotal
+        : creditAmount.clamp(0, computedTotal).toDouble();
 
     final payload = {
       'client_uuid': clientUuid,
@@ -341,6 +347,7 @@ class LocalReturnRepository {
     required int customerId,
     int? billerId,
     String? returnNote,
+    double? creditAmount,
   }) async {
     final clientUuid = _uuid.v4();
     var totalQty = 0.0;
@@ -391,7 +398,9 @@ class LocalReturnRepository {
       throw StateError('Select at least one item to return.');
     }
 
-    final grandTotal = totalPrice;
+    final grandTotal = creditAmount == null
+        ? totalPrice
+        : creditAmount.clamp(0, totalPrice).toDouble();
     final referenceNo = generateReturnReference();
     final createdAt = DateTime.now();
 

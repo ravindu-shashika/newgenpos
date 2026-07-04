@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/pos_theme.dart';
 import 'pos_touch_keyboard_controller.dart';
 
-class PosTouchTextKeyboard extends StatelessWidget {
+/// On-screen QWERTY keyboard with Shift / Caps for capital letters.
+class PosTouchTextKeyboard extends StatefulWidget {
   const PosTouchTextKeyboard({
     super.key,
     required this.controller,
@@ -13,16 +14,61 @@ class PosTouchTextKeyboard extends StatelessWidget {
   final PosTouchKeyboardController controller;
   final int maxLines;
 
-  static const _rows = [
-    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+  @override
+  State<PosTouchTextKeyboard> createState() => _PosTouchTextKeyboardState();
+}
+
+class _PosTouchTextKeyboardState extends State<PosTouchTextKeyboard> {
+  /// 0 = off, 1 = shift (next letter only), 2 = caps lock (sticky).
+  int _shiftMode = 0;
+
+  static const _digitRow = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+  static const _letterRows = [
     ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
     ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '@'],
     ['z', 'x', 'c', 'v', 'b', 'n', 'm', '.', '-', '_'],
   ];
 
+  bool get _upper => _shiftMode > 0;
+
+  void _toggleShift() {
+    setState(() {
+      // Off → Shift (one letter) → Caps lock → Off
+      _shiftMode = (_shiftMode + 1) % 3;
+    });
+  }
+
+  void _insertKey(String key) {
+    final isLetter = key.length == 1 &&
+        key.toLowerCase() != key.toUpperCase() &&
+        key.toLowerCase().codeUnitAt(0) >= 97 &&
+        key.toLowerCase().codeUnitAt(0) <= 122;
+
+    final text = isLetter && _upper ? key.toUpperCase() : key;
+    widget.controller.insertText(text);
+
+    // One-shot shift: return to lowercase after a letter.
+    if (isLetter && _shiftMode == 1) {
+      setState(() => _shiftMode = 0);
+    }
+  }
+
+  String _displayLabel(String key) {
+    final isLetter = key.length == 1 &&
+        key.toLowerCase() != key.toUpperCase() &&
+        key.toLowerCase().codeUnitAt(0) >= 97 &&
+        key.toLowerCase().codeUnitAt(0) <= 122;
+    if (isLetter && _upper) return key.toUpperCase();
+    return key;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.posStyles;
+    final brand = context.posBrand;
+    final shiftActive = _shiftMode > 0;
+    final capsLock = _shiftMode == 2;
+
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -37,54 +83,62 @@ class PosTouchTextKeyboard extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                for (final row in _rows)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        for (final key in row)
-                          Expanded(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 3),
-                              child: _KeyButton(
-                                label: key,
-                                onPressed: () => controller.insertText(key),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                _buildRow(
+                  _digitRow.map(_displayLabel).toList(),
+                  onKey: _insertKey,
+                ),
+                for (final row in _letterRows)
+                  _buildRow(
+                    row.map(_displayLabel).toList(),
+                    onKey: (label) {
+                      // Map displayed label back to base key for insert logic.
+                      final base = label.toLowerCase();
+                      _insertKey(base == '@' ||
+                              base == '.' ||
+                              base == '-' ||
+                              base == '_'
+                          ? label
+                          : base);
+                    },
                   ),
                 Row(
                   children: [
+                    _KeyButton(
+                      label: capsLock ? 'CAPS' : '⇧',
+                      width: 72,
+                      color: shiftActive ? brand.buttonPrimary : null,
+                      foreground: shiftActive ? Colors.white : null,
+                      onPressed: _toggleShift,
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       flex: 2,
                       child: _KeyButton(
                         label: 'Space',
-                        onPressed: () => controller.insertText(' '),
+                        onPressed: () => widget.controller.insertText(' '),
                       ),
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     _KeyButton(
                       label: '⌫',
-                      width: 72,
-                      onPressed: controller.backspace,
+                      width: 64,
+                      onPressed: widget.controller.backspace,
                     ),
-                    SizedBox(width: 6),
-                    if (maxLines > 1)
+                    if (widget.maxLines > 1) ...[
+                      const SizedBox(width: 6),
                       _KeyButton(
                         label: 'Enter',
-                        width: 72,
-                        onPressed: () => controller.insertText('\n'),
+                        width: 64,
+                        onPressed: () => widget.controller.insertText('\n'),
                       ),
-                    SizedBox(width: 6),
+                    ],
+                    const SizedBox(width: 6),
                     _KeyButton(
                       label: 'Done',
                       width: 72,
-                      color: context.posBrand.buttonPrimary,
+                      color: brand.buttonPrimary,
                       foreground: Colors.white,
-                      onPressed: controller.detach,
+                      onPressed: widget.controller.detach,
                     ),
                   ],
                 ),
@@ -92,6 +146,29 @@ class PosTouchTextKeyboard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRow(
+    List<String> keys, {
+    required void Function(String key) onKey,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          for (final key in keys)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: _KeyButton(
+                  label: key,
+                  onPressed: () => onKey(key),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -141,7 +218,7 @@ class _KeyButton extends StatelessWidget {
             : Text(
                 label,
                 style: TextStyle(
-                  fontSize: label.length > 1 ? 13 : 16,
+                  fontSize: label.length > 1 ? 12 : 16,
                   fontWeight: FontWeight.w700,
                   color: fg,
                 ),

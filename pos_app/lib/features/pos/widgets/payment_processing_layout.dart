@@ -8,7 +8,7 @@ import 'pos_amount_numpad.dart';
 /// Payment modal width — wide layout for touch POS.
 const kPosPaymentDialogWidth = 1160.0;
 
-const kPosCashTabQuickAmounts = [20, 50, 100, 500, 1000, 2000, 5000];
+const kPosCashTabQuickAmounts = [50, 100, 500, 1000, 2000, 5000];
 
 class PaymentProcessingHeader extends StatelessWidget {
   const PaymentProcessingHeader({
@@ -678,43 +678,52 @@ class PaymentKeypadColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.posStyles;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-      decoration: BoxDecoration(
-        color: s.inputFill.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: s.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'KEYPAD',
-            textAlign: TextAlign.center,
-            style: s.caption.copyWith(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              fontSize: 10,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tight = constraints.maxHeight > 0 && constraints.maxHeight < 280;
+        return Container(
+          padding: EdgeInsets.fromLTRB(10, tight ? 4 : 8, 10, tight ? 6 : 10),
+          decoration: BoxDecoration(
+            color: s.inputFill.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: s.border),
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: PosPaymentNumpad(
-              controller: controller,
-              onChanged: onChanged,
-              allowDecimal: allowDecimal,
-              maxLength: maxLength,
-              clearButtonLabel: clearButtonLabel,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!tight) ...[
+                Text(
+                  'KEYPAD',
+                  textAlign: TextAlign.center,
+                  style: s.caption.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              Expanded(
+                child: PosPaymentNumpad(
+                  controller: controller,
+                  onChanged: onChanged,
+                  allowDecimal: allowDecimal,
+                  maxLength: maxLength,
+                  clearButtonLabel: clearButtonLabel,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class PaymentFooterBar extends StatelessWidget {
-  const PaymentFooterBar({
+/// Complete action sits under the left payment column only (not full dialog width),
+/// so the keypad column can use the full body height.
+class PaymentCompleteButton extends StatelessWidget {
+  const PaymentCompleteButton({
     super.key,
     required this.canComplete,
     required this.busy,
@@ -735,81 +744,92 @@ class PaymentFooterBar extends StatelessWidget {
     final brand = context.posBrand;
     final hasStatusHint = !canComplete && statusHint != null;
 
-    final completeButton = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 480),
-      child: SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: busy || !canComplete ? null : onComplete,
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(double.infinity, 58),
-            backgroundColor: canComplete ? brand.buttonPrimary : null,
-            foregroundColor: s.onBrand,
-            disabledForegroundColor: s.textMuted,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+    final button = SizedBox(
+      width: double.infinity,
+      height: 44,
+      child: FilledButton(
+        onPressed: busy || !canComplete ? null : onComplete,
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(double.infinity, 44),
+          maximumSize: const Size(double.infinity, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          backgroundColor: canComplete ? brand.buttonPrimary : null,
+          foregroundColor: s.onBrand,
+          disabledForegroundColor: s.textMuted,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: s.onBrand,
-                  ),
-                )
-              else
-                Icon(
-                  Icons.check_circle_rounded,
-                  size: 24,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
                   color: s.onBrand,
                 ),
-              const SizedBox(width: 10),
-              Text(
+              )
+            else
+              Icon(
+                Icons.check_circle_rounded,
+                size: 20,
+                color: s.onBrand,
+              ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
                 busy ? 'Processing…' : completeLabel,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.4,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
                   color: s.onBrand,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      decoration: BoxDecoration(
-        color: s.cardBg,
-        border: Border(top: BorderSide(color: s.border)),
-      ),
-      child: hasStatusHint
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  statusHint!,
-                  textAlign: TextAlign.center,
-                  style: s.body.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: s.danger,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Center(child: completeButton),
-              ],
-            )
-          : Center(child: completeButton),
+    if (!hasStatusHint) return button;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          statusHint!,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: s.caption.copyWith(
+            fontWeight: FontWeight.w600,
+            color: s.danger,
+          ),
+        ),
+        const SizedBox(height: 6),
+        button,
+      ],
     );
   }
+}
+
+/// @deprecated Use [PaymentCompleteButton] under the left column.
+class PaymentFooterBar extends PaymentCompleteButton {
+  const PaymentFooterBar({
+    super.key,
+    required super.canComplete,
+    required super.busy,
+    required super.onComplete,
+    super.completeLabel,
+    super.statusHint,
+  });
 }
 
 class PaymentCardDetailsFields extends StatelessWidget {

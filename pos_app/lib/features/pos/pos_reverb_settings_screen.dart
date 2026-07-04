@@ -240,9 +240,11 @@ class _PosReverbSettingsScreenState extends ConsumerState<PosReverbSettingsScree
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable live stock sync'),
-                  subtitle: const Text(
-                    'Connect to Reverb WebSocket for realtime stock updates',
+                  title: const Text('Enable Reverb (live stock sync)'),
+                  subtitle: Text(
+                    local.enableLiveStockSync
+                        ? 'Connect to Reverb for realtime stock updates'
+                        : 'Off — no Reverb connection and no failure alerts',
                   ),
                   value: local.enableLiveStockSync,
                   onChanged: _busy
@@ -265,6 +267,9 @@ class _PosReverbSettingsScreenState extends ConsumerState<PosReverbSettingsScree
                                     posRealtimeConnectionStateProvider.notifier,
                                   )
                                   .state = PosRealtimeConnectionState.disabled;
+                              ref
+                                  .read(posRealtimeFailureProvider.notifier)
+                                  .state = null;
                             }
                           } finally {
                             if (mounted) setState(() => _busy = false);

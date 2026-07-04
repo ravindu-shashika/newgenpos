@@ -90,7 +90,6 @@ class LeaveTypeController extends Controller
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [
                 'leave_types' => $this->leaveTypeList(),
-                'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
             ]);
         }
 

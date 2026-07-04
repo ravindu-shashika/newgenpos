@@ -286,61 +286,64 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
     }
   }
 
-  Widget _buildGrid() {
-    const crossCount = 3;
-    const rowCount = 4;
-    final mainSpacing = widget.compact ? 4.0 : 8.0;
-    final crossSpacing = widget.compact ? 4.0 : 8.0;
-
-    Widget grid(double width, double height) {
-      var aspectRatio = widget.compact ? 2.4 : 1.65;
-      if (widget.fillHeight && height > 0 && width > 0) {
-        final cellHeight = (height - mainSpacing * (rowCount - 1)) / rowCount;
-        final cellWidth =
-            (width - crossSpacing * (crossCount - 1)) / crossCount;
-        aspectRatio = cellWidth / cellHeight;
-      }
-
-      return GridView.count(
-        shrinkWrap: !widget.fillHeight,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: crossCount,
-        mainAxisSpacing: mainSpacing,
-        crossAxisSpacing: crossSpacing,
-        childAspectRatio: aspectRatio,
-        children: [
-          for (final key in _keys)
-            key.isEmpty
-                ? const _NumpadKeyPlaceholder()
-                : _NumpadKey(
-                    label: key,
-                    largeTouch: widget.largeTouch,
-                    compact: widget.compact,
-                    lightKeys: widget.lightKeys,
-                    style: widget.style,
-                    onPressed: () => _onKey(key),
-                  ),
-        ],
-      );
-    }
-
-    if (widget.fillHeight) {
-      return LayoutBuilder(
-        builder: (context, constraints) => SizedBox(
-          height: constraints.maxHeight,
-          child: grid(constraints.maxWidth, constraints.maxHeight),
-        ),
-      );
-    }
-
-    return grid(0, 0);
+  Widget _keyAt(String key) {
+    if (key.isEmpty) return const _NumpadKeyPlaceholder();
+    return _NumpadKey(
+      label: key,
+      largeTouch: widget.largeTouch,
+      compact: widget.compact,
+      lightKeys: widget.lightKeys,
+      style: widget.style,
+      onPressed: () => _onKey(key),
+    );
   }
 
-  Widget _buildClearButton() {
+  /// Column/Row layout scales with available space (avoids GridView clipping).
+  Widget _buildGrid({required bool expandRows, double? fixedRowHeight}) {
+    const crossCount = 3;
+    const rowCount = 4;
+    final mainSpacing = widget.compact ? 4.0 : 6.0;
+    final crossSpacing = widget.compact ? 4.0 : 6.0;
+    final keys = _keys;
+
+    return Column(
+      children: [
+        for (var r = 0; r < rowCount; r++) ...[
+          if (r > 0) SizedBox(height: mainSpacing),
+          if (expandRows)
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var c = 0; c < crossCount; c++) ...[
+                    if (c > 0) SizedBox(width: crossSpacing),
+                    Expanded(child: _keyAt(keys[r * crossCount + c])),
+                  ],
+                ],
+              ),
+            )
+          else
+            SizedBox(
+              height: fixedRowHeight ?? (widget.largeTouch ? 52 : 44),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var c = 0; c < crossCount; c++) ...[
+                    if (c > 0) SizedBox(width: crossSpacing),
+                    Expanded(child: _keyAt(keys[r * crossCount + c])),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildClearButton({required double height}) {
     final danger = context.posStyles.danger;
-    final clearHeight = widget.largeTouch
-        ? (_paymentStyle ? 56.0 : 52.0)
-        : 48.0;
+    final iconSize = height < 40 ? 16.0 : 18.0;
+    final fontSize = height < 40 ? 12.0 : 14.0;
     return Material(
       color: danger.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(10),
@@ -348,25 +351,31 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
         onTap: _clearAll,
         borderRadius: BorderRadius.circular(10),
         child: Container(
-          height: clearHeight,
+          height: height,
           alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: danger.withValues(alpha: 0.3)),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.delete_outline, color: danger, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                widget.clearButtonLabel,
-                style: TextStyle(
-                  color: danger,
-                  fontWeight: FontWeight.w700,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete_outline, color: danger, size: iconSize),
+                const SizedBox(width: 6),
+                Text(
+                  widget.clearButtonLabel,
+                  style: TextStyle(
+                    color: danger,
+                    fontWeight: FontWeight.w700,
+                    fontSize: fontSize,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -375,31 +384,87 @@ class _PosAmountNumpadState extends State<PosAmountNumpad> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.showQuickCash) ...[
-          PosQuickCashBar(
-            controller: widget.controller,
-            onChanged: widget.onChanged,
-            quickAmounts: widget.quickAmounts,
-            quickCashInitial: widget.quickCashInitial,
-            onQuickCashUsed: () {
-              _afterQuickCash();
-              widget.onQuickCashUsed?.call();
-            },
-          ),
-          SizedBox(height: 10),
+    if (!widget.fillHeight) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.showQuickCash) ...[
+            PosQuickCashBar(
+              controller: widget.controller,
+              onChanged: widget.onChanged,
+              quickAmounts: widget.quickAmounts,
+              quickCashInitial: widget.quickCashInitial,
+              onQuickCashUsed: () {
+                _afterQuickCash();
+                widget.onQuickCashUsed?.call();
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          _buildGrid(expandRows: false),
+          if (widget.showClearButton) ...[
+            const SizedBox(height: 8),
+            _buildClearButton(height: widget.largeTouch ? 48 : 44),
+          ],
         ],
-        if (widget.fillHeight)
-          Expanded(child: _buildGrid())
-        else
-          _buildGrid(),
-        if (widget.showClearButton) ...[
-          SizedBox(height: 10),
-          _buildClearButton(),
-        ],
-      ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxH = constraints.maxHeight;
+        final maxW = constraints.maxWidth;
+        // Keep clear bar proportional so digit rows stay tall enough.
+        var clearH = widget.showClearButton
+            ? (widget.largeTouch ? 44.0 : 40.0)
+            : 0.0;
+        var gap = widget.showClearButton ? 8.0 : 0.0;
+        if (maxH > 0 && maxH < 220 && widget.showClearButton) {
+          clearH = 34;
+          gap = 6;
+        }
+
+        final gridH = maxH > 0 ? (maxH - clearH - gap).clamp(0.0, maxH) : 0.0;
+        // Prefer flexible rows; if height is tiny, use a scrollable min size.
+        final minGridH = widget.largeTouch ? 168.0 : 140.0;
+        final useScroll = gridH > 0 && gridH < minGridH;
+
+        final grid = useScroll
+            ? SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: SizedBox(
+                  height: minGridH,
+                  width: maxW,
+                  child: _buildGrid(expandRows: true),
+                ),
+              )
+            : _buildGrid(expandRows: true);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.showQuickCash) ...[
+              PosQuickCashBar(
+                controller: widget.controller,
+                onChanged: widget.onChanged,
+                quickAmounts: widget.quickAmounts,
+                quickCashInitial: widget.quickCashInitial,
+                onQuickCashUsed: () {
+                  _afterQuickCash();
+                  widget.onQuickCashUsed?.call();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+            Expanded(child: grid),
+            if (widget.showClearButton) ...[
+              SizedBox(height: gap),
+              _buildClearButton(height: clearH),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -651,36 +716,48 @@ class _NumpadKey extends StatelessWidget {
       }
     }
 
+    final baseFont = compact
+        ? 15.0
+        : (largeTouch ? (payment ? 28.0 : 24.0) : 20.0);
+    final baseIcon = compact ? 18.0 : (largeTouch ? 26.0 : 22.0);
+
     return Material(
       color: bg,
       elevation: isBackspace || lightKeys || payment ? 0 : 1,
       shadowColor: Colors.black12,
       borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed,
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          alignment: Alignment.center,
+        child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: borderColor),
           ),
-          child: isBackspace
-              ? Icon(
-                  Icons.backspace_outlined,
-                  color: fg,
-                  size: compact ? 18 : (largeTouch ? 28 : 26),
-                )
-              : Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: compact
-                        ? 15
-                        : (largeTouch ? (payment ? 36 : 32) : 22),
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                  ),
-                ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: isBackspace
+                    ? Icon(
+                        Icons.backspace_outlined,
+                        color: fg,
+                        size: baseIcon,
+                      )
+                    : Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: baseFont,
+                          fontWeight: FontWeight.w700,
+                          height: 1.0,
+                          color: fg,
+                        ),
+                      ),
+              ),
+            ),
+          ),
         ),
       ),
     );

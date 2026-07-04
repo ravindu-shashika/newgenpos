@@ -86,12 +86,6 @@ class AccountDashboardController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        if (!env('USER_VERIFIED')) {
-            return $this->spaJson($request, [
-                'message' => __('db.This feature is disable for demo!'),
-            ], 403);
-        }
-
         if (!$this->userCanAccess()) {
             return $this->spaJson($request, [
                 'message' => __('db.Sorry! You are not allowed to access this module'),

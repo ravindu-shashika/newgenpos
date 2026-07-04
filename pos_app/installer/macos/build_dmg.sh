@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds KOOBIYA POS macOS .dmg from Flutter release.
+# Builds NEWGENID POS macOS .dmg from Flutter release.
 # Requires: Flutter SDK, macOS with hdiutil
 
 set -euo pipefail
@@ -14,7 +14,7 @@ APP_SRC="$POS_APP_DIR/build/macos/Build/Products/Release/pos_app.app"
 # shellcheck source=/dev/null
 source "$INSTALLER_DIR/scripts/read_version.sh"
 
-DMG_NAME="KOOBIYA-POS-${APP_VERSION}-macos.dmg"
+DMG_NAME="NEWGENID-POS-${APP_VERSION}-macos.dmg"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 
 echo "==> flutter pub get"
@@ -39,7 +39,7 @@ rm -f "$DMG_PATH"
 
 echo "==> hdiutil create"
 hdiutil create \
-  -volname "KOOBIYA POS" \
+  -volname "NEWGENID POS" \
   -srcfolder "$STAGING_DIR" \
   -ov \
   -format UDZO \

@@ -116,6 +116,7 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
           child: PosSidebar(
             activeSection: widget.activeSection,
             sidebarLogoPath: sidebarLogoPath,
+            displayAppName: uiSettings.displayAppName,
             onDashboard: widget.onDashboard,
             onRegister: widget.onRegister,
             onInventory: widget.onInventory,

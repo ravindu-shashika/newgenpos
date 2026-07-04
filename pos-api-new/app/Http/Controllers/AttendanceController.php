@@ -153,7 +153,6 @@ class AttendanceController extends Controller
                     'checkout' => $hrmSetting->checkout ?? '',
                 ],
                 'date_format' => $generalSetting->date_format ?? 'd-m-Y',
-                'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
             ]);
         }
 

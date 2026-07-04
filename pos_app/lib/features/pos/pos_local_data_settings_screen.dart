@@ -9,6 +9,7 @@ import '../../core/database/local_database_config.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/local_database_settings_provider.dart';
 import '../../core/providers/local_reverb_settings_provider.dart';
+import '../../core/realtime/pos_realtime_service.dart';
 import '../../core/sync/database_backup_scheduler.dart';
 import '../../core/theme/pos_theme.dart';
 import 'models/local_database_settings.dart';
@@ -374,18 +375,48 @@ class _PosLocalDataSettingsScreenState
           PosSettingsSectionCard(
             icon: Icons.podcasts_outlined,
             title: 'Live stock sync',
-            subtitle: 'Reverb WebSocket — configure on the Reverb setup page',
+            subtitle: 'Reverb WebSocket — turn off to stop connection alerts',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ListTile(
+                SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Reverb'),
+                  title: const Text('Enable Reverb'),
                   subtitle: Text(
                     reverb.enableLiveStockSync
-                        ? 'Enabled on this terminal'
-                        : 'Disabled on this terminal',
+                        ? 'Realtime stock updates on'
+                        : 'Off — no Reverb connection or failure alerts',
                   ),
+                  value: reverb.enableLiveStockSync,
+                  onChanged: _busy
+                      ? null
+                      : (enabled) async {
+                          setState(() => _busy = true);
+                          try {
+                            await ref
+                                .read(localReverbSettingsProvider.notifier)
+                                .patch(
+                                  (s) => s.copyWith(
+                                    enableLiveStockSync: enabled,
+                                  ),
+                                );
+                            if (enabled) {
+                              await connectPosRealtimeIfConfigured(ref);
+                            } else {
+                              await disconnectPosRealtime(ref);
+                              ref
+                                  .read(
+                                    posRealtimeConnectionStateProvider.notifier,
+                                  )
+                                  .state = PosRealtimeConnectionState.disabled;
+                              ref
+                                  .read(posRealtimeFailureProvider.notifier)
+                                  .state = null;
+                            }
+                          } finally {
+                            if (mounted) setState(() => _busy = false);
+                          }
+                        },
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(

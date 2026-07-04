@@ -176,7 +176,6 @@ class UserController extends Controller
             'lims_account_list' => Account::select('id', 'name')->where('is_active', true)->orderBy('name')->get(),
             'lims_customer_group_list' => CustomerGroup::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'number_of_user_account' => User::where('is_active', true)->count(),
-            'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
             'restaurant_enabled' => in_array('restaurant', $modules, true),
         ];
     }
@@ -453,16 +452,6 @@ class UserController extends Controller
             return $this->denyUserAccess($request);
         }
 
-        if(!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         $lims_user_data = User::findOrFail($id);
 
         $this->validate($request, [
@@ -510,12 +499,6 @@ class UserController extends Controller
             return $this->denyUserAccess($request);
         }
 
-        if(!env('USER_VERIFIED')) {
-            return response()->json([
-                'success' => false,
-                'message' => __('db.This feature is disable for demo!'),
-            ], 403);
-        }
         
         $user = User::find($request->id);
 
@@ -567,16 +550,6 @@ class UserController extends Controller
             return $this->denyProfileAccess($request);
         }
 
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         $lims_user_data = User::findOrFail($id);
 
         $this->validate($request, [
@@ -608,16 +581,6 @@ class UserController extends Controller
     {
         if (!$this->canUpdateProfile((int) $id)) {
             return $this->denyProfileAccess($request);
-        }
-
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
 
         $this->validate($request, [
@@ -669,16 +632,6 @@ class UserController extends Controller
             return $this->denyUserAccess($request);
         }
 
-        if(!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return response('This feature is disable for demo!', 403);
-        }
-
         $user_id = $request->input('userIdArray', []);
         
         foreach ($user_id as $id) {
@@ -704,16 +657,6 @@ class UserController extends Controller
     {
         if (!$this->userCanAccessUsers('delete')) {
             return $this->denyUserAccess($request);
-        }
-
-        if(!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
 
         $lims_user_data = User::find($id);

@@ -43,6 +43,7 @@ class PosRealtimeService {
   int? _warehouseId;
   bool _disposed = false;
   bool _handlingFailure = false;
+  bool _suppressFailureAlerts = false;
 
   PosRealtimeConnectionState _state = PosRealtimeConnectionState.disabled;
 
@@ -57,6 +58,7 @@ class PosRealtimeService {
     _token = posToken;
     _warehouseId = warehouseId;
     _handlingFailure = false;
+    _suppressFailureAlerts = false;
 
     if (!config.isValid) {
       _setState(PosRealtimeConnectionState.disabled);
@@ -121,7 +123,8 @@ class PosRealtimeService {
   }
 
   Future<void> _handleConnectionFailure(Object exception) async {
-    if (_handlingFailure || _disposed) return;
+    // Intentional disconnect / disabled — never surface failure alerts.
+    if (_handlingFailure || _disposed || _suppressFailureAlerts) return;
     _handlingFailure = true;
 
     final endpoint = _config.wsUrl;
@@ -167,8 +170,10 @@ class PosRealtimeService {
   }
 
   Future<void> disconnect() async {
-    _handlingFailure = false;
+    _suppressFailureAlerts = true;
+    _handlingFailure = true;
     await _tearDownClient(notifyDisconnected: true);
+    _handlingFailure = false;
   }
 
   Future<void> dispose() async {
@@ -207,8 +212,12 @@ final posRealtimeServiceProvider = Provider<PosRealtimeService>((ref) {
     onEventReceived: (at) {
       ref.read(posRealtimeLastEventProvider.notifier).state = at;
       ref.read(productGridProvider.notifier).reload();
+      // Inventory / dashboard pages watch this and reload from local DB.
+      ref.read(syncRevisionProvider.notifier).state++;
     },
     onConnectionFailed: (message) {
+      // Never alert when live stock sync is turned off on this terminal.
+      if (!ref.read(localReverbSettingsProvider).enableLiveStockSync) return;
       ref.read(posRealtimeFailureProvider.notifier).state = message;
     },
   );
@@ -219,11 +228,13 @@ final posRealtimeServiceProvider = Provider<PosRealtimeService>((ref) {
 });
 
 Future<void> connectPosRealtimeIfConfigured(WidgetRef ref) async {
+  await ref.read(localReverbSettingsProvider.notifier).ensureLoaded();
   final local = ref.read(localReverbSettingsProvider);
   if (!local.enableLiveStockSync) {
     await ref.read(posRealtimeServiceProvider).disconnect();
     ref.read(posRealtimeConnectionStateProvider.notifier).state =
         PosRealtimeConnectionState.disabled;
+    ref.read(posRealtimeFailureProvider.notifier).state = null;
     return;
   }
 
@@ -272,6 +283,7 @@ Future<void> disconnectPosRealtime(WidgetRef ref) async {
   await ref.read(posRealtimeServiceProvider).disconnect();
   ref.read(posRealtimeConnectionStateProvider.notifier).state =
       PosRealtimeConnectionState.disconnected;
+  ref.read(posRealtimeFailureProvider.notifier).state = null;
 }
 
 Future<void> refreshPosRealtimeConfigFromServer(WidgetRef ref) async {

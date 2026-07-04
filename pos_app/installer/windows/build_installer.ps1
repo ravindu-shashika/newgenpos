@@ -1,4 +1,4 @@
-# Builds KOOBIYA POS Windows release and Inno Setup installer.
+# Builds NEWGENID POS Windows release and Inno Setup installer.
 # Requires: Flutter SDK, Inno Setup 6 (ISCC.exe)
 
 $ErrorActionPreference = "Stop"
@@ -39,11 +39,11 @@ try {
     & $Iscc `
         "/DMyAppVersion=$AppVersion" `
         "/DMyAppBuild=$AppBuild" `
-        (Join-Path $WindowsDir "koobiya_pos.iss")
+        (Join-Path $WindowsDir "newgenidpos.iss")
 
     Write-Host ""
     Write-Host "Done. Installer output:"
-    Get-ChildItem $OutputDir -Filter "KOOBIYA-POS-Setup-*.exe" | ForEach-Object { Write-Host "  $($_.FullName)" }
+    Get-ChildItem $OutputDir -Filter "NEWGENIDPOS-Setup-*.exe" | ForEach-Object { Write-Host "  $($_.FullName)" }
 } finally {
     Pop-Location
 }

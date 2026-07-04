@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/branding/pos_branding.dart';
 import 'core/database/app_database.dart';
 import 'core/database/local_database_config.dart';
 import 'core/repositories/local_database_settings_repository.dart';
@@ -31,12 +30,17 @@ Future<void> main() async {
   final db = AppDatabase(databaseFilePath: dbPath);
   final session = SessionService(db);
   await session.ensureLoaded();
-  await session.migrateFromSharedPreferencesIfNeeded(); 
+  await session.migrateFromSharedPreferencesIfNeeded();
+
+  // Old builds overwrote the server URL with 127.0.0.1 after register.
+  // Force Register screen so the user must enter the real API URL again.
+  await session.repairInvalidServerUrlRegistration();
 
   if (!session.isRegistered &&
       session.isTerminalRegistered &&
       session.posToken != null &&
-      session.posToken!.isNotEmpty) {
+      session.posToken!.isNotEmpty &&
+      session.hasUsableServerUrl) {
     await session.markDeviceRegistered();
   }
 
@@ -70,6 +74,9 @@ class _PosAppState extends ConsumerState<PosApp> {
     final uiSettings = ref.read(posUiSettingsProvider);
     final primary = resolvePosBrandTheme(uiSettings).primary;
     unawaited(PosWindowService.instance.applyThemeColor(primary));
+    unawaited(
+      PosWindowService.instance.setAppTitle(uiSettings.effectiveAppName),
+    );
   }
 
   @override
@@ -84,7 +91,7 @@ class _PosAppState extends ConsumerState<PosApp> {
 
     return MaterialApp(
       navigatorKey: rootNavigatorKey,
-      title: PosBranding.appName,
+      title: uiSettings.effectiveAppName,
       debugShowCheckedModeBanner: false,
       theme: buildPosTheme(uiSettings),
       home: !session.isRegistered

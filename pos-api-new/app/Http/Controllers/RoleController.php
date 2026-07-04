@@ -249,16 +249,6 @@ class RoleController extends Controller
 
     public function setPermission(Request $request)
     {
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (!$this->userCanAccess()) {
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [
@@ -328,16 +318,6 @@ class RoleController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (!$this->userCanAccess()) {
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [

@@ -26,7 +26,6 @@ class LanguageSettingController extends Controller
         return $role->hasPermissionTo('language_setting');
     }
 
-
     public function languages()
     {
         if (!$this->hasPermission()) {
@@ -103,10 +102,6 @@ class LanguageSettingController extends Controller
                 ->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
         }
 
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with(['error' => __('db.This feature is disabled for demo!')]);
-        }
-
         $this->translation->addLanguage($request->locale, $request->name);
 
         return redirect()
@@ -128,12 +123,6 @@ class LanguageSettingController extends Controller
                 ->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
         }
         
-        if (!env('USER_VERIFIED')) {
-            session()->flash('message', 'This feature is disabled for demo!');
-            session()->flash('type', 'danger');
-            return response()->json('error');
-        }
-
         $path = base_path('resources/lang/' . $request->langVal);
         if (File::exists($path)) {
             File::deleteDirectory($path);

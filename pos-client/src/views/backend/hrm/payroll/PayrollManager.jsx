@@ -67,7 +67,6 @@ const PayrollManager = ({ controllerName }) => {
     const [employees, setEmployees] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
-    const [userVerified, setUserVerified] = useState(true);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
     const [page, setPage] = useState(1);
@@ -129,7 +128,6 @@ const PayrollManager = ({ controllerName }) => {
         if (res.data?.employees) setEmployees(res.data.employees);
         if (res.data?.accounts) setAccounts(res.data.accounts);
         if (res.data?.warehouses) setWarehouses(res.data.warehouses);
-        if (res.data?.user_verified !== undefined) setUserVerified(res.data.user_verified !== false);
     };
 
     const loadWarehouseEmployees = async (warehouseId) => {
@@ -316,10 +314,6 @@ const PayrollManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!userVerified) {
-            showToast('This feature is disabled for demo.', 'error');
-            return;
-        }
         try {
             const res = await api.post('payroll/deletebyselection', { payrollIdArray: [...selected] });
             showToast(res.data?.message || 'Selected payroll records deleted.', 'success');

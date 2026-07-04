@@ -68,7 +68,13 @@ class _DownloadScreenState extends ConsumerState<DownloadScreen> {
       final api = ref.read(apiClientProvider);
       final session = ref.read(sessionServiceProvider);
 
-      api.setBaseUrl(AppConfig.resolvePosBaseUrl(session.posBaseUrl));
+      if (!session.hasUsableServerUrl) {
+        throw Exception(
+          'Server URL is missing or points to localhost. '
+          'Open Register / Setup and save your public POS API URL.',
+        );
+      }
+      api.setBaseUrl(session.effectivePosBaseUrl);
 
       final posToken = session.posToken;
       if (posToken == null || posToken.isEmpty) {
@@ -125,6 +131,29 @@ class _DownloadScreenState extends ConsumerState<DownloadScreen> {
                 });
               },
             );
+      }
+
+      final userCount =
+          await ref.read(localAuthRepositoryProvider).countUsers();
+      final pinCount =
+          await ref.read(localAuthRepositoryProvider).countUsersWithPin();
+      AppLogger.info(
+        'DownloadScreen',
+        'Download finished',
+        'users=$userCount with_credentials=$pinCount',
+      );
+
+      if (userCount == 0) {
+        throw Exception(
+          'Download finished but no users were imported. '
+          'Check that active users exist on the server, then try Full download again.',
+        );
+      }
+      if (pinCount == 0) {
+        throw Exception(
+          'Users downloaded but none have a POS Access PIN or password. '
+          'Set POS Access PIN in Admin → User List, then download again.',
+        );
       }
 
       if (widget.isInitialSetup) {

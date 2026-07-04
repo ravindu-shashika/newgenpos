@@ -15,6 +15,8 @@ import 'widgets/show_pos_dialog.dart';
 
 final billerOverviewProvider =
     FutureProvider.autoDispose<BillerOverview>((ref) async {
+  // Rebuild when sales/returns/sync change local data.
+  ref.watch(syncRevisionProvider);
   final db = ref.watch(appDatabaseProvider);
   final billerId = ref.watch(sessionServiceProvider).billerId;
   return StaffService(db).load(currentBillerId: billerId);
@@ -85,6 +87,8 @@ class _PosStaffScreenState extends ConsumerState<PosStaffScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: overviewAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Failed to load: $e')),
         data: (overview) {

@@ -74,6 +74,7 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       return;
     }
     ref.read(posNavSectionProvider.notifier).state = section;
+    _refreshSectionData(section);
     final target = posSectionPageIndex(section);
     if (_pageController.hasClients &&
         (_pageController.page?.round() ?? target) != target) {
@@ -87,6 +88,26 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
           .whenComplete(() {
         if (mounted) setState(() => _pageSyncing = false);
       });
+    }
+  }
+
+  /// Pages stay alive in the shell PageView — reload stats when opening a section.
+  void _refreshSectionData(PosNavSection section) {
+    switch (section) {
+      case PosNavSection.dashboard:
+      case PosNavSection.history:
+        ref.invalidate(dashboardStatsProvider);
+        break;
+      case PosNavSection.staff:
+        ref.invalidate(billerOverviewProvider);
+        break;
+      case PosNavSection.inventory:
+        ref.invalidate(inventorySummaryProvider);
+        ref.invalidate(inventoryListProvider);
+        break;
+      case PosNavSection.register:
+      case PosNavSection.settings:
+        break;
     }
   }
 
@@ -151,6 +172,9 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
         ref.read(posSettingsSubPageProvider.notifier).state =
             PosSettingsSubPage.main;
       }
+      if (previous != next) {
+        _refreshSectionData(next);
+      }
       if (_pageSyncing || previous == next) return;
       final target = posSectionPageIndex(next);
       if (next == PosNavSection.history) return;
@@ -176,12 +200,18 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       },
     );
 
-    // One alert when Reverb fails — no auto-retry spam.
+    // One alert when Reverb fails — never when live stock sync is disabled.
     ref.listen<String?>(posRealtimeFailureProvider, (previous, next) {
       if (next == null || next.isEmpty) return;
       ref.read(posRealtimeFailureProvider.notifier).state = null;
+      if (!ref.read(localReverbSettingsProvider).enableLiveStockSync) {
+        return;
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
+        if (!ref.read(localReverbSettingsProvider).enableLiveStockSync) {
+          return;
+        }
         final connect = await showPosConfirmDialog(
           context: context,
           title: 'Live stock sync offline',

@@ -56,6 +56,7 @@ import 'widgets/discount_entry_dialog.dart';
 import 'widgets/payment_carousel_dialog.dart';
 import 'widgets/transaction_success_dialog.dart';
 import 'services/return_receipt_print_service.dart';
+import 'widgets/return_credit_amount_dialog.dart';
 import 'widgets/return_credit_dialog.dart';
 import 'widgets/return_session_panel.dart';
 import 'widgets/pos_professional_dialog.dart';
@@ -91,6 +92,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
   bool _busy = false;
   bool _syncing = false;
   bool _initialized = false;
+  bool _barcodeBusy = false;
+  String? _lastBarcodeTerm;
+  DateTime? _lastBarcodeAt;
   int? _openCashRegisterId;
   bool _returnFlowActive = false;
   ProviderSubscription<int>? _returnTriggerSub;
@@ -302,9 +306,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
     if (persistSession) {
       if (parties.customerId != null) {
         await session.setCustomerId(parties.customerId!);
+      } else {
+        await session.clearCustomerId();
       }
       if (parties.billerId != null) {
         await session.setBillerId(parties.billerId!);
+      } else {
+        await session.clearBillerId();
       }
     }
 
@@ -312,6 +320,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       customerId: parties.customerId,
       billerId: parties.billerId,
       warehouseId: parties.warehouseId,
+      clearCustomerId: parties.customerId == null,
+      clearBillerId: parties.billerId == null,
       saleDate: DateTime.now(),
     ));
   }
@@ -362,6 +372,22 @@ class _PosScreenState extends ConsumerState<PosScreen>
     _returnScanCtrl.clear();
     _setCheckout(_checkout.clearReturnSession());
     if (mounted) setState(() {});
+  }
+
+  Future<void> _editReturnCredit() async {
+    final checkout = _checkout;
+    if (!checkout.hasReturnSession || checkout.returnLines.isEmpty) return;
+
+    final maxAmount = checkout.returnLinesTotal;
+    final amount = await showReturnCreditAmountDialog(
+      context: context,
+      maxAmount: maxAmount,
+      initialAmount: checkout.returnCreditFromSession,
+    );
+    if (amount == null || !mounted) return;
+
+    _setCheckout(checkout.copyWith(returnCreditOverride: amount));
+    setState(() {});
   }
 
   void _startReturnSession(ReturnCheckoutSessionStart start) {
@@ -712,7 +738,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
     );
 
     var addQty = qty;
-    double unitDiscount = 0;
+    // Default item discount from max_price − price; modal can override.
+    var unitDiscount = defaultUnitDiscount(resolved);
 
     if (ref.read(posUiSettingsProvider).enableAddItemModal) {
       if (!mounted) return false;
@@ -721,6 +748,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         context: context,
         product: resolved,
         availableStock: resolved.warehouseQty,
+        initialUnitDiscount: defaultUnitDiscount(resolved),
       );
       if (entry == null) return false;
       addQty = entry.qty;
@@ -737,6 +765,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return false;
     }
 
+    final listPrice = listUnitPrice(resolved);
+
     final draft = CartLine(
       productId: resolved.productId,
       variantId: resolved.variantId,
@@ -751,17 +781,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
       stockQty: resolved.warehouseQty,
     );
 
-    final line = unitDiscount > 0
-        ? applyCartLineEdit(
-            line: draft,
-            qty: addQty,
-            unitDiscount: unitDiscount,
-            rowUnitPrice: resolved.price,
-            taxRate: resolved.taxRate,
-            taxMethod: resolved.taxMethod,
-            saleUnit: draft.saleUnit,
-          )
-        : draft;
+    final line = applyCartLineEdit(
+      line: draft,
+      qty: addQty,
+      unitDiscount: unitDiscount,
+      rowUnitPrice: listPrice,
+      taxRate: resolved.taxRate,
+      taxMethod: resolved.taxMethod,
+      saleUnit: draft.saleUnit,
+    );
 
     _setCheckout(_checkout.addProduct(line));
     return true;
@@ -993,6 +1021,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
       _searchResults = [];
       _searchOpen = false;
     });
+    final filter = ref.read(productFilterProvider);
+    if (filter.searchQuery.isNotEmpty) {
+      ref.read(productFilterProvider.notifier).state =
+          filter.copyWith(searchQuery: '');
+    }
     if (refocus) _focusEntryField();
   }
 
@@ -1034,37 +1067,31 @@ class _PosScreenState extends ConsumerState<PosScreen>
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
     final term = value.trim();
+    // Manual search only: drive the product grid (no dropdown overlay).
     if (term.length < 2) {
       setState(() {
         _searchResults = [];
         _searchOpen = false;
       });
+      final filter = ref.read(productFilterProvider);
+      if (filter.searchQuery.isNotEmpty) {
+        ref.read(productFilterProvider.notifier).state =
+            filter.copyWith(searchQuery: '');
+      }
       return;
     }
 
-    _searchDebounce = Timer(const Duration(milliseconds: 220), () async {
-      final warehouseId = _warehouseId;
-      if (warehouseId == null || !mounted) return;
-
-      try {
-        final items =
-            await ref.read(productLookupRepositoryProvider).searchLocal(
-                  query: term,
-                  warehouseId: warehouseId,
-                  priceType: _checkout.priceType,
-                );
-        if (!mounted) return;
-        setState(() {
-          _searchResults = items;
-          _searchOpen = items.isNotEmpty;
-        });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() {
-          _searchResults = [];
-          _searchOpen = false;
-        });
+    _searchDebounce = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      if (ref.read(posCatalogEntryModeProvider) != PosCatalogEntryMode.search) {
+        return;
       }
+      setState(() {
+        _searchResults = [];
+        _searchOpen = false;
+      });
+      ref.read(productFilterProvider.notifier).state =
+          ref.read(productFilterProvider).copyWith(searchQuery: term);
     });
   }
 
@@ -1078,11 +1105,28 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final term = (codeOverride ?? _scanCtrl.text).trim();
     if (term.isEmpty) return;
 
+    // Scanners often fire Enter twice or re-send the same code — ignore duplicates.
+    final now = DateTime.now();
+    if (_barcodeBusy) {
+      _scanCtrl.clear();
+      return;
+    }
+    if (_lastBarcodeTerm == term &&
+        _lastBarcodeAt != null &&
+        now.difference(_lastBarcodeAt!) < const Duration(milliseconds: 900)) {
+      _scanCtrl.clear();
+      return;
+    }
+
     final warehouseId = _warehouseId;
     if (warehouseId == null) {
       _showSnack('Warehouse not configured', error: true);
       return;
     }
+
+    _barcodeBusy = true;
+    // Clear immediately so the next scan cannot re-submit this buffer.
+    _scanCtrl.clear();
 
     try {
       final product = await ref
@@ -1097,6 +1141,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
       if (product == null) {
         _showSnack('No product for barcode "$term"', error: true);
+        _scanCtrl.text = term;
         _scanCtrl.selection = TextSelection(
           baseOffset: 0,
           extentOffset: _scanCtrl.text.length,
@@ -1105,11 +1150,15 @@ class _PosScreenState extends ConsumerState<PosScreen>
         return;
       }
 
-      if (await _tryAddToCart(product)) {
-        _clearEntryField();
-      }
+      _lastBarcodeTerm = term;
+      _lastBarcodeAt = DateTime.now();
+      // Add to cart as soon as product is identified (no modal delay unless enabled).
+      await _tryAddToCart(product);
+      if (mounted) _focusEntryField();
     } catch (e) {
       if (mounted) _showSnack('Scan error: $e', error: true);
+    } finally {
+      _barcodeBusy = false;
     }
   }
 
@@ -1125,10 +1174,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return;
     }
 
-    if (_searchResults.length == 1) {
-      _pickSearchResult(_searchResults.first);
-      return;
-    }
+    // Keep results in the product grid (no dropdown).
+    ref.read(productFilterProvider.notifier).state =
+        ref.read(productFilterProvider).copyWith(searchQuery: term);
+    setState(() {
+      _searchResults = [];
+      _searchOpen = false;
+    });
 
     setState(() => _busy = true);
     try {
@@ -1147,27 +1199,19 @@ class _PosScreenState extends ConsumerState<PosScreen>
             query: term,
             warehouseId: warehouseId,
             priceType: _checkout.priceType,
+            limit: 100,
           );
 
       if (!mounted) return;
       if (items.isEmpty) {
         _showSnack('No product found for "$term"', error: true);
-        setState(() {
-          _searchResults = [];
-          _searchOpen = false;
-        });
         return;
       }
 
+      // Single match: add to cart. Multiple: stay on filtered grid.
       if (items.length == 1) {
         _pickSearchResult(items.first);
-        return;
       }
-
-      setState(() {
-        _searchResults = items;
-        _searchOpen = true;
-      });
     } catch (e) {
       _showSnack('Search error: $e', error: true);
     } finally {
@@ -1198,6 +1242,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
             customerId: customerId,
             lookup: _checkout.originalSaleLookup,
             billerId: _checkout.billerId ?? session.billerId,
+            creditAmount: _checkout.returnCreditOverride != null
+                ? _checkout.returnCreditFromSession
+                : null,
           );
 
       if (!mounted) return;
@@ -1266,6 +1313,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
             customerId: customerId,
             lookup: _checkout.originalSaleLookup,
             billerId: _checkout.billerId ?? session.billerId,
+            creditAmount: _checkout.returnCreditOverride != null
+                ? _checkout.returnCreditFromSession
+                : null,
           );
 
       final saleGrand = _calcTotals(
@@ -1511,6 +1561,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
       await _resetCheckoutForNewSale();
       reloadProductGrid(ref);
+      // Refresh dashboard / staff / inventory without waiting for server sync.
+      ref.read(syncRevisionProvider.notifier).state++;
 
       if (isDraft) {
         _showSnack('Sale held as draft', success: true);
@@ -1522,25 +1574,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _refreshStockFromServer() async {
-    final session = ref.read(sessionServiceProvider);
-    final warehouseId = session.warehouseId;
-    if (warehouseId == null) return;
-    try {
-      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
-            resource: 'product_stock',
-            deviceId: session.deviceId,
-            warehouseId: warehouseId,
-          );
-      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
-            resource: 'product_batches',
-            deviceId: session.deviceId,
-            warehouseId: warehouseId,
-          );
-      if (mounted) reloadProductGrid(ref);
-    } catch (_) {}
   }
 
   /// Push sales to server without blocking checkout (no success toasts).
@@ -1563,8 +1596,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
                 'Sale saved locally — sync failed. Retry from Settings or next bill.',
             error: true,
           );
-        } else if (syncResult.synced > 0) {
-          unawaited(_refreshStockFromServer());
         }
       } catch (e) {
         if (mounted) {
@@ -2061,9 +2092,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
       },
     );
     if (picked != null) {
+      _scanCtrl.clear();
       ref.read(productFilterProvider.notifier).state = ProductFilterState(
         filter: type,
         filterId: picked,
+        searchQuery: '',
       );
     }
   }
@@ -2360,10 +2393,6 @@ class _PosScreenState extends ConsumerState<PosScreen>
           _showSnack('All sales synced');
         }
       }
-      final pendingAfter = await ref.read(pendingSyncCountProvider.future);
-      if (pendingAfter == 0 && result.synced > 0) {
-        await _refreshStockFromServer();
-      }
     } catch (e) {
       if (manual && mounted) {
         _showSnack('Sync error: $e', error: true);
@@ -2471,6 +2500,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
       onChanged: _onEntryChanged,
       onSubmitted: _onEntrySubmitted,
       onPickResult: _pickSearchResult,
+      onClear: () {
+        _clearEntryField();
+      },
     );
   }
 
@@ -2630,8 +2662,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
           PosQuickFilterChip(
             label: 'Featured',
             colors: const [Color(0xFFFF7043), Color(0xFFC62828)],
-            active: filter.filter == ProductGridFilter.featured,
+            active: !filter.isSearching &&
+                filter.filter == ProductGridFilter.featured,
             onTap: () {
+              _scanCtrl.clear();
               ref.read(productFilterProvider.notifier).state =
                   const ProductFilterState(filter: ProductGridFilter.featured);
             },
@@ -2639,22 +2673,30 @@ class _PosScreenState extends ConsumerState<PosScreen>
           PosQuickFilterChip(
             label: 'Category',
             colors: const [Color(0xFF9B7FD4), Color(0xFF5B45A0)],
-            active: filter.filter == ProductGridFilter.category,
+            active: !filter.isSearching &&
+                filter.filter == ProductGridFilter.category,
             onTap: meta == null
                 ? () {}
-                : () => unawaited(
+                : () {
+                    _scanCtrl.clear();
+                    unawaited(
                       _showFilterPicker(ProductGridFilter.category, meta),
-                    ),
+                    );
+                  },
           ),
           PosQuickFilterChip(
             label: 'Brand',
             colors: const [Color(0xFF4DD0E1), Color(0xFF00838F)],
-            active: filter.filter == ProductGridFilter.brand,
+            active: !filter.isSearching &&
+                filter.filter == ProductGridFilter.brand,
             onTap: meta == null
                 ? () {}
-                : () => unawaited(
+                : () {
+                    _scanCtrl.clear();
+                    unawaited(
                       _showFilterPicker(ProductGridFilter.brand, meta),
-                    ),
+                    );
+                  },
           ),
         ],
       ),
@@ -2696,6 +2738,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                 setState(() {});
               },
               onCancelSession: _clearReturnSession,
+              onReturnCreditTap: () => unawaited(_editReturnCredit()),
               busy: _busy,
               title: 'Return items',
               showScanField: checkout.returnLines.isEmpty ||
@@ -2890,7 +2933,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
   Widget _buildCartRow(PosCheckoutState checkout, CartLine line) {
     return PosCartLineCard(
       name: line.name,
-      unitPrice: line.netUnitPrice,
+      unitPrice: rowUnitPriceForLine(line),
+      unitDiscount: unitDiscountForLine(line),
       qty: line.qty,
       lineTotal: line.subtotal,
       enabled: !_busy,

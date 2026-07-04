@@ -19,6 +19,7 @@ class PosCatalogEntryBar extends StatelessWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onPickResult,
+    this.onClear,
     this.showModeSwitch = true,
   });
 
@@ -31,6 +32,7 @@ class PosCatalogEntryBar extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final ValueChanged<ScannedProduct> onPickResult;
+  final VoidCallback? onClear;
   final bool showModeSwitch;
 
   @override
@@ -72,19 +74,31 @@ class PosCatalogEntryBar extends StatelessWidget {
                     isBarcode ? Icons.qr_code_scanner : Icons.search,
                     color: isBarcode ? styles.accent : styles.textMuted,
                   ),
-                  suffixIcon: isBarcode
-                      ? Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Icon(
-                            Icons.sensors,
-                            size: 18,
-                            color: styles.accent.withValues(alpha: 0.85),
-                          ),
-                        )
-                      : null,
-                  suffixIconConstraints: isBarcode
-                      ? const BoxConstraints(minWidth: 32, minHeight: 32)
-                      : null,
+                  suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: controller,
+                    builder: (context, value, _) {
+                      if (value.text.isEmpty) {
+                        return const SizedBox(width: 8);
+                      }
+                      return IconButton(
+                        tooltip: 'Clear',
+                        icon: Icon(
+                          Icons.close,
+                          size: 20,
+                          color: styles.textMuted,
+                        ),
+                        onPressed: () {
+                          controller.clear();
+                          onChanged('');
+                          onClear?.call();
+                        },
+                      );
+                    },
+                  ),
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,

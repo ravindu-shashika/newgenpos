@@ -1,5 +1,20 @@
 import 'models/cart_line.dart';
 import 'models/cart_line_edit_context.dart';
+import 'models/scanned_product.dart';
+
+/// List / MRP unit price shown on catalog and bills.
+double listUnitPrice(ScannedProduct product) {
+  final max = product.maxPrice;
+  if (max != null && max > product.price) return max;
+  return product.price;
+}
+
+/// Auto item discount per unit: max_price − price (0 when no max or max ≤ price).
+double defaultUnitDiscount(ScannedProduct product) {
+  final max = product.maxPrice;
+  if (max == null || max <= product.price) return 0;
+  return max - product.price;
+}
 
 double rowPriceFromBase(
   double basePrice,

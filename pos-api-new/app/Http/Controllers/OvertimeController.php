@@ -106,7 +106,6 @@ class OvertimeController extends Controller
             return $this->spaJson($request, [
                 'overtimes' => $overtimes->map(fn (Overtime $overtime) => $this->formatOvertime($overtime)),
                 'employees' => $employees,
-                'user_verified' => filter_var(env('USER_VERIFIED', false), FILTER_VALIDATE_BOOLEAN),
             ]);
         }
 

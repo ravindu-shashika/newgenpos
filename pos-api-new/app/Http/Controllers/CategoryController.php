@@ -172,7 +172,6 @@ class CategoryController extends Controller
 
                 $nestedData['stock_worth'] = format_currency($total_price).' / '.format_currency($total_cost);
 
-
                 $nestedData['options'] = '<div class="btn-group">
                             <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'.__("db.action").'
                               <span class="caret"></span>
@@ -306,16 +305,6 @@ class CategoryController extends Controller
     public function update(UpdateCategoryRequest $request, $id)
     {
         $this->normalizeParentId($request);
-
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
 
         $lims_category_data = DB::table('categories')->where('id', $request->category_id)->first();
 

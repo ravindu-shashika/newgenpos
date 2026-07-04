@@ -15,8 +15,8 @@ class AppConfig {
   /// Cloud API — development (Laravel APP_URL).
   static const String developmentAppUrl = 'http://127.0.0.1:8000';
 
-  /// Cloud API — production (Laravel APP_URL).
-  static const String productionAppUrl = 'https://pos.yourcompany.com';
+  /// Cloud API — production (Laravel APP_URL, no trailing /pos).
+  static const String productionAppUrl = 'https://kbt.newgenideas.com/api';
 
   static bool get isProduction => runMode == AppRunMode.production;
 
@@ -30,18 +30,44 @@ class AppConfig {
   /// Cloud POS routes — `pos-api-new/routes/pos.php` mounted at `/pos`.
   static String get posBaseUrl => '$cloudBaseUrl/pos';
 
-  /// Device-stored POS base URL, or [posBaseUrl] when unset/invalid.
+  /// Whether [url] points at this machine (loopback).
+  static bool isLoopbackPosUrl(String? url) {
+    final value = (url ?? '').toLowerCase();
+    if (value.isEmpty) return false;
+    return value.contains('127.0.0.1') ||
+        value.contains('localhost') ||
+        value.contains('0.0.0.0') ||
+        value.contains('[::1]');
+  }
+
+  /// True when the device has a saved POS API URL ending with `/pos`.
+  static bool hasStoredPosBaseUrl(String? stored) {
+    final value = stored?.trim() ?? '';
+    if (value.isEmpty) return false;
+    final normalized = value.endsWith('/')
+        ? value.substring(0, value.length - 1)
+        : value;
+    return normalized.toLowerCase().endsWith('/pos');
+  }
+
+  /// Saved URL is present and not loopback (safe for download / status).
+  static bool hasUsablePosBaseUrl(String? stored) {
+    if (!hasStoredPosBaseUrl(stored)) return false;
+    return !isLoopbackPosUrl(stored);
+  }
+
+  /// Prefer the device-stored URL only. Never invent localhost when a real
+  /// URL was configured. Falls back to build default only when nothing is stored.
   static String resolvePosBaseUrl([String? stored]) {
-    var url = (stored != null && stored.trim().isNotEmpty)
-        ? stored.trim()
-        : posBaseUrl;
-    if (url.endsWith('/')) {
-      url = url.substring(0, url.length - 1);
+    final raw = stored?.trim() ?? '';
+    if (raw.isNotEmpty) {
+      var url = raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+      if (!url.toLowerCase().endsWith('/pos')) {
+        url = '$url/pos';
+      }
+      return url;
     }
-    if (!url.endsWith('/pos')) {
-      return posBaseUrl;
-    }
-    return url;
+    return posBaseUrl;
   }
 
   /// Normalize user-entered API root for storage (must end with `/pos`).
@@ -54,22 +80,24 @@ class AppConfig {
     if (url.endsWith('/')) {
       url = url.substring(0, url.length - 1);
     }
-    if (!url.endsWith('/pos')) {
+    if (!url.toLowerCase().endsWith('/pos')) {
       url = '$url/pos';
     }
     return url;
   }
 
-  /// Display label for a stored or default POS API URL.
-  static String displayPosBaseUrl([String? stored]) =>
-      resolvePosBaseUrl(stored);
+  /// Display label for a stored POS API URL (empty if not configured).
+  static String displayPosBaseUrl([String? stored]) {
+    if (!hasStoredPosBaseUrl(stored)) return '';
+    return resolvePosBaseUrl(stored);
+  }
 
   static String get environmentLabel =>
       isProduction ? 'production' : 'development';
 
   static String _normalizeRoot(String url) {
     var trimmed = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-    if (trimmed.endsWith('/pos')) {
+    if (trimmed.toLowerCase().endsWith('/pos')) {
       trimmed = trimmed.substring(0, trimmed.length - 4);
     }
     return trimmed;
@@ -80,8 +108,6 @@ class AppConfig {
 
   static const int maxSyncBatch = 20;
 
-  /// After server accepts a sale into the queue, poll sync-status this many times.
-  /// Status polls after queue accept (only while sales still processing).
   static const int queueStatusPollAttempts = 8;
 
   static const Duration queueStatusPollDelay = Duration(seconds: 2);
@@ -96,7 +122,6 @@ class AppConfig {
       Duration(seconds: 120);
   static const Duration downloadReceiveTimeoutBulk = Duration(seconds: 300);
 
-  /// Legacy default — prefer [downloadPageSizeFor].
   static const int downloadPageSize = downloadPageSizeResponsive;
   static const int dbWriteBatchSize = dbWriteBatchSizeResponsive;
 

@@ -1,4 +1,4 @@
-; KOOBIYA POS — Windows installer (Inno Setup 6)
+; NEWGENID POS — Windows installer (Inno Setup 6)
 ; Build with: pos_app\installer\windows\build_installer.ps1
 
 #ifndef MyAppVersion
@@ -9,9 +9,9 @@
   #define MyAppBuild "1"
 #endif
 
-#define MyAppName "KOOBIYA POS"
-#define MyAppPublisher "KOOBIYA"
-#define MyAppURL "https://koobiya.com"
+#define MyAppName "NEWGENID POS"
+#define MyAppPublisher "NEWGENID"
+#define MyAppURL "https://newgenid.com"
 #define MyAppExeName "pos_app.exe"
 #define MyAppId "{{8F3C2A1B-4D5E-6F7A-8B9C-0D1E2F3A4B5C}"
 
@@ -24,12 +24,12 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-DefaultDirName={autopf}\KOOBIYA POS
+DefaultDirName={autopf}\NEWGENIDPOS
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 LicenseFile=
 OutputDir=..\output
-OutputBaseFilename=KOOBIYA-POS-Setup-{#MyAppVersion}
+OutputBaseFilename=NEWGENIDPOS-Setup-{#MyAppVersion}
 SetupIconFile=..\..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
@@ -60,3 +60,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+; Clear local POS data on uninstall so reinstall shows Register screen.
+[UninstallDelete]
+Type: files; Name: "{userdocs}\newgenpos.sqlite"
+Type: files; Name: "{userdocs}\newgenpos.sqlite-wal"
+Type: files; Name: "{userdocs}\newgenpos.sqlite-shm"
+Type: files; Name: "{userdocs}\pos.sqlite"
+Type: files; Name: "{userdocs}\pos.sqlite-wal"
+Type: files; Name: "{userdocs}\pos.sqlite-shm"
+Type: filesandordirs; Name: "{userdocs}\backups"
+Type: filesandordirs; Name: "{localappdata}\pos_app"
+Type: filesandordirs; Name: "{userappdata}\pos_app"

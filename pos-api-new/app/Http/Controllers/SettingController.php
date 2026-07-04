@@ -487,9 +487,6 @@ class SettingController extends Controller
 
     public function emptyDatabase()
     {
-        if (!env('USER_VERIFIED'))
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-
         // Clear cached queries
         $this->cacheForget('biller_list');
         $this->cacheForget('brand_list');
@@ -654,16 +651,6 @@ class SettingController extends Controller
     {
         if (!$this->userCanAccessGeneralSetting()) {
             return $this->denyGeneralSettingAccess($request);
-        }
-
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
 
         $this->validate($request, [
@@ -856,12 +843,8 @@ class SettingController extends Controller
         return redirect()->back()->with('message', __('db.Reward point setting updated successfully'));
     }
 
-
     public function backup()
     {
-        if (!env('USER_VERIFIED'))
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-
         // Database configuration
         $host = env('DB_HOST');
         $username = env('DB_USERNAME');
@@ -874,7 +857,6 @@ class SettingController extends Controller
         // Get connection object and set the charset
         $conn = mysqli_connect($host, $username, $password, $database_name);
         $conn->set_charset("utf8");
-
 
         // Get All Table Names From the Database
         $tables = array();
@@ -894,7 +876,6 @@ class SettingController extends Controller
             $row = mysqli_fetch_row($result);
 
             $sqlScript .= "\n\n" . $row[1] . ";\n\n";
-
 
             $query = "SELECT * FROM $table";
             $result = mysqli_query($conn, $query);
@@ -956,9 +937,6 @@ class SettingController extends Controller
 
     public function mailSettingStore(Request $request)
     {
-        if (!env('USER_VERIFIED'))
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-
         $data = $request->all();
         $mail_setting = MailSetting::latest()->first();
         if (!$mail_setting)
@@ -1014,16 +992,6 @@ class SettingController extends Controller
     {
         if (!$this->userCanAccessSmsSetting()) {
             return $this->denySmsSettingAccess($request);
-        }
-
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
 
         $this->validate($request, [
@@ -1187,12 +1155,6 @@ class SettingController extends Controller
                 ->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
         }
 
-        if (!env('USER_VERIFIED')) {
-            Session::flash('message', 'This feature is disabled for demo!');
-            Session::flash('type', 'error');
-            return redirect()->back();
-        }
-
         // Fetch all payment gateways from the database
         $gateways = DB::table('external_services')->where('type', 'payment')->get();
 
@@ -1332,16 +1294,6 @@ class SettingController extends Controller
     {
         if (!$this->userCanAccessPosSetting()) {
             return $this->denyPosSettingAccess($request);
-        }
-
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
         }
 
         $this->validate($request, [

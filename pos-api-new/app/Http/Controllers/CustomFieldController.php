@@ -35,9 +35,6 @@ class CustomFieldController extends Controller
 
     public function store(Request $request)
     {
-        if(!env('USER_VERIFIED'))
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-
         $data = $request->all();
         //adding column to specific database
         if($data['belongs_to'] == 'sale')
@@ -53,7 +50,6 @@ class CustomFieldController extends Controller
 
         // $column_name = str_replace("( ", "`(", strtolower($data['name']));
         // $column_name = str_replace(") ", ")`", strtolower($data['name']));
-
 
         if($data['type'] == 'number')
             $data_type = 'double';
@@ -115,7 +111,6 @@ class CustomFieldController extends Controller
         else
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
-
 
     public function update(Request $request, $id)
     {
@@ -211,16 +206,8 @@ class CustomFieldController extends Controller
         }
     }
 
-
-
-
-
     public function destroy($id)
     {
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __('db.This feature is disabled for demo!'));
-        }
-
         $custom_field_data = CustomField::find($id);
 
         if (!$custom_field_data) {

@@ -25,6 +25,7 @@ class PosCheckoutState {
     this.staffNote = '',
     this.draftClientUuid,
     this.returnSettlements = const [],
+    this.returnCreditOverride,
   });
 
   final List<CartLine> lines;
@@ -49,6 +50,9 @@ class PosCheckoutState {
   final String? draftClientUuid;
   final List<AppliedReturnSettlement> returnSettlements;
 
+  /// Manual return credit (numpad). Null = use sum of return line totals.
+  final double? returnCreditOverride;
+
   bool get isEmpty => lines.isEmpty;
 
   bool get hasReturnSession => returnSessionMode != ReturnSessionMode.none;
@@ -56,8 +60,16 @@ class PosCheckoutState {
   bool get canCheckout =>
       lines.isNotEmpty || (hasReturnSession && returnLines.isNotEmpty);
 
-  double get returnCreditFromSession =>
+  double get returnLinesTotal =>
       returnLines.fold<double>(0, (sum, line) => sum + line.subtotal);
+
+  /// Effective return credit for this session (override or line totals).
+  double get returnCreditFromSession {
+    final linesTotal = returnLinesTotal;
+    final override = returnCreditOverride;
+    if (override == null) return linesTotal;
+    return override.clamp(0, linesTotal).toDouble();
+  }
 
   double get returnCreditApplied =>
       returnSettlements.fold<double>(0, (s, r) => s + r.amount);
@@ -85,10 +97,14 @@ class PosCheckoutState {
     String? staffNote,
     String? draftClientUuid,
     List<AppliedReturnSettlement>? returnSettlements,
+    double? returnCreditOverride,
+    bool clearCustomerId = false,
+    bool clearBillerId = false,
     bool clearCoupon = false,
     bool clearDraft = false,
     bool clearReturnSettlements = false,
     bool clearReturnSession = false,
+    bool clearReturnCreditOverride = false,
   }) {
     return PosCheckoutState(
       lines: lines ?? this.lines,
@@ -101,8 +117,8 @@ class PosCheckoutState {
       originalSaleLookup: clearReturnSession || clearOriginalSaleLookup
           ? null
           : (originalSaleLookup ?? this.originalSaleLookup),
-      customerId: customerId ?? this.customerId,
-      billerId: billerId ?? this.billerId,
+      customerId: clearCustomerId ? null : (customerId ?? this.customerId),
+      billerId: clearBillerId ? null : (billerId ?? this.billerId),
       warehouseId: warehouseId ?? this.warehouseId,
       saleDate: saleDate ?? this.saleDate,
       priceType: priceType ?? this.priceType,
@@ -122,6 +138,9 @@ class PosCheckoutState {
       returnSettlements: clearReturnSettlements
           ? const []
           : (returnSettlements ?? this.returnSettlements),
+      returnCreditOverride: clearReturnSession || clearReturnCreditOverride
+          ? null
+          : (returnCreditOverride ?? this.returnCreditOverride),
     );
   }
 
@@ -132,6 +151,7 @@ class PosCheckoutState {
       final existing = next[idx];
       next[idx] = existing.copyWith(
         qty: existing.qty + line.qty,
+        discount: existing.discount + line.discount,
         stockQty: line.stockQty ?? existing.stockQty,
       );
     } else {
@@ -154,7 +174,12 @@ class PosCheckoutState {
 
   PosCheckoutState updateQty(String lineKey, double qty) {
     final next = lines
-        .map((l) => l.lineKey == lineKey ? l.copyWith(qty: qty) : l)
+        .map((l) {
+          if (l.lineKey != lineKey) return l;
+          // Keep per-unit item discount when qty changes.
+          final unitDiscount = l.qty > 0 ? l.discount / l.qty : 0.0;
+          return l.copyWith(qty: qty, discount: unitDiscount * qty);
+        })
         .where((l) => l.qty > 0)
         .toList();
     return copyWith(lines: next);

@@ -130,6 +130,8 @@ class _AddItemEntryDialogState extends ConsumerState<_AddItemEntryDialog> {
     return v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
   }
 
+  double get _listPrice => listUnitPrice(widget.product);
+
   double get _unitDiscount =>
       double.tryParse(_unitDiscountCtrl.text.trim()) ?? 0;
 
@@ -150,8 +152,8 @@ class _AddItemEntryDialogState extends ConsumerState<_AddItemEntryDialog> {
     return applyCartLineEdit(
       line: draft,
       qty: _qty,
-      unitDiscount: _unitDiscount.clamp(0, widget.product.price),
-      rowUnitPrice: widget.product.price,
+      unitDiscount: _unitDiscount.clamp(0, _listPrice),
+      rowUnitPrice: _listPrice,
       taxRate: widget.product.taxRate,
       taxMethod: widget.product.taxMethod,
       saleUnit: draft.saleUnit,
@@ -207,10 +209,10 @@ class _AddItemEntryDialogState extends ConsumerState<_AddItemEntryDialog> {
       );
       return;
     }
-    if (unitDiscount > widget.product.price) {
+    if (unitDiscount > _listPrice) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unit discount cannot exceed unit price'),
+          content: Text('Unit discount cannot exceed list price'),
         ),
       );
       return;
@@ -431,15 +433,16 @@ class _UnitDiscountEntryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final styles = context.posStyles;
 
+    final listPrice = listUnitPrice(product);
     final info = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          formatPosMoney(product.price),
+          formatPosMoney(listPrice),
           style: styles.moneyLarge.copyWith(fontSize: 28),
         ),
         const SizedBox(height: 4),
-        Text('Unit price', style: styles.caption),
+        Text('List price', style: styles.caption),
         const SizedBox(height: 20),
         Text(
           'Unit discount',
@@ -457,7 +460,7 @@ class _UnitDiscountEntryPanel extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Discount per unit (flat amount)',
+          'Discount per unit (max_price − price)',
           style: styles.caption,
         ),
         const Spacer(),

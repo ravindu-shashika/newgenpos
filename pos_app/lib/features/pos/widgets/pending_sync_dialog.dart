@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/app_providers.dart';
-import '../../../core/providers/product_grid_provider.dart';
 import '../../../core/theme/pos_app_styles.dart';
 import 'pos_professional_dialog.dart';
 import 'pos_toast.dart';
@@ -47,9 +46,6 @@ class PosPendingSyncActions {
       ref.read(syncRevisionProvider.notifier).update((n) => n + 1);
 
       final pendingAfter = await ref.read(pendingSyncCountProvider.future);
-      if (pendingAfter == 0 && result.synced > 0) {
-        await _refreshStockFromServer(ref);
-      }
 
       return PendingSyncUiResult(
         synced: result.synced,
@@ -60,25 +56,6 @@ class PosPendingSyncActions {
     } finally {
       ref.read(salesSyncInProgressProvider.notifier).state = false;
     }
-  }
-
-  static Future<void> _refreshStockFromServer(WidgetRef ref) async {
-    final session = ref.read(sessionServiceProvider);
-    final warehouseId = session.warehouseId;
-    if (warehouseId == null) return;
-    try {
-      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
-            resource: 'product_stock',
-            deviceId: session.deviceId,
-            warehouseId: warehouseId,
-          );
-      await ref.read(catalogDownloadServiceProvider).refreshResourceDelta(
-            resource: 'product_batches',
-            deviceId: session.deviceId,
-            warehouseId: warehouseId,
-          );
-      reloadProductGrid(ref);
-    } catch (_) {}
   }
 
   static void showResultSnack(BuildContext context, PendingSyncUiResult result) {

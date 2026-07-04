@@ -92,7 +92,6 @@ const SaleAgentManager = ({ controllerName }) => {
         lims_biller_list: [],
         lims_warehouse_list: [],
         project_enabled: false,
-        user_verified: true,
     });
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
@@ -130,7 +129,6 @@ const SaleAgentManager = ({ controllerName }) => {
                 lims_biller_list: data.lims_biller_list || [],
                 lims_warehouse_list: data.lims_warehouse_list || [],
                 project_enabled: !!data.project_enabled,
-                user_verified: data.user_verified !== false,
             });
         } catch (err) {
             showToast(err.response?.data?.message || 'Failed to load sale agents.', 'error');

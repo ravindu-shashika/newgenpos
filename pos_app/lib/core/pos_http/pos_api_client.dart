@@ -10,7 +10,7 @@ class PosApiClient {
   PosApiClient({Dio? dio, String? posToken, String? baseUrl})
       : _dio = dio ??
             _createDio(
-              baseUrl ?? AppConfig.posBaseUrl,
+              AppConfig.resolvePosBaseUrl(baseUrl),
               tag: 'POS',
               receiveTimeout: const Duration(seconds: 120),
             ) {

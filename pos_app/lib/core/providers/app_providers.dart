@@ -42,10 +42,12 @@ void bumpSessionState(WidgetRef ref) {
 }
 
 final apiClientProvider = Provider<PosApiClient>((ref) {
+  // Rebuild whenever register / URL save bumps session revision.
+  ref.watch(sessionRevisionProvider);
   final session = ref.watch(sessionServiceProvider);
   return PosApiClient(
     posToken: session.posToken,
-    baseUrl: AppConfig.resolvePosBaseUrl(session.posBaseUrl),
+    baseUrl: session.effectivePosBaseUrl,
   );
 });
 

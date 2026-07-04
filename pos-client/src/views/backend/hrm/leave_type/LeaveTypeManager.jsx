@@ -51,7 +51,6 @@ const LeaveTypeManager = ({ controllerName }) => {
     const canDelete = perms.canDelete || legacyAccess;
 
     const [allRows, setAllRows] = useState([]);
-    const [userVerified, setUserVerified] = useState(true);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
     const [page, setPage] = useState(1);
@@ -81,7 +80,6 @@ const LeaveTypeManager = ({ controllerName }) => {
             setLoading(true);
             const res = await api.get('leave-type');
             setAllRows(res.data?.leave_types || []);
-            setUserVerified(res.data?.user_verified !== false);
         } catch (err) {
             showToast(err.response?.data?.message || 'Failed to load leave types.', 'error');
         } finally {
@@ -241,10 +239,6 @@ const LeaveTypeManager = ({ controllerName }) => {
     };
 
     const handleBulkDelete = async () => {
-        if (!userVerified) {
-            showToast('This feature is disabled for demo.', 'error');
-            return;
-        }
         try {
             const res = await api.post('leave-type/deletebyselection', {
                 leaveTypeIdArray: [...selected],

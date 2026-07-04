@@ -512,6 +512,12 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     _onAmountChanged();
   }
 
+  /// Quick-cash denominations add to the current tendered amount (e.g. 5000 + 2000).
+  void _addTendered(double amount) {
+    final current = double.tryParse(_cashReceivedCtrl.text.trim()) ?? 0;
+    _setTendered(current + amount);
+  }
+
   void _applyExactChange() => _setTendered(_grandTotal);
 
   void _clearCashReceived() {
@@ -845,7 +851,17 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(flex: 2, child: _buildSplitPanel()),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _buildSplitPanel()),
+                const SizedBox(height: 10),
+                _buildCompleteButton(),
+              ],
+            ),
+          ),
           const SizedBox(width: 16),
           Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
         ],
@@ -866,23 +882,25 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
                   changeText: formatPosMoney(_cashChange),
                   isReady: _cashReceived >= _grandTotal - 0.009,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 PaymentCashQuickActions(
                   exactAmountText: _money,
                   onExactAmount: _applyExactChange,
                   onClear: _clearCashReceived,
                 ),
-                const SizedBox(height: 12),
-                PaymentQuickCashGrid(
-                  onAmount: _setTendered,
-                  onBackspace: () {
-                    final t = _cashReceivedCtrl.text;
-                    if (t.isEmpty) return;
-                    _cashReceivedCtrl.text = t.substring(0, t.length - 1);
-                    _onAmountChanged();
-                  },
+                const SizedBox(height: 10),
+                Expanded(
+                  child: PaymentQuickCashGrid(
+                    onAmount: _addTendered,
+                    onBackspace: () {
+                      final t = _cashReceivedCtrl.text;
+                      if (t.isEmpty) return;
+                      _cashReceivedCtrl.text = t.substring(0, t.length - 1);
+                      _onAmountChanged();
+                    },
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 PaymentCashReceivedField(
                   controller: _cashReceivedCtrl,
                   active: _cashFieldActive,
@@ -891,6 +909,8 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
                     _activeMixField = _MixFieldKind.amount;
                   }),
                 ),
+                const SizedBox(height: 10),
+                _buildCompleteButton(),
               ],
             ),
           ),
@@ -925,6 +945,8 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
                 const PaymentReadyBanner(
                   message: 'Tap the digits field, then enter on the keypad.',
                 ),
+                const SizedBox(height: 10),
+                _buildCompleteButton(),
               ],
             ),
           ),
@@ -937,7 +959,17 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(flex: 2, child: _buildLeftPanel(_currentTab.method!)),
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildLeftPanel(_currentTab.method!)),
+              const SizedBox(height: 10),
+              _buildCompleteButton(),
+            ],
+          ),
+        ),
         const SizedBox(width: 16),
         Expanded(flex: 1, child: _buildPaymentRightRail(showAdjustments: true)),
       ],
@@ -1007,25 +1039,28 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
                 });
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: _buildPaymentBody(),
               ),
-            ),
-            PaymentFooterBar(
-              canComplete: _canCompletePayment,
-              busy: _busy,
-              onComplete: _completePayment,
-              statusHint: _paymentStatusHint,
-              completeLabel: widget.printOnComplete
-                  ? 'COMPLETE & PRINT'
-                  : 'COMPLETE SALE',
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCompleteButton() {
+    return PaymentCompleteButton(
+      canComplete: _canCompletePayment,
+      busy: _busy,
+      onComplete: _completePayment,
+      statusHint: _paymentStatusHint,
+      completeLabel: widget.printOnComplete
+          ? 'COMPLETE & PRINT'
+          : 'COMPLETE SALE',
     );
   }
 
@@ -1195,7 +1230,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           ],
         ),
         SizedBox(height: 16),
-        Expanded(child: _buildQuickCashButtons(_setTendered)),
+        Expanded(child: _buildQuickCashButtons(_addTendered)),
       ],
     );
   }

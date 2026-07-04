@@ -47,8 +47,6 @@ class AccountsController extends Controller
         return view('backend.account.index', compact('lims_account_all'));
     }
 
-
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -212,19 +210,12 @@ class AccountsController extends Controller
         ]);
     }
 
-
-
-
-
     public function destroy(Request $request, $id)
     {
         if ($this->wantsSpaResponse($request)) {
             return app(AccountDashboardController::class)->destroy($request, $id);
         }
 
-        if (!env('USER_VERIFIED')) {
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
         $lims_account_data = Account::find($id);
         if (!$lims_account_data->is_default) {
             $lims_account_data->is_active = false;

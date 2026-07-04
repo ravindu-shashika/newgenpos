@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=KOOBIYA POS
+Name=NEWGENID POS
 Comment=Offline-first POS terminal
-Exec=/usr/lib/koobiya-pos/pos_app
-Icon=koobiya-pos
+Exec=/usr/lib/newgenidpos/pos_app
+Icon=newgenidpos
 Terminal=false
 Categories=Office;Finance;
 StartupWMClass=pos_app

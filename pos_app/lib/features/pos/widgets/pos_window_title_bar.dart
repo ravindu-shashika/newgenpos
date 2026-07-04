@@ -1,22 +1,26 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../../core/branding/pos_branding.dart';
+import '../../../core/providers/pos_ui_settings_provider.dart';
 import '../../../core/services/pos_window_service.dart';
 import '../../../core/theme/pos_theme.dart';
 
 /// Custom draggable title bar shown in kiosk mode (native bar is hidden).
-class PosWindowTitleBar extends StatelessWidget {
+class PosWindowTitleBar extends ConsumerWidget {
   const PosWindowTitleBar({super.key});
 
   static const height = 36.0;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final brand = context.posBrand;
     final styles = context.posStyles;
+    final appName = ref.watch(
+      posUiSettingsProvider.select((s) => s.effectiveAppName),
+    );
 
     return Material(
       color: brand.primary,
@@ -38,7 +42,7 @@ class PosWindowTitleBar extends StatelessWidget {
                       ),
                       SizedBox(width: 8),
                       Text(
-                        PosBranding.appName,
+                        appName,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,

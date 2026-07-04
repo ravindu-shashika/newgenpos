@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/logging/app_logger.dart';
+import '../../core/pos_http/pos_api_client.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/device_identity_service.dart';
 import 'setup_screen.dart';
 
-/// First launch: auto-filled MAC, token, PC name — user selects warehouse only.
+/// First launch: set server URL, then register terminal (MAC + token + warehouse).
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -15,13 +17,16 @@ class RegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  final _serverUrlCtrl = TextEditingController();
   final _terminalIdCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
   final _pcNameCtrl = TextEditingController();
 
   bool _loading = false;
   bool _loadingIdentity = true;
+  bool _connecting = false;
   bool _loadingWarehouses = false;
+  bool _serverConnected = false;
   String? _error;
   int? _selectedWarehouseId;
   List<Map<String, dynamic>> _warehouses = [];
@@ -31,6 +36,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.initState();
     final session = ref.read(sessionServiceProvider);
     _selectedWarehouseId = session.warehouseId;
+    // Only pre-fill a previously saved URL — never force local IP on first install.
+    final stored = session.posBaseUrl?.trim();
+    if (stored != null && stored.isNotEmpty) {
+      _serverUrlCtrl.text = AppConfig.displayPosBaseUrl(stored);
+    } else if (AppConfig.isProduction) {
+      _serverUrlCtrl.text = AppConfig.posBaseUrl;
+    } else {
+      _serverUrlCtrl.text = '';
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDeviceIdentity());
   }
 
@@ -56,7 +70,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _loadingIdentity = false;
       });
 
-      await _loadWarehouses();
+      // Resume warehouse list only when a custom URL was already saved.
+      if (session.posBaseUrl?.trim().isNotEmpty == true) {
+        await _connectAndLoadWarehouses(auto: true);
+      }
     } catch (e, stack) {
       AppLogger.error('Register', 'Device identity failed', e, stack);
       if (!mounted) return;
@@ -67,14 +84,39 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
   }
 
-  Future<void> _loadWarehouses() async {
+  Future<void> _connectAndLoadWarehouses({bool auto = false}) async {
+    final url = AppConfig.normalizePosBaseUrlInput(_serverUrlCtrl.text);
+    if (url == null) {
+      setState(() {
+        _error = 'Enter the POS server URL (example: https://your-domain.com/api/pos)';
+        _serverConnected = false;
+        _warehouses = [];
+        _selectedWarehouseId = null;
+      });
+      return;
+    }
+
+    // Block accidental use of loopback on a fresh install unless user typed it.
+    if (!auto && AppConfig.isLoopbackPosUrl(url) && AppConfig.isProduction) {
+      setState(() {
+        _error =
+            'Localhost / 127.0.0.1 is not allowed for production. Enter your public server URL.';
+      });
+      return;
+    }
+
     setState(() {
+      _connecting = true;
       _loadingWarehouses = true;
       _error = null;
     });
 
     try {
-      final api = ref.read(apiClientProvider);
+      final session = ref.read(sessionServiceProvider);
+      await session.savePosBaseUrl(url);
+      bumpSessionState(ref);
+
+      final api = PosApiClient(baseUrl: url, posToken: session.posToken);
       await api.health();
       final warehouses = await api.fetchWarehouses();
 
@@ -84,19 +126,27 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (selected != null && !warehouses.any((w) => w['id'] == selected)) {
         selected = null;
       }
-      selected ??= warehouses.isNotEmpty ? _intOrNull(warehouses.first['id']) : null;
+      selected ??=
+          warehouses.isNotEmpty ? _intOrNull(warehouses.first['id']) : null;
 
       setState(() {
         _warehouses = warehouses;
         _selectedWarehouseId = selected;
+        _serverConnected = true;
+        _connecting = false;
         _loadingWarehouses = false;
+        _error = warehouses.isEmpty
+            ? 'Server connected but no warehouses were returned.'
+            : null;
       });
     } catch (e, stack) {
-      AppLogger.error('Register', 'Load warehouses failed', e, stack);
+      AppLogger.error('Register', 'Connect / load warehouses failed', e, stack);
       if (!mounted) return;
       setState(() {
         _warehouses = [];
         _selectedWarehouseId = null;
+        _serverConnected = false;
+        _connecting = false;
         _loadingWarehouses = false;
         _error = AppLogger.userMessage(e);
       });
@@ -105,6 +155,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   void dispose() {
+    _serverUrlCtrl.dispose();
     _terminalIdCtrl.dispose();
     _tokenCtrl.dispose();
     _pcNameCtrl.dispose();
@@ -116,13 +167,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final activationToken = _tokenCtrl.text.trim();
     final pcName = _pcNameCtrl.text.trim();
     final warehouseId = _selectedWarehouseId;
+    final url = AppConfig.normalizePosBaseUrlInput(_serverUrlCtrl.text);
 
+    if (url == null) {
+      setState(() => _error = 'Enter and connect to the POS server URL first.');
+      return;
+    }
     if (_loadingIdentity || macAddress.isEmpty || activationToken.isEmpty) {
       setState(() => _error = 'Device identity is still loading.');
       return;
     }
-    if (warehouseId == null) {
-      setState(() => _error = 'Select a warehouse.');
+    if (!_serverConnected || warehouseId == null) {
+      setState(
+        () => _error = 'Connect to the server and select a warehouse.',
+      );
       return;
     }
 
@@ -132,8 +190,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     try {
-      final api = ref.read(apiClientProvider);
       final session = ref.read(sessionServiceProvider);
+      await session.savePosBaseUrl(url);
+      bumpSessionState(ref);
+
+      final api = PosApiClient(baseUrl: url, posToken: session.posToken);
 
       await api.health();
       await session.ensureDeviceId();
@@ -161,7 +222,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       }
 
       await session.savePosToken(posToken);
+      // Re-assert configured URL so status/download never fall back to localhost.
+      await session.savePosBaseUrl(url);
       api.setPosToken(posToken);
+      api.setBaseUrl(url);
 
       await session.saveTerminal(
         id: _int(terminal['id']),
@@ -200,7 +264,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   InputDecoration _readOnlyDecoration(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(),
+      border: const OutlineInputBorder(),
       prefixIcon: Icon(icon),
       filled: true,
       fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -210,7 +274,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final canRegister = !_loadingIdentity &&
+        !_connecting &&
         !_loadingWarehouses &&
+        _serverConnected &&
         _terminalIdCtrl.text.isNotEmpty &&
         _tokenCtrl.text.isNotEmpty &&
         _selectedWarehouseId != null &&
@@ -230,22 +296,73 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   size: 56,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(
                   'Register POS',
                   style: Theme.of(context).textTheme.headlineMedium,
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
-                  'Terminal ID and token are generated from this device. '
-                  'Select a warehouse and tap Register.',
+                  'Enter your POS server URL first, connect, then select a warehouse.',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 24),
-                InputDecorator(
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _serverUrlCtrl,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  enabled: !_loading && !_connecting,
                   decoration: InputDecoration(
+                    labelText: 'POS server URL *',
+                    hintText: 'https://your-domain.com/api/pos',
+                    helperText:
+                        'Full API path ending with /pos (not a local IP unless you run the API on this PC)',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.cloud_outlined),
+                  ),
+                  onChanged: (_) {
+                    if (_serverConnected || _error != null) {
+                      setState(() {
+                        _serverConnected = false;
+                        _warehouses = [];
+                        _selectedWarehouseId = null;
+                        _error = null;
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: (_loading || _connecting || _loadingIdentity)
+                      ? null
+                      : () => _connectAndLoadWarehouses(),
+                  icon: _connecting || _loadingWarehouses
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          _serverConnected
+                              ? Icons.check_circle_outline
+                              : Icons.link,
+                        ),
+                  label: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      _connecting || _loadingWarehouses
+                          ? 'Connecting…'
+                          : _serverConnected
+                              ? 'Connected — refresh warehouses'
+                              : 'Connect to server',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InputDecorator(
+                  decoration: const InputDecoration(
                     labelText: 'Warehouse',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.warehouse),
@@ -255,9 +372,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       value: _selectedWarehouseId,
                       isExpanded: true,
                       hint: Text(
-                        _loadingWarehouses
-                            ? 'Loading warehouses…'
-                            : 'Select warehouse',
+                        !_serverConnected
+                            ? 'Connect to server first'
+                            : _loadingWarehouses
+                                ? 'Loading warehouses…'
+                                : 'Select warehouse',
                       ),
                       items: _warehouses
                           .map(
@@ -268,45 +387,48 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           )
                           .where((item) => item.value != null)
                           .toList(),
-                      onChanged: (_loadingWarehouses || _warehouses.isEmpty)
+                      onChanged: (!_serverConnected ||
+                              _loadingWarehouses ||
+                              _warehouses.isEmpty)
                           ? null
                           : (value) =>
                               setState(() => _selectedWarehouseId = value),
                     ),
                   ),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _terminalIdCtrl,
                   readOnly: true,
-                  decoration: _readOnlyDecoration('Terminal ID (MAC)', Icons.tag),
+                  decoration:
+                      _readOnlyDecoration('Terminal ID (MAC)', Icons.tag),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _tokenCtrl,
                   readOnly: true,
                   decoration: _readOnlyDecoration('Token', Icons.vpn_key),
                 ),
-                SizedBox(height: 12),
+                const SizedBox(height: 12),
                 TextField(
                   controller: _pcNameCtrl,
                   readOnly: true,
                   decoration: _readOnlyDecoration('PC name', Icons.computer),
                 ),
                 if (_loadingIdentity) ...[
-                  SizedBox(height: 16),
-                  Center(child: CircularProgressIndicator()),
-                  SizedBox(height: 8),
-                  Text(
+                  const SizedBox(height: 16),
+                  const Center(child: CircularProgressIndicator()),
+                  const SizedBox(height: 8),
+                  const Text(
                     'Reading device MAC address…',
                     textAlign: TextAlign.center,
                   ),
                 ],
                 if (_error != null) ...[
-                  SizedBox(height: 12),
-                  Text(_error!, style: TextStyle(color: Colors.red)),
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
                 ],
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: (_loading || !canRegister) ? null : _register,
                   icon: _loading

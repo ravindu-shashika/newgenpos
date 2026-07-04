@@ -22,6 +22,8 @@ import 'widgets/show_pos_dialog.dart';
 
 final dashboardStatsProvider =
     FutureProvider.autoDispose<DashboardStats>((ref) async {
+  // Rebuild when sales/returns/sync change local data.
+  ref.watch(syncRevisionProvider);
   final db = ref.watch(appDatabaseProvider);
   return DashboardStatsService(db).load();
 });
@@ -170,6 +172,8 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
   Widget build(BuildContext context) {
     final statsAsync = ref.watch(dashboardStatsProvider);
     final content = statsAsync.when(
+      skipLoadingOnReload: true,
+      skipLoadingOnRefresh: true,
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Failed to load: $e')),
       data: (stats) => RefreshIndicator(

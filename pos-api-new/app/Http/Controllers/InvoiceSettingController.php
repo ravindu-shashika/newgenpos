@@ -130,16 +130,6 @@ class InvoiceSettingController extends Controller
 
     public function store(Request $request)
     {
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (!$this->userCanManage()) {
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [
@@ -227,16 +217,6 @@ class InvoiceSettingController extends Controller
             return true;
         }
 
-        if (!env('USER_VERIFIED')) {
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.This feature is disable for demo!'),
-                ], 403);
-            }
-
-            return redirect()->back()->with('not_permitted', __('db.This feature is disable for demo!'));
-        }
-
         if (!$this->userCanManage()) {
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [
@@ -285,10 +265,6 @@ class InvoiceSettingController extends Controller
 
     public function destroy(Request $request, $id)
     {
-        if (!env('USER_VERIFIED')) {
-            return response()->json(['not_permitted' => __('db.This feature is disable for demo!')], 403);
-        }
-
         if (!$this->userCanManage()) {
             return response()->json([
                 'message' => __('db.Sorry! You are not allowed to access this module'),

@@ -279,7 +279,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
 
     const handleSetDefault = async (id) => {
         try {
-            await api.post(`barcodes/${id}/set-default`);
+            await api.post(`barcodes/${id}/set-default`, {});
             showToast('Default barcode setting updated.', 'success');
             fetchRows();
         } catch (err) {

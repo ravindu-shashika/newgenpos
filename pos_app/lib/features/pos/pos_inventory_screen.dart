@@ -18,6 +18,8 @@ import 'widgets/show_pos_dialog.dart';
 
 final inventorySummaryProvider =
     FutureProvider.autoDispose<InventorySummary>((ref) async {
+  // Rebuild when sales/sync or live stock events change local data.
+  ref.watch(syncRevisionProvider);
   final db = ref.watch(appDatabaseProvider);
   final warehouseId = ref.watch(sessionServiceProvider).warehouseId;
   return InventoryService(db).loadSummary(warehouseId: warehouseId);
@@ -25,6 +27,7 @@ final inventorySummaryProvider =
 
 final inventoryListProvider = FutureProvider.autoDispose
     .family<InventoryListPage, InventoryListQuery>((ref, query) async {
+  ref.watch(syncRevisionProvider);
   final db = ref.watch(appDatabaseProvider);
   final warehouseId = ref.watch(sessionServiceProvider).warehouseId;
   return InventoryService(db).loadPage(
@@ -202,10 +205,14 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
       children: [
         Expanded(
           child: summaryAsync.when(
+            skipLoadingOnReload: true,
+            skipLoadingOnRefresh: true,
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Failed to load: $e')),
             data: (summary) {
               return listAsync.when(
+                skipLoadingOnReload: true,
+                skipLoadingOnRefresh: true,
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Failed to load: $e')),
                 data: (listPage) {

@@ -412,15 +412,20 @@ class LocalSaleRepository {
 
     final receiptLines = lines
         .map(
-          (l) => LocalReceiptLine(
-            name: l.name ?? 'Product',
-            code: l.code,
-            qty: l.qty,
-            unitPrice: l.netUnitPrice,
-            total: l.total,
-            discount: l.discount,
-            tax: l.tax,
-          ),
+          (l) {
+            final unitDiscount = l.qty > 0 ? l.discount / l.qty : 0.0;
+            // Bill shows list/real price; discount column is item discount.
+            final listUnitPrice = l.netUnitPrice + unitDiscount;
+            return LocalReceiptLine(
+              name: l.name ?? 'Product',
+              code: l.code,
+              qty: l.qty,
+              unitPrice: listUnitPrice,
+              total: l.total,
+              discount: l.discount,
+              tax: l.tax,
+            );
+          },
         )
         .toList();
 
