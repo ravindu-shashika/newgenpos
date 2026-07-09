@@ -6,29 +6,68 @@ import 'pos_amount_numpad.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
 
-/// Opens a numpad to set the return credit amount (capped at [maxAmount]).
+/// Opens a numpad to set a return credit amount or unit price.
+///
+/// [itemTotal] is shown in the reference chip (defaults to [maxAmount]).
+/// When [maxAmount] is null, the entered value is not capped.
 Future<double?> showReturnCreditAmountDialog({
   required BuildContext context,
-  required double maxAmount,
   required double initialAmount,
+  double? maxAmount,
+  double? itemTotal,
+  String title = 'Return credit',
+  String subtitle = 'Enter the credit amount for this return',
+  String itemTotalLabel = 'Item total',
+  String amountLabel = 'Credit amount',
+  String primaryLabel = 'Apply credit',
+  String useFullLabel = 'Use full item total',
+  bool showUseFullAmount = true,
+  IconData icon = Icons.undo_rounded,
 }) {
   return showPosDialog<double>(
     context: context,
     builder: (ctx) => _ReturnCreditAmountDialog(
-      maxAmount: maxAmount,
       initialAmount: initialAmount,
+      maxAmount: maxAmount,
+      itemTotal: itemTotal ?? maxAmount ?? initialAmount,
+      title: title,
+      subtitle: subtitle,
+      itemTotalLabel: itemTotalLabel,
+      amountLabel: amountLabel,
+      primaryLabel: primaryLabel,
+      useFullLabel: useFullLabel,
+      showUseFullAmount: showUseFullAmount && maxAmount != null,
+      icon: icon,
     ),
   );
 }
 
 class _ReturnCreditAmountDialog extends StatefulWidget {
   const _ReturnCreditAmountDialog({
-    required this.maxAmount,
     required this.initialAmount,
+    required this.itemTotal,
+    this.maxAmount,
+    required this.title,
+    required this.subtitle,
+    required this.itemTotalLabel,
+    required this.amountLabel,
+    required this.primaryLabel,
+    required this.useFullLabel,
+    required this.showUseFullAmount,
+    required this.icon,
   });
 
-  final double maxAmount;
   final double initialAmount;
+  final double? maxAmount;
+  final double itemTotal;
+  final String title;
+  final String subtitle;
+  final String itemTotalLabel;
+  final String amountLabel;
+  final String primaryLabel;
+  final String useFullLabel;
+  final bool showUseFullAmount;
+  final IconData icon;
 
   @override
   State<_ReturnCreditAmountDialog> createState() =>
@@ -40,10 +79,18 @@ class _ReturnCreditAmountDialogState extends State<_ReturnCreditAmountDialog> {
 
   double get _amount => double.tryParse(_amountCtrl.text.trim()) ?? 0;
 
+  double? get _maxCap => widget.maxAmount;
+
+  double _clampAmount(double value) {
+    final max = _maxCap;
+    if (max == null) return value < 0 ? 0 : value;
+    return value.clamp(0, max).toDouble();
+  }
+
   @override
   void initState() {
     super.initState();
-    final initial = widget.initialAmount.clamp(0, widget.maxAmount).toDouble();
+    final initial = _clampAmount(widget.initialAmount);
     _amountCtrl = TextEditingController(
       text: initial % 1 == 0
           ? initial.toStringAsFixed(0)
@@ -58,12 +105,12 @@ class _ReturnCreditAmountDialogState extends State<_ReturnCreditAmountDialog> {
   }
 
   void _apply() {
-    final amount = _amount.clamp(0, widget.maxAmount).toDouble();
-    Navigator.pop(context, amount);
+    Navigator.pop(context, _clampAmount(_amount));
   }
 
   void _useFullAmount() {
-    final max = widget.maxAmount;
+    final max = _maxCap;
+    if (max == null) return;
     _amountCtrl.text =
         max % 1 == 0 ? max.toStringAsFixed(0) : max.toStringAsFixed(2);
     setState(() {});
@@ -72,18 +119,19 @@ class _ReturnCreditAmountDialogState extends State<_ReturnCreditAmountDialog> {
   @override
   Widget build(BuildContext context) {
     final styles = context.posStyles;
-    final amount = _amount.clamp(0, widget.maxAmount).toDouble();
-    final overMax = _amount > widget.maxAmount + 0.009;
+    final amount = _clampAmount(_amount);
+    final max = _maxCap;
+    final overMax = max != null && _amount > max + 0.009;
 
     return PosProfessionalWideDialogShell(
-      title: 'Return credit',
-      subtitle: 'Enter the credit amount for this return',
-      icon: Icons.undo_rounded,
+      title: widget.title,
+      subtitle: widget.subtitle,
+      icon: widget.icon,
       maxWidth: 520,
       onClose: () => Navigator.pop(context),
       footer: PosProfessionalDialogFooter(
         secondaryLabel: 'Cancel',
-        primaryLabel: 'Apply credit',
+        primaryLabel: widget.primaryLabel,
         onSecondary: () => Navigator.pop(context),
         onPrimary: _apply,
       ),
@@ -96,15 +144,15 @@ class _ReturnCreditAmountDialogState extends State<_ReturnCreditAmountDialog> {
               children: [
                 Expanded(
                   child: _InfoChip(
-                    label: 'Item total',
-                    value: formatPosMoney(widget.maxAmount),
+                    label: widget.itemTotalLabel,
+                    value: formatPosMoney(widget.itemTotal),
                     color: styles.text,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _InfoChip(
-                    label: 'Credit amount',
+                    label: widget.amountLabel,
                     value: formatPosMoney(amount),
                     color: context.posBrand.primary,
                   ),
@@ -114,19 +162,21 @@ class _ReturnCreditAmountDialogState extends State<_ReturnCreditAmountDialog> {
             if (overMax) ...[
               const SizedBox(height: 8),
               Text(
-                'Max credit is ${formatPosMoney(widget.maxAmount)}',
+                'Max ${widget.amountLabel.toLowerCase()} is ${formatPosMoney(max!)}',
                 style: styles.caption.copyWith(color: PosColors.red),
               ),
             ],
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _useFullAmount,
-                icon: const Icon(Icons.done_all, size: 18),
-                label: const Text('Use full item total'),
+            if (widget.showUseFullAmount) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _useFullAmount,
+                  icon: const Icon(Icons.done_all, size: 18),
+                  label: Text(widget.useFullLabel),
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 8),
             Container(
               height: 72,

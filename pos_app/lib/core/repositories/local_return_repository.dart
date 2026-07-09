@@ -131,6 +131,7 @@ class LocalReturnRepository {
     int? billerId,
     String? returnNote,
     double? creditAmount,
+    String? issueMode,
   }) async {
     if (lines.isEmpty) {
       throw StateError('Select at least one item to return.');
@@ -199,6 +200,7 @@ class LocalReturnRepository {
       billerId: billerId,
       returnNote: returnNote,
       creditAmount: creditAmount,
+      issueMode: issueMode,
     );
   }
 
@@ -211,6 +213,7 @@ class LocalReturnRepository {
     int? saleId,
     String? returnNote,
     double? creditAmount,
+    String? issueMode,
   }) async {
     final clientUuid = _uuid.v4();
     var totalQty = 0.0;
@@ -348,6 +351,7 @@ class LocalReturnRepository {
     int? billerId,
     String? returnNote,
     double? creditAmount,
+    String? issueMode,
   }) async {
     final clientUuid = _uuid.v4();
     var totalQty = 0.0;
@@ -424,6 +428,7 @@ class LocalReturnRepository {
       'grand_total': grandTotal,
       'total_sale_discount': 0,
       'return_note': returnNote ?? '',
+      if (issueMode != null && issueMode.isNotEmpty) 'issue_mode': issueMode,
       'lines': linePayloads,
     };
 

@@ -61,7 +61,7 @@ const BrandManager = ({ controllerName }) => {
     const importFileRef = useRef(null);
 
     // ── Toast ──────────────────────────────────────────────────────────────────
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     // -- Permissions (resolved against the controllerName passed from the router) --
     const { canAdd, canEdit, canDelete, canImport } = usePermissions(controllerName);
@@ -109,8 +109,8 @@ const BrandManager = ({ controllerName }) => {
             const res = await api.get('brand');
             const data = res.data?.data ?? res.data ?? [];
             setBrands(Array.isArray(data) ? data : []);
-        } catch {
-            showToast('Failed to load brands.', 'error');
+        } catch (err) {
+            showApiError(err, 'Failed to load brands.');
         } finally {
             setLoading(false);
         }
@@ -152,15 +152,15 @@ const BrandManager = ({ controllerName }) => {
         const errs = validate(form);
         if (Object.keys(errs).length) { setFormErrors(errs); return; }
         try {
-            await api.post('brand', buildFormData(form), {
+            const res = await api.post('brand', buildFormData(form), {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setAddOpen(false);
             resetForm();
             fetchBrands();
-            showToast('Brand added successfully.');
-        } catch {
-            showToast('Failed to add brand.', 'error');
+            showApiSuccess(res, 'Brand added successfully.');
+        } catch (err) {
+            showApiError(err, 'Failed to add brand.');
         }
     };
 
@@ -181,40 +181,40 @@ const BrandManager = ({ controllerName }) => {
         if (Object.keys(errs).length) { setFormErrors(errs); return; }
         try {
             // Laravel requires POST + _method: 'PUT' for multipart/form-data
-            await api.post(`brand/${form.brand_id}`, buildFormData(form, 'PUT'), {
+            const res = await api.post(`brand/${form.brand_id}`, buildFormData(form, 'PUT'), {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setEditOpen(false);
             resetForm();
             fetchBrands();
-            showToast('Brand updated successfully.');
-        } catch {
-            showToast('Failed to update brand.', 'error');
+            showApiSuccess(res, 'Brand updated successfully.');
+        } catch (err) {
+            showApiError(err, 'Failed to update brand.');
         }
     };
 
     const handleDelete = async () => {
         try {
-            await api.delete(`brand/${deleteId}`);
+            const res = await api.delete(`brand/${deleteId}`);
             setDeleteId(null);
             fetchBrands();
-            showToast('Brand deleted.');
-        } catch {
-            showToast('Failed to delete brand.', 'error');
+            showApiSuccess(res, 'Brand deleted.');
+        } catch (err) {
+            showApiError(err, 'Failed to delete brand.');
         }
     };
 
     const handleBulkDelete = async () => {
         try {
-            await api.post('brand/deletebyselection', {
+            const res = await api.post('brand/deletebyselection', {
                 brandIdArray: [...selected],
             });
             setBulkDeleteOpen(false);
             setSelected(new Set());
             fetchBrands();
-            showToast(`${selected.size} brand${selected.size > 1 ? 's' : ''} deleted.`);
-        } catch {
-            showToast('Bulk delete failed.', 'error');
+            showApiSuccess(res, `${selected.size} brand${selected.size > 1 ? 's' : ''} deleted.`);
+        } catch (err) {
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 
@@ -225,14 +225,14 @@ const BrandManager = ({ controllerName }) => {
         const fd = new FormData();
         fd.append('file', file);
         try {
-            await api.post('brand/import', fd, {
+            const res = await api.post('brand/import', fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setImportOpen(false);
             fetchBrands();
-            showToast('Brands imported successfully.');
-        } catch {
-            showToast('Import failed.', 'error');
+            showApiSuccess(res, 'Brands imported successfully.');
+        } catch (err) {
+            showApiError(err, 'Import failed.');
         }
     };
 

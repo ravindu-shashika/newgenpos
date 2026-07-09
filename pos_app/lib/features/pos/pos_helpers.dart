@@ -1,7 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import 'models/cart_line.dart';
 import 'pos_currency.dart';
+
+/// Default card holder label when POS card UI does not collect a name.
+const kDefaultCardHolderName = 'card customer';
+
+String resolveCardHolderName(String? value) {
+  final trimmed = value?.trim() ?? '';
+  return trimmed.isEmpty ? kDefaultCardHolderName : trimmed;
+}
 
 /// Payment + coupon helpers aligned with web `posHelpers.js` / `pos.blade.php`.
 class MixPaymentLine {
@@ -104,6 +114,74 @@ String? stockLimitMessage({
 dynamic encodePaidById(String paidById) {
   final parsed = int.tryParse(paidById);
   return parsed ?? paidById;
+}
+
+/// Receipt / report label for a Spatie paid_by_id (1=cash, 3=card, …).
+String saleTypeLabelForPaidById(String paidById) {
+  final id = paidById.trim();
+  for (final method in kPosPaymentMethods.values) {
+    if (method.id == id) {
+      return method.label;
+    }
+  }
+  if (id.isEmpty || id == '1') return 'Cash';
+  if (id == '3') return 'Card';
+  final words = id.replaceAll('_', ' ').split(RegExp(r'\s+'));
+  return words
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+      .join(' ');
+}
+
+List<String> _paidByIdsFromSalePayload(Map<String, dynamic> map) {
+  final paidBy = map['paid_by_id'];
+  if (paidBy is List) {
+    return paidBy.map((v) => v.toString()).toList();
+  }
+  if (paidBy != null) return [paidBy.toString()];
+  return const ['1'];
+}
+
+int _saleTypeIdSortOrder(String id) {
+  switch (id.trim()) {
+    case '1':
+      return 0;
+    case '3':
+      return 1;
+    case '4':
+      return 2;
+    case '2':
+      return 3;
+    case '6':
+      return 4;
+    case '7':
+      return 5;
+    default:
+      return 50;
+  }
+}
+
+/// Reads saved sale payload (`paid_by_id`) for receipt "Sale Type" line.
+/// Cash → Cash, Card → Card, mix → Cash & Card (etc.).
+String receiptSaleTypeFromPayloadJson(String? payloadJson) {
+  if (payloadJson == null || payloadJson.isEmpty) return 'Cash';
+  try {
+    final map = jsonDecode(payloadJson) as Map<String, dynamic>;
+    final ids = [..._paidByIdsFromSalePayload(map)]
+      ..sort((a, b) => _saleTypeIdSortOrder(a).compareTo(_saleTypeIdSortOrder(b)));
+
+    final labels = <String>[];
+    final seen = <String>{};
+    for (final id in ids) {
+      final label = saleTypeLabelForPaidById(id);
+      if (seen.add(label)) labels.add(label);
+    }
+
+    if (labels.isEmpty) return 'Cash';
+    if (labels.length == 1) return labels.first;
+    return labels.join(' & ');
+  } catch (_) {
+    return 'Cash';
+  }
 }
 
 class PosPaymentMethod {

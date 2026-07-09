@@ -207,6 +207,7 @@ class ExpenseController extends Controller
 
     public function store(Request $request)
     {
+        try {
         $data = $request->except('document');
         $data = $request->all();
         $document = $request->document;
@@ -266,6 +267,15 @@ class ExpenseController extends Controller
             return $this->spaJson($request, ['message' => $message], 201);
         }
         return redirect('expenses')->with('message', $message);
+        } catch (\Throwable $e) {
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save expense. Please check your entries and try again.'),
+                422,
+                'expenses'
+            );
+        }
     }
 
     public function edit(Request $request, $id)
@@ -295,6 +305,7 @@ class ExpenseController extends Controller
 
     public function update(Request $request, $id)
     {
+        try {
         $data = $request->except('document');
         $data = $request->all();
         $lims_expense_data = Expense::find($data['expense_id']);
@@ -350,6 +361,15 @@ class ExpenseController extends Controller
             return $this->spaJson($request, ['message' => $message]);
         }
         return redirect('expenses')->with('message', $message);
+        } catch (\Throwable $e) {
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not update expense. Please check your entries and try again.'),
+                422,
+                'expenses'
+            );
+        }
     }
 
     public function deleteBySelection(Request $request)

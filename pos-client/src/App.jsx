@@ -11,7 +11,7 @@ import {
   cookie,
 } from './services';
 import { isPosPathname } from './services/posApp';
-import { hasToken, restoreSessionToken, PERSISTENT_COOKIE_OPTIONS } from './services/tokenStorage';
+import { hasToken, restoreSessionToken, clearToken, PERSISTENT_COOKIE_OPTIONS } from './services/tokenStorage';
 import authStore from './stores/authStore';
 import roleStore from './stores/roleStore';
 import generalSettingStore from './stores/generalSettingStore';
@@ -156,29 +156,47 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const token = restoreSessionToken();
-    const authed = Boolean(token || hasToken());
-    setIsAuthenticated(authed);
-    setSessionReady(true);
-    if (!authed) return undefined;
+    let cancelled = false;
 
-    authStore.fetchUser().then((result) => {
-      // Token may have been cleared by a 401 during fetchUser
+    const boot = async () => {
+      restoreSessionToken();
       if (!hasToken()) {
-        setIsAuthenticated(false);
+        if (!cancelled) {
+          setIsAuthenticated(false);
+          setSessionReady(true);
+        }
         return;
       }
+
+      const result = await authStore.fetchUser();
+      if (cancelled) return;
+
+      if (!hasToken()) {
+        setIsAuthenticated(false);
+        setSessionReady(true);
+        return;
+      }
+
       if (result?.user) {
-        // Refresh role cookies so menu build works after browser reopen
+        setIsAuthenticated(true);
         const u = result.user;
         if (u.id != null) cookie.set('user_id', u.id, PERSISTENT_COOKIE_OPTIONS);
         if (u.name) cookie.set('user_name', u.name, PERSISTENT_COOKIE_OPTIONS);
         const roleId = u.role_id ?? u.role?.id;
         if (roleId != null) cookie.set('role_id', roleId, PERSISTENT_COOKIE_OPTIONS);
         if (u.role?.name) cookie.set('role_name', u.role.name, PERSISTENT_COOKIE_OPTIONS);
+      } else {
+        authStore.clearAuth();
+        clearToken();
+        setIsAuthenticated(false);
       }
-    });
-    return undefined;
+      setSessionReady(true);
+    };
+
+    boot();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

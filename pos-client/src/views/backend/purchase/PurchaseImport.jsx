@@ -172,7 +172,9 @@ export default function PurchaseImport() {
         return (
             <PageLayout eyebrow="Purchase" title="Import Purchase">
                 <p className="text-danger">You are not allowed to access this page.</p>
-                <Link to="/purchases" className="ui-btn">Back to list</Link>
+                <Link to="/purchases" className="ui-btn ghost sm">
+                    <i className="fa fa-arrow-left ui-btn-icon" /> Back to list
+                </Link>
             </PageLayout>
         );
     }
@@ -236,11 +238,11 @@ export default function PurchaseImport() {
                         <FormField label="Sample file">
                             <a
                                 href={sampleUrl}
-                                className="ui-btn ghost"
+                                className="ui-btn ghost sm"
                                 style={{ justifyContent: 'center' }}
                                 download
                             >
-                                ↓ Download sample file
+                                <i className="fa fa-download ui-btn-icon" /> Download sample file
                             </a>
                         </FormField>
                     </FormRow>
@@ -295,12 +297,13 @@ export default function PurchaseImport() {
                     </FormField>
                 </FormSection>
 
-                <div className="d-flex gap-2">
-                    <button type="submit" className="ui-btn primary" disabled={submitting}>
+                <div className="ui-btn-group">
+                    <button type="submit" className="ui-btn primary sm" disabled={submitting}>
+                        <i className={`fa ${submitting ? 'fa-spinner fa-spin' : 'fa-check'} ui-btn-icon`} />
                         {submitting ? 'Importing…' : 'Submit'}
                     </button>
-                    <Link to="/purchases" className="ui-btn">
-                        Cancel
+                    <Link to="/purchases" className="ui-btn ghost sm">
+                        <i className="fa fa-times ui-btn-icon" /> Cancel
                     </Link>
                 </div>
             </form>

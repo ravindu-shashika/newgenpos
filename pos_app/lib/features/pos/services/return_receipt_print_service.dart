@@ -116,27 +116,40 @@ class ReturnReceiptPrintService {
             children: [
               pw.Center(
                 child: pw.Text(
-                  'SALES RETURN',
+                  'RETURN BILL',
                   style: pw.TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.Center(
+                child: pw.Text(
+                  'Store credit voucher',
+                  style: const pw.TextStyle(fontSize: 8),
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Center(
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: refDisplay,
+                  width: 160,
+                  height: 40,
+                  drawText: false,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Center(
+                child: pw.Text(
+                  refDisplay,
+                  style: pw.TextStyle(
+                    fontSize: 11,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
               ),
               pw.SizedBox(height: 6),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Return #:', style: const pw.TextStyle(fontSize: 9)),
-                  pw.Text(
-                    refDisplay,
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
               pw.Align(
                 alignment: pw.Alignment.centerRight,
                 child: pw.Text(
@@ -181,6 +194,43 @@ class ReturnReceiptPrintService {
                 ),
               ),
               pw.SizedBox(height: 4),
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    flex: 5,
+                    child: pw.Text(
+                      'Item',
+                      style: pw.TextStyle(
+                        fontSize: 7,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 2,
+                    child: pw.Text(
+                      'Qty',
+                      style: pw.TextStyle(
+                        fontSize: 7,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                      textAlign: pw.TextAlign.right,
+                    ),
+                  ),
+                  pw.Expanded(
+                    flex: 3,
+                    child: pw.Text(
+                      'Amount',
+                      style: pw.TextStyle(
+                        fontSize: 7,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                      textAlign: pw.TextAlign.right,
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 2),
               for (final line in result.lines) ...[
                 pw.Text(
                   line.name,
@@ -191,33 +241,47 @@ class ReturnReceiptPrintService {
                   maxLines: 2,
                 ),
                 pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text(
-                      '${line.code} x ${qtyFmt.format(line.qty)}',
-                      style: const pw.TextStyle(fontSize: 7),
+                    pw.Expanded(
+                      flex: 5,
+                      child: pw.Text(
+                        line.code,
+                        style: const pw.TextStyle(fontSize: 7),
+                      ),
                     ),
-                    pw.Text(
-                      formatPosMoney(line.total),
-                      style: const pw.TextStyle(fontSize: 7),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        qtyFmt.format(line.qty),
+                        style: const pw.TextStyle(fontSize: 7),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Text(
+                        formatPosMoney(line.total),
+                        style: const pw.TextStyle(fontSize: 7),
+                        textAlign: pw.TextAlign.right,
+                      ),
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 2),
+                pw.SizedBox(height: 3),
               ],
               pw.Divider(thickness: 0.5),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'RETURN CREDIT',
+                    'CREDIT ISSUED',
                     style: pw.TextStyle(
                       fontSize: 10,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   pw.Text(
-                    formatPosMoney(result.creditRemaining),
+                    formatPosMoney(result.grandTotal),
                     style: pw.TextStyle(
                       fontSize: 11,
                       fontWeight: pw.FontWeight.bold,
@@ -225,7 +289,27 @@ class ReturnReceiptPrintService {
                   ),
                 ],
               ),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Remaining credit',
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                  pw.Text(
+                    formatPosMoney(result.creditRemaining),
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                ],
+              ),
               pw.SizedBox(height: 8),
+              pw.Text(
+                'Valid until fully settled on a future purchase.',
+                style: const pw.TextStyle(fontSize: 7),
+                textAlign: pw.TextAlign.center,
+              ),
+              pw.SizedBox(height: 4),
               pw.Text(
                 'Scan this return bill on your next purchase to settle credit.',
                 style: const pw.TextStyle(fontSize: 7),

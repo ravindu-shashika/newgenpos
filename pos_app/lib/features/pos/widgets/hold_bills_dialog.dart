@@ -135,6 +135,7 @@ class _HoldBillsDialogState extends ConsumerState<_HoldBillsDialog> {
                 name: l.name,
                 qty: l.qty,
                 netUnitPrice: l.netUnitPrice,
+                netUnitCost: l.netUnitCost,
                 discount: l.discount,
                 taxRate: l.taxRate,
                 taxMethod: l.taxMethod,

@@ -10,6 +10,44 @@ import '../../features/pos/pos_totals.dart';
 import '../../features/pos/sale_reference.dart';
 import '../../features/pos/pos_helpers.dart';
 
+double _tenderedFromPayload(String? payloadJson, double fallbackPaid) {
+  if (payloadJson == null || payloadJson.trim().isEmpty) return fallbackPaid;
+  try {
+    final map = jsonDecode(payloadJson);
+    if (map is! Map<String, dynamic>) return fallbackPaid;
+    final paying = map['paying_amount'];
+    if (paying is List) {
+      var sum = 0.0;
+      for (final v in paying) {
+        if (v is num) {
+          sum += v.toDouble();
+        } else {
+          sum += double.tryParse(v.toString()) ?? 0;
+        }
+      }
+      if (sum > 0) return sum;
+    } else if (paying is num && paying > 0) {
+      return paying.toDouble();
+    }
+  } catch (_) {}
+  return fallbackPaid;
+}
+
+bool _payloadHasCardPayment({
+  required bool isDraft,
+  required String paidById,
+  required List<MixPaymentLine> normalizedMix,
+  required String cardNumber,
+  required String cardType,
+}) {
+  if (isDraft) return false;
+  if (cardNumber.isNotEmpty || cardType.isNotEmpty) return true;
+  if (normalizedMix.isNotEmpty) {
+    return normalizedMix.any((line) => line.paidById == '3');
+  }
+  return paidById == '3';
+}
+
 class LocalSaleRepository {
   LocalSaleRepository(this._db);
 
@@ -242,9 +280,17 @@ class LocalSaleRepository {
       'paying_amount': payingAmounts,
       'payment_note': paymentNote,
       if (paymentReceiver.isNotEmpty) 'payment_receiver': paymentReceiver,
-      if (cardNumber.isNotEmpty) 'card_number': cardNumber,
-      if (cardHolderName.isNotEmpty) 'card_holder_name': cardHolderName,
-      if (cardType.isNotEmpty) 'card_type': cardType,
+      if (_payloadHasCardPayment(
+        isDraft: isDraft,
+        paidById: paidById,
+        normalizedMix: normalizedMix,
+        cardNumber: cardNumber,
+        cardType: cardType,
+      )) ...{
+        'card_number': cardNumber,
+        'card_holder_name': resolveCardHolderName(cardHolderName),
+        if (cardType.isNotEmpty) 'card_type': cardType,
+      },
       if (chequeNo.isNotEmpty) 'cheque_no': chequeNo,
       'account_id': 0,
       'currency_id': currencyId,
@@ -313,6 +359,9 @@ class LocalSaleRepository {
             name: map['name']?.toString() ?? 'Product',
             qty: qty,
             netUnitPrice: (map['net_unit_price'] as num?)?.toDouble() ?? 0,
+            netUnitCost: (map['net_unit_cost'] as num?)?.toDouble() ??
+                (map['unit_cost'] as num?)?.toDouble() ??
+                0,
             discount: (map['discount'] as num?)?.toDouble() ?? 0,
             taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0,
             taxMethod: (map['tax_method'] as num?)?.toInt() ?? 1,
@@ -430,6 +479,10 @@ class LocalSaleRepository {
         .toList();
 
     final subtotal = receiptLines.fold<double>(0, (s, l) => s + l.total);
+    final itemDiscount =
+        receiptLines.fold<double>(0, (s, l) => s + l.discount);
+    final orderDiscount = sale.orderDiscount;
+    final tendered = _tenderedFromPayload(sale.payloadJson, sale.paidAmount);
 
     return LocalReceipt(
       referenceNo: ref,
@@ -439,12 +492,14 @@ class LocalSaleRepository {
       cashierName: cashierName ?? '',
       registerName: warehouse?.name ?? 'MAIN',
       dailySaleNumber: sale.id,
-      saleType: 'CASH',
+      saleType: receiptSaleTypeFromPayloadJson(sale.payloadJson),
       subtotal: subtotal,
       grandTotal: sale.grandTotal,
       paidAmount: sale.paidAmount,
-      tenderedAmount: sale.paidAmount,
+      tenderedAmount: tendered,
       totalTax: sale.totalTax,
+      itemDiscount: itemDiscount,
+      orderDiscount: orderDiscount,
       totalDiscount: sale.totalDiscount,
       serverSaleId: sale.serverSaleId,
       lines: receiptLines,

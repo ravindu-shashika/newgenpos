@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Currency;
 use App\Models\GeneralSetting;
+use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +27,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->app->afterResolving('translator', function (Translator $translator) {
+            $translator->handleMissingKeysUsing(function (string $key) {
+                return humanize_db_message($key);
+            });
+        });
+
         if (!Schema::hasTable('general_settings')) {
             return;
         }

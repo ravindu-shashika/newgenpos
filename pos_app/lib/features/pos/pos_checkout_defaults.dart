@@ -16,6 +16,32 @@ int? _idInCatalog(int? id, Iterable<int> catalogIds) {
   return catalogIds.contains(value) ? value : null;
 }
 
+typedef CheckoutPartyMissing = ({
+  bool missingCustomer,
+  bool missingBiller,
+});
+
+CheckoutPartyMissing checkoutPartyMissingParts({
+  required int? checkoutCustomerId,
+  required int? checkoutBillerId,
+}) {
+  return (
+    missingCustomer: checkoutCustomerId == null,
+    missingBiller: checkoutBillerId == null,
+  );
+}
+
+bool checkoutPartiesMissing({
+  required int? checkoutCustomerId,
+  required int? checkoutBillerId,
+}) {
+  final parts = checkoutPartyMissingParts(
+    checkoutCustomerId: checkoutCustomerId,
+    checkoutBillerId: checkoutBillerId,
+  );
+  return parts.missingCustomer || parts.missingBiller;
+}
+
 /// Resolves register customer / biller / warehouse for a new sale.
 ///
 /// Only IDs present in the downloaded catalog are used. Defaults come from
@@ -32,20 +58,23 @@ CheckoutPartyIds resolveCheckoutPartyIds({
   required List<Biller> billers,
   required List<Warehouse> warehouses,
   bool includeSessionFallback = true,
+  bool useUiDefaults = true,
 }) {
   final customerIds = customers.map((c) => c.id).toSet();
   final billerIds = billers.map((b) => b.id).toSet();
   final warehouseIds = warehouses.map((w) => w.id).toSet();
 
   // Prefer configured defaults, but only if they exist in downloaded data.
-  int? customerId = _idInCatalog(ui.defaultCustomerId, customerIds) ??
+  int? customerId = (useUiDefaults
+          ? _idInCatalog(ui.defaultCustomerId, customerIds)
+          : null) ??
       _idInCatalog(settings?.customerId, customerIds) ??
       _idInCatalog(syncMeta?.defaultCustomerId, customerIds);
   if (includeSessionFallback) {
     customerId ??= _idInCatalog(sessionCustomerId, customerIds);
   }
 
-  int? billerId = _idInCatalog(ui.defaultBillerId, billerIds) ??
+  int? billerId = (useUiDefaults ? _idInCatalog(ui.defaultBillerId, billerIds) : null) ??
       _idInCatalog(settings?.billerId, billerIds) ??
       _idInCatalog(syncMeta?.defaultBillerId, billerIds);
   if (includeSessionFallback) {

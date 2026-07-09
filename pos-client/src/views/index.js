@@ -3,6 +3,7 @@ export { default as CategoryManager } from './backend/category/CategoryManager';
 export { default as CustomerGroup } from './backend/customer_group/CustomerGroup';
 export { default as CustomerManager } from './backend/customer/CustomerManager';
 export { default as BrandManager } from './backend/brand/BrandManager';
+export { default as VariantMasterManager } from './backend/variant/VariantMasterManager';
 export { default as UnitManager } from './backend/unit/UnitManager';
 export { default as PrinterManager } from './backend/printer/PrinterManager';
 export { default as InvoiceSettingManager } from './backend/setting/invoice_setting/InvoiceSettingManager';

@@ -110,7 +110,7 @@ const SaleAgentManager = ({ controllerName }) => {
     const [form, setForm] = useState(INITIAL_FORM);
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchForm = (patch) => setForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -131,7 +131,7 @@ const SaleAgentManager = ({ controllerName }) => {
                 project_enabled: !!data.project_enabled,
             });
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load sale agents.', 'error');
+            showApiError(err, 'Failed to load sale agents.');
         } finally {
             setLoading(false);
         }
@@ -309,17 +309,17 @@ const SaleAgentManager = ({ controllerName }) => {
             setSaving(true);
             const fd = buildFormData();
             if (editId) {
-                await api.put(`sale-agents/${editId}`, fd);
-                showToast('Sale agent updated.');
+                const res = await api.put(`sale-agents/${editId}`, fd);
+                showApiSuccess(res, 'Sale agent updated.');
                 setEditOpen(false);
             } else {
-                await api.post('sale-agents', fd);
-                showToast('Sale agent created.');
+                const res = await api.post('sale-agents', fd);
+                showApiSuccess(res, 'Sale agent created.');
                 setAddOpen(false);
             }
             fetchData();
         } catch (err) {
-            showToast(err.response?.data?.message || err.message || 'Submit failed.', 'error');
+            showApiError(err, 'Submit failed.');
         } finally {
             setSaving(false);
         }
@@ -327,24 +327,24 @@ const SaleAgentManager = ({ controllerName }) => {
 
     const handleDelete = async () => {
         try {
-            await api.delete(`sale-agents/${deleteId}`);
+            const res = await api.delete(`sale-agents/${deleteId}`);
             setDeleteId(null);
             fetchData();
-            showToast('Sale agent deleted.');
+            showApiSuccess(res, 'Sale agent deleted.');
         } catch (err) {
-            showToast(err.response?.data?.message || 'Delete failed.', 'error');
+            showApiError(err, 'Delete failed.');
         }
     };
 
     const handleBulkDelete = async () => {
         try {
-            await api.post('sale-agents/deletebyselection', { employeeIdArray: Array.from(selected) });
+            const res = await api.post('sale-agents/deletebyselection', { employeeIdArray: Array.from(selected) });
             setBulkDeleteOpen(false);
             setSelected(new Set());
             fetchData();
-            showToast(`${selected.size} sale agent(s) deleted.`);
+            showApiSuccess(res, `${selected.size} sale agent(s) deleted.`);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

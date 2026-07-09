@@ -7,6 +7,7 @@ class ScannedProduct {
     required this.taxRate,
     required this.taxMethod,
     required this.warehouseQty,
+    this.cost = 0,
     this.variantId,
     this.image,
     this.source = ProductSource.local,
@@ -24,6 +25,7 @@ class ScannedProduct {
   final double taxRate;
   final int taxMethod;
   final double warehouseQty;
+  final double cost;
   final String? image;
   final ProductSource source;
   final bool isBatch;
@@ -40,6 +42,7 @@ class ScannedProduct {
     double? taxRate,
     int? taxMethod,
     double? warehouseQty,
+    double? cost,
     String? image,
     ProductSource? source,
     bool? isBatch,
@@ -56,6 +59,7 @@ class ScannedProduct {
       taxRate: taxRate ?? this.taxRate,
       taxMethod: taxMethod ?? this.taxMethod,
       warehouseQty: warehouseQty ?? this.warehouseQty,
+      cost: cost ?? this.cost,
       image: image ?? this.image,
       source: source ?? this.source,
       isBatch: isBatch ?? this.isBatch,
@@ -75,6 +79,7 @@ class ScannedProduct {
       taxRate: _dbl(map['tax_rate']),
       taxMethod: _int(map['tax_method'], fallback: 1),
       warehouseQty: _dbl(map['warehouse_qty'] ?? map['qty']),
+      cost: _dbl(map['cost'] ?? map['net_unit_cost'] ?? map['unit_cost']),
       image: map['image']?.toString() ?? map['base_image']?.toString(),
       source: ProductSource.remote,
       isBatch: map['is_batch'] == true || map['is_batch'] == 1,

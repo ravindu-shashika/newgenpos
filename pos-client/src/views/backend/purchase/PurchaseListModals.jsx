@@ -284,11 +284,14 @@ export function PurchaseAddPaymentModal({ row, accounts, onClose, onSuccess, sho
                         onChange={(e) => setForm((f) => ({ ...f, payment_note: e.target.value }))}
                     />
                 </FormField>
-                <div className="d-flex gap-2 mt-3">
-                    <button type="submit" className="ui-btn primary" disabled={submitting}>
+                <div className="ui-btn-group mt-3">
+                    <button type="submit" className="ui-btn primary sm" disabled={submitting}>
+                        <i className={`fa ${submitting ? 'fa-spinner fa-spin' : 'fa-check'} ui-btn-icon`} />
                         {submitting ? 'Saving…' : 'Submit'}
                     </button>
-                    <button type="button" className="ui-btn" onClick={onClose}>Cancel</button>
+                    <button type="button" className="ui-btn ghost sm" onClick={onClose}>
+                        <i className="fa fa-times ui-btn-icon" /> Cancel
+                    </button>
                 </div>
             </form>
         </Modal>
@@ -454,12 +457,13 @@ export function PurchasePaymentsModal({
                                 onChange={(e) => setEditForm((f) => ({ ...f, edit_payment_note: e.target.value }))}
                             />
                         </FormField>
-                        <div className="d-flex gap-2 mt-2">
-                            <button type="submit" className="ui-btn primary" disabled={submitting}>
+                        <div className="ui-btn-group mt-2">
+                            <button type="submit" className="ui-btn primary sm" disabled={submitting}>
+                                <i className={`fa ${submitting ? 'fa-spinner fa-spin' : 'fa-save'} ui-btn-icon`} />
                                 {submitting ? 'Updating…' : 'Update'}
                             </button>
-                            <button type="button" className="ui-btn" onClick={() => { setEditId(null); setEditForm(null); }}>
-                                Cancel
+                            <button type="button" className="ui-btn ghost sm" onClick={() => { setEditId(null); setEditForm(null); }}>
+                                <i className="fa fa-times ui-btn-icon" /> Cancel
                             </button>
                         </div>
                     </form>
@@ -496,15 +500,15 @@ export function PurchasePaymentsModal({
                                         <td>{p.payment_at}</td>
                                         {(canEditPayment || canDeletePayment) && (
                                             <td>
-                                                <div className="d-flex gap-1 flex-wrap">
+                                                <div className="ui-btn-group">
                                                     {canEditPayment && (
-                                                        <button type="button" className="ui-btn sm" onClick={() => startEdit(p)}>
-                                                            Edit
+                                                        <button type="button" className="ui-btn ghost sm" onClick={() => startEdit(p)}>
+                                                            <i className="fa fa-pencil ui-btn-icon" /> Edit
                                                         </button>
                                                     )}
                                                     {canDeletePayment && (
-                                                        <button type="button" className="ui-btn sm danger" onClick={() => setDeleteId(p.id)}>
-                                                            Delete
+                                                        <button type="button" className="ui-btn danger sm" onClick={() => setDeleteId(p.id)}>
+                                                            <i className="fa fa-trash ui-btn-icon" /> Delete
                                                         </button>
                                                     )}
                                                 </div>

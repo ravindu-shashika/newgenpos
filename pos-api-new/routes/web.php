@@ -15,15 +15,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/clear-all-cache', function () {
-    $key = (string) env('ARTISAN_WEB_KEY', '');
-    $provided = (string) request()->query('key', '');
-
-    if ($key === '' || ! hash_equals($key, $provided)) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Unauthorized. Add ARTISAN_WEB_KEY to .env and open /clear-all-cache?key=YOUR_SECRET',
-        ], 403);
-    }
+  
 
     try {
         Artisan::call('optimize:clear');

@@ -8,6 +8,7 @@ class CartLine {
     required this.netUnitPrice,
     required this.taxRate,
     required this.taxMethod,
+    this.netUnitCost = 0,
     this.variantId,
     this.productBatchId,
     this.batchNo,
@@ -25,6 +26,7 @@ class CartLine {
   final String name;
   double qty;
   double netUnitPrice;
+  double netUnitCost;
   double discount;
   double taxRate;
   int taxMethod;
@@ -51,6 +53,7 @@ class CartLine {
     double? qty,
     double? stockQty,
     double? netUnitPrice,
+    double? netUnitCost,
     double? discount,
     double? taxRate,
     int? taxMethod,
@@ -66,6 +69,7 @@ class CartLine {
       code: code,
       name: name,
       netUnitPrice: netUnitPrice ?? this.netUnitPrice,
+      netUnitCost: netUnitCost ?? this.netUnitCost,
       taxRate: taxRate ?? this.taxRate,
       taxMethod: taxMethod ?? this.taxMethod,
       qty: qty ?? this.qty,
@@ -84,6 +88,7 @@ class CartLine {
       'name': name,
       'qty': qty,
       'net_unit_price': netUnitPrice,
+      'net_unit_cost': netUnitCost,
       'discount': discount,
       'tax_rate': taxRate,
       'tax': lineTax,

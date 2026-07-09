@@ -30,7 +30,7 @@ class ReturnCartLine {
   final String code;
   final String name;
   double qty;
-  final double netUnitPrice;
+  double netUnitPrice;
   final double discount;
   final double taxRate;
   final int taxMethod;
@@ -57,6 +57,7 @@ class ReturnCartLine {
 
   ReturnCartLine copyWith({
     double? qty,
+    double? netUnitPrice,
     bool? isDamage,
   }) {
     return ReturnCartLine(
@@ -67,7 +68,7 @@ class ReturnCartLine {
       productSaleId: productSaleId,
       code: code,
       name: name,
-      netUnitPrice: netUnitPrice,
+      netUnitPrice: netUnitPrice ?? this.netUnitPrice,
       discount: discount,
       taxRate: taxRate,
       taxMethod: taxMethod,

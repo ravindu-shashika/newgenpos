@@ -121,6 +121,20 @@ class CurrencyController extends Controller
         return view('backend.currency.index', compact('lims_currency_all'));
     }
 
+    protected function forgetCurrencyCache(?int $currencyId = null): void
+    {
+        if ($currencyId) {
+            cache()->forget('currency_'.$currencyId);
+        }
+
+        $defaultId = GeneralSetting::latest()->first()?->currency;
+        if ($defaultId) {
+            cache()->forget('currency_'.$defaultId);
+        }
+
+        cache()->forget('currency');
+    }
+
     public function store(Request $request)
     {
         if (!$this->userCanAccess()) {
@@ -145,7 +159,7 @@ class CurrencyController extends Controller
         $data = $request->only(['name', 'code', 'symbol', 'exchange_rate']);
         $data['is_active'] = true;
         $currency = Currency::create($data);
-        cache()->forget('currency');
+        $this->forgetCurrencyCache((int) $currency->id);
 
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [
@@ -200,7 +214,7 @@ class CurrencyController extends Controller
         }
 
         $currency->update($data);
-        cache()->forget('currency');
+        $this->forgetCurrencyCache($currencyId);
 
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [
@@ -238,7 +252,7 @@ class CurrencyController extends Controller
         }
 
         $currency->update(['is_active' => false]);
-        cache()->forget('currency');
+        $this->forgetCurrencyCache($currencyId);
 
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [

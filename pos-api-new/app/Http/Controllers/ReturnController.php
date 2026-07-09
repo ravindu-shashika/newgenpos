@@ -25,6 +25,7 @@ use App\Models\Unit;
 use App\Models\Variant;
 use App\Models\Warehouse;
 use App\Traits\MailInfo;
+use App\Traits\SpaResponse;
 use App\Traits\StaffAccess;
 use App\Traits\TenantInfo;
 use Illuminate\Http\Request;
@@ -36,7 +37,7 @@ use Spatie\Permission\Models\Role;
 
 class ReturnController extends Controller
 {
-    use TenantInfo, MailInfo, StaffAccess;
+    use TenantInfo, MailInfo, StaffAccess, SpaResponse;
 
     public function index(Request $request)
     {
@@ -626,11 +627,20 @@ class ReturnController extends Controller
                 }
             }
             DB::commit();
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => $message]);
+            }
             return redirect('return-sale')->with('message', $message);
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            return redirect()->back()->with('not_permitted', 'Something went wrong: ' . $e->getMessage());
+
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save sale return. Please check your entries and try again.'),
+                422
+            );
         }
     }
 

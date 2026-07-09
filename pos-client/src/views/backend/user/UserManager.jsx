@@ -107,7 +107,7 @@ const UserManager = ({ controllerName }) => {
     const [form, setForm] = useState(INITIAL_FORM);
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchForm = (patch) => setForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -130,7 +130,7 @@ const UserManager = ({ controllerName }) => {
                 restaurant_enabled: !!data.restaurant_enabled,
             });
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load users.', 'error');
+            showApiError(err, 'Failed to load users.');
         } finally {
             setLoading(false);
         }
@@ -336,18 +336,17 @@ const UserManager = ({ controllerName }) => {
         try {
             setSaving(true);
             if (isEdit) {
-                await api.put(`user/${editId}`, buildUpdatePayload());
-                showToast('User updated.');
+                const res = await api.put(`user/${editId}`, buildUpdatePayload());
+                showApiSuccess(res, 'User updated.');
                 setEditOpen(false);
             } else {
-                await api.post('user', buildCreatePayload());
-                showToast('User created.');
+                const res = await api.post('user', buildCreatePayload());
+                showApiSuccess(res, 'User created.');
                 setAddOpen(false);
             }
             fetchData();
         } catch (err) {
-            const msg = err.response?.data?.message || err.message || 'Submit failed.';
-            showToast(typeof msg === 'string' ? msg : 'Submit failed.', 'error');
+            showApiError(err, 'Submit failed.');
         } finally {
             setSaving(false);
         }
@@ -355,13 +354,13 @@ const UserManager = ({ controllerName }) => {
 
     const handleToggleStatus = async (row, checked) => {
         try {
-            await api.post('user/toggle-status', { id: row.id, is_active: checked ? 1 : 0 });
+            const res = await api.post('user/toggle-status', { id: row.id, is_active: checked ? 1 : 0 });
             setAllUsers((prev) =>
                 prev.map((u) => (u.id === row.id ? { ...u, is_active: checked } : u))
             );
-            showToast('User status updated.');
+            showApiSuccess(res, 'User status updated.');
         } catch (err) {
-            showToast(err.response?.data?.message || 'Status update failed.', 'error');
+            showApiError(err, 'Status update failed.');
             fetchData();
         }
     };
@@ -375,21 +374,21 @@ const UserManager = ({ controllerName }) => {
                 return;
             }
             fetchData();
-            showToast('User deleted.');
+            showApiSuccess(res, 'User deleted.');
         } catch (err) {
-            showToast(err.response?.data?.message || 'Delete failed.', 'error');
+            showApiError(err, 'Delete failed.');
         }
     };
 
     const handleBulkDelete = async () => {
         try {
-            await api.post('user/deletebyselection', { userIdArray: Array.from(selected) });
+            const res = await api.post('user/deletebyselection', { userIdArray: Array.from(selected) });
             setBulkDeleteOpen(false);
             setSelected(new Set());
             fetchData();
-            showToast(`${selected.size} user(s) deleted.`);
+            showApiSuccess(res, `${selected.size} user(s) deleted.`);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

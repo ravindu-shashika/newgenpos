@@ -1,4 +1,10 @@
 /** Default label content options for barcode templates. */
+export const BARCODE_PRICE_DISPLAY = {
+    off: 'off',
+    price: 'price',
+    maxPrice: 'max_price',
+};
+
 export const DEFAULT_BARCODE_PRINT_OPTIONS = {
     layout: 'zebra',
     business_name: true,
@@ -11,7 +17,8 @@ export const DEFAULT_BARCODE_PRINT_OPTIONS = {
     product_code_size: 12,
     alt_code: true,
     alt_code_size: 12,
-    price: true,
+    /** @type {'off'|'price'|'max_price'} */
+    price_display: BARCODE_PRICE_DISPLAY.price,
     price_size: 12,
     promo_price: false,
     promo_price_size: 15,
@@ -40,5 +47,35 @@ export function normalizeBarcodePrintOptions(raw) {
     if (!raw || typeof raw !== 'object') {
         return { ...DEFAULT_BARCODE_PRINT_OPTIONS };
     }
-    return { ...DEFAULT_BARCODE_PRINT_OPTIONS, ...raw };
+    const merged = { ...DEFAULT_BARCODE_PRINT_OPTIONS, ...raw };
+
+    if (
+        merged.price_display !== BARCODE_PRICE_DISPLAY.off
+        && merged.price_display !== BARCODE_PRICE_DISPLAY.price
+        && merged.price_display !== BARCODE_PRICE_DISPLAY.maxPrice
+    ) {
+        if (merged.max_price === true) {
+            merged.price_display = BARCODE_PRICE_DISPLAY.maxPrice;
+        } else if (merged.price === false) {
+            merged.price_display = BARCODE_PRICE_DISPLAY.off;
+        } else {
+            merged.price_display = BARCODE_PRICE_DISPLAY.price;
+        }
+    }
+
+    delete merged.price;
+    delete merged.max_price;
+
+    return merged;
+}
+
+export function barcodePriceDisplayLabel(mode) {
+    switch (mode) {
+        case BARCODE_PRICE_DISPLAY.maxPrice:
+            return 'Max price';
+        case BARCODE_PRICE_DISPLAY.off:
+            return null;
+        default:
+            return 'Sale price';
+    }
 }

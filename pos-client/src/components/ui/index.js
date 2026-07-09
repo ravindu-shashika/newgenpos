@@ -14,6 +14,8 @@ export {
   CheckboxInput,
 } from './FormField';
 export { Toast, useToast }   from './Toast';
+export { PermissionDenied }  from './PermissionDenied';
 export { ActionMenu }        from './ActionMenu';
+export { actionItem, ACTION_ICONS, cleanActionLabel, resolveActionIcon } from './actionMenuHelpers';
 export { Pagination }        from './Pagination';
 export { SelectionBar }      from './SelectionBar';

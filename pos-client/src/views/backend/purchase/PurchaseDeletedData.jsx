@@ -91,7 +91,9 @@ export default function PurchaseDeletedData() {
         return (
             <PageLayout eyebrow="Purchase" title="Deleted Purchases">
                 <p className="text-danger">You are not allowed to access this page.</p>
-                <Link to="/purchases" className="ui-btn">Back to list</Link>
+                <Link to="/purchases" className="ui-btn ghost sm">
+                    <i className="fa fa-arrow-left ui-btn-icon" /> Back to list
+                </Link>
             </PageLayout>
         );
     }
@@ -100,17 +102,17 @@ export default function PurchaseDeletedData() {
         <PageLayout eyebrow="Purchase" title="Deleted Purchases">
             <Toast toast={toast} />
 
-            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
-                <Link to="/purchases" className="ui-btn">
-                    ← Back to purchase list
+            <div className="ui-btn-group mb-3">
+                <Link to="/purchases" className="ui-btn ghost sm">
+                    <i className="fa fa-arrow-left ui-btn-icon" /> Back to purchase list
                 </Link>
                 {selected.size > 0 && (
                     <button
                         type="button"
-                        className="ui-btn danger"
+                        className="ui-btn danger sm"
                         onClick={() => setForceDeleteOpen(true)}
                     >
-                        Delete permanently ({selected.size})
+                        <i className="fa fa-trash ui-btn-icon" /> Delete permanently ({selected.size})
                     </button>
                 )}
             </div>

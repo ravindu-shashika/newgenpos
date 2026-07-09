@@ -8,6 +8,7 @@ import {
   CustomerGroup,
   CustomerManager,
   BrandManager,
+  VariantMasterManager,
   UnitManager,
   PrinterManager,
   InvoiceSettingManager,
@@ -445,6 +446,7 @@ export const ROUTE_REGISTRY = {
   '/dashboard': Dashboard,
   '/category': CategoryManager,
   '/brand': BrandManager,
+  '/variant-masters': VariantMasterManager,
   '/unit': UnitManager,
   '/units': UnitManager, // DB menu route (menus table sub_menu_route)
   '/products': ProductList,

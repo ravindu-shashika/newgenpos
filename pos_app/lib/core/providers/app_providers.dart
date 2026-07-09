@@ -119,6 +119,7 @@ final warehouseRepositoryProvider = Provider<WarehouseRepository>((ref) {
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {
+  ref.watch(sessionRevisionProvider);
   final session = ref.watch(sessionServiceProvider);
   final api = ref.watch(apiClientProvider);
   final sales = ref.watch(localSaleRepositoryProvider);

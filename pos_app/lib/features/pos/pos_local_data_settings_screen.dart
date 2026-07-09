@@ -9,6 +9,7 @@ import '../../core/database/local_database_config.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/providers/local_database_settings_provider.dart';
 import '../../core/providers/local_reverb_settings_provider.dart';
+import '../../core/realtime/pos_realtime_config.dart';
 import '../../core/realtime/pos_realtime_service.dart';
 import '../../core/sync/database_backup_scheduler.dart';
 import '../../core/theme/pos_theme.dart';

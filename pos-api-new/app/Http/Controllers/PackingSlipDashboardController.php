@@ -203,7 +203,7 @@ class PackingSlipDashboardController extends Controller
 
         $variantIds = $rows->pluck('variant_id')->filter()->unique()->values()->all();
         $variants = $variantIds
-            ? Variant::whereIn('id', $variantIds)->pluck('name', 'id')
+            ? Variant::whereIn('id', $variantIds)->pluck('value', 'id')
             : collect();
 
         $lists = [];

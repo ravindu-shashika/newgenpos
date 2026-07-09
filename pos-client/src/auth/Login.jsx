@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { api, auth, msg } from '../services';
-import { hasToken, restoreSessionToken } from '../services/tokenStorage';
 import {
   isMobile,
   browserName,
@@ -28,14 +27,6 @@ const Login = () => {
 
   const [branchList, setBranchList] = useState([]);
   const [currentBranch, setCurrentBranch] = useState({ id: '', code: '', name: '' });
-
-  // Already signed in (e.g. reopen browser) → dashboard, not login form
-  useEffect(() => {
-    restoreSessionToken();
-    if (!hasToken()) return;
-    window.location.hash = '#/dashboard';
-    window.location.reload();
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -57,6 +57,29 @@ if (!function_exists('normalize_to_sql_datetime')) {
     }
 }
 
+if (!function_exists('humanize_db_message')) {
+    /**
+     * Render db.* translation keys as plain English when no lang files are loaded.
+     */
+    function humanize_db_message(string $key): string
+    {
+        if (!str_starts_with($key, 'db.')) {
+            return $key;
+        }
+
+        $text = substr($key, 3);
+        if ($text === '') {
+            return $key;
+        }
+
+        if (str_contains($text, '_') && !str_contains($text, ' ')) {
+            return ucfirst(str_replace('_', ' ', $text));
+        }
+
+        return $text;
+    }
+}
+
 if (!function_exists('format_currency')) {
     function format_currency($amount, $currency = null, $position = null, $decimal = null, $mask = false)
     {

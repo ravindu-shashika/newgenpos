@@ -144,6 +144,7 @@ class _AddItemEntryDialogState extends ConsumerState<_AddItemEntryDialog> {
       code: widget.product.code,
       name: widget.product.name,
       netUnitPrice: widget.product.price,
+      netUnitCost: widget.product.cost,
       taxRate: widget.product.taxRate,
       taxMethod: widget.product.taxMethod,
       qty: _qty,

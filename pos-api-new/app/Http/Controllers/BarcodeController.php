@@ -79,7 +79,26 @@ class BarcodeController extends Controller
             return Barcode::defaultPrintOptions();
         }
 
-        return array_merge(Barcode::defaultPrintOptions(), $value);
+        return $this->resolvePriceDisplay(array_merge(Barcode::defaultPrintOptions(), $value));
+    }
+
+    protected function resolvePriceDisplay(array $options): array
+    {
+        $display = $options['price_display'] ?? null;
+        if (! in_array($display, ['off', 'price', 'max_price'], true)) {
+            if (! empty($options['max_price'])) {
+                $display = 'max_price';
+            } elseif (array_key_exists('price', $options) && $options['price'] === false) {
+                $display = 'off';
+            } else {
+                $display = 'price';
+            }
+        }
+
+        $options['price_display'] = $display;
+        unset($options['price'], $options['max_price']);
+
+        return $options;
     }
 
     protected function prepareBarcodeInput(Request $request): array

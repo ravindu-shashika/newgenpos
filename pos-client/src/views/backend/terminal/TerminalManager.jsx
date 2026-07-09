@@ -58,7 +58,7 @@ export default function TerminalManager({ controllerName }) {
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     const fetchRows = useCallback(async () => {
         setLoading(true);
@@ -150,7 +150,7 @@ export default function TerminalManager({ controllerName }) {
             setAddOpen(false);
             resetForm();
             fetchRows();
-            showToast('Terminal created. Activate it and share the code with the POS device.', 'success');
+            showApiSuccess(res, 'Terminal created. Activate it and share the code with the POS device.');
             const created = res.data?.data;
             if (created?.activation_token_plain || created?.activation_token) {
                 openCredentialsModal(
@@ -160,7 +160,7 @@ export default function TerminalManager({ controllerName }) {
                 );
             }
         } catch (err) {
-            showToast(err?.message || 'Failed to create terminal.', 'error');
+            showApiError(err, 'Failed to create terminal.');
         } finally {
             setSaving(false);
         }
@@ -185,7 +185,7 @@ export default function TerminalManager({ controllerName }) {
         }
         setSaving(true);
         try {
-            await api.put(`terminal/${form.terminal_id}`, {
+            const res = await api.put(`terminal/${form.terminal_id}`, {
                 name: form.name.trim(),
                 warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : null,
                 notes: form.notes?.trim() || null,
@@ -193,9 +193,9 @@ export default function TerminalManager({ controllerName }) {
             setEditOpen(false);
             resetForm();
             fetchRows();
-            showToast('Terminal updated.', 'success');
+            showApiSuccess(res, 'Terminal updated.');
         } catch (err) {
-            showToast(err?.message || 'Failed to update terminal.', 'error');
+            showApiError(err, 'Failed to update terminal.');
         } finally {
             setSaving(false);
         }
@@ -203,33 +203,33 @@ export default function TerminalManager({ controllerName }) {
 
     const handleDelete = async () => {
         try {
-            await api.delete(`terminal/${deleteId}`);
+            const res = await api.delete(`terminal/${deleteId}`);
             setDeleteId(null);
             fetchRows();
-            showToast('Terminal deleted.', 'success');
+            showApiSuccess(res, 'Terminal deleted.');
         } catch (err) {
-            showToast(err?.message || 'Failed to delete terminal.', 'error');
+            showApiError(err, 'Failed to delete terminal.');
         }
     };
 
     const handleActivate = async (id) => {
         try {
             // Empty body required — api.post(url) alone returns a .values() helper and does not send.
-            await api.post(`terminal/${id}/activate`, {});
+            const res = await api.post(`terminal/${id}/activate`, {});
             fetchRows();
-            showToast('Terminal activated.', 'success');
+            showApiSuccess(res, 'Terminal activated.');
         } catch (err) {
-            showToast(err?.message || 'Activation failed.', 'error');
+            showApiError(err, 'Activation failed.');
         }
     };
 
     const handleDeactivate = async (id) => {
         try {
-            await api.post(`terminal/${id}/deactivate`, {});
+            const res = await api.post(`terminal/${id}/deactivate`, {});
             fetchRows();
-            showToast('Terminal deactivated.', 'success');
+            showApiSuccess(res, 'Terminal deactivated.');
         } catch (err) {
-            showToast(err?.message || 'Deactivation failed.', 'error');
+            showApiError(err, 'Deactivation failed.');
         }
     };
 
@@ -245,9 +245,9 @@ export default function TerminalManager({ controllerName }) {
                     'Share this token with the POS device. Previous token is invalid.',
                 );
             }
-            showToast('Activation token regenerated.', 'success');
+            showApiSuccess(res, 'Activation token regenerated.');
         } catch (err) {
-            showToast(err?.message || 'Failed to regenerate token.', 'error');
+            showApiError(err, 'Failed to regenerate token.');
         }
     };
 

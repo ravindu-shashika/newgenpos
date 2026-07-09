@@ -36,6 +36,10 @@ Future<void> main() async {
   // Force Register screen so the user must enter the real API URL again.
   await session.repairInvalidServerUrlRegistration();
 
+  if (session.isLoggedIn && await session.applyServerOfflineReauthIfNeeded()) {
+    // Backend was restarted while the app was closed — require PIN login again.
+  }
+
   if (!session.isRegistered &&
       session.isTerminalRegistered &&
       session.posToken != null &&

@@ -91,11 +91,38 @@ function handleUnauthorized(err) {
   }
 }
 
+function normalizeApiMessage(message) {
+  if (typeof message !== 'string' || !message.startsWith('db.')) {
+    return message;
+  }
+  const text = message.slice(3);
+  if (text.includes('_') && !text.includes(' ')) {
+    return text.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  }
+  return text;
+}
+
+function normalizeResponseData(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (typeof data.message === 'string') {
+    data.message = normalizeApiMessage(data.message);
+  }
+  if (typeof data.msg === 'string') {
+    data.msg = normalizeApiMessage(data.msg);
+  }
+  return data;
+}
+
 function formatAxiosError(err) {
-  const data = err?.response?.data;
+  const data = normalizeResponseData(err?.response?.data);
+  const developerError = typeof data?.error === 'string' ? data.error : null;
+  if (developerError) {
+    console.error('[API error]', developerError);
+  }
   return {
-    message: data?.message || err?.message || 'Request failed',
-    errors: data?.errors || data?.error || null,
+    message: normalizeApiMessage(data?.message) || err?.message || 'Request failed',
+    developerError,
+    errors: data?.errors || null,
     status: err?.response?.status,
     response: err?.response,
     error: err,
@@ -129,6 +156,9 @@ async function axiosRequest(method, url, data, config = {}, base = defaultPath) 
       withCredentials: true,
     });
     handleForbidden(response);
+    if (response?.data) {
+      response.data = normalizeResponseData(response.data);
+    }
     return response;
   } catch (err) {
     handleUnauthorized(err);

@@ -33,6 +33,8 @@ class LocalReceipt {
     required this.paidAmount,
     required this.totalTax,
     required this.totalDiscount,
+    this.itemDiscount = 0,
+    this.orderDiscount = 0,
     this.subtotal = 0,
     this.tenderedAmount = 0,
     this.serverSaleId,
@@ -41,7 +43,7 @@ class LocalReceipt {
     this.paymentNote = '',
     this.dailySaleNumber = 0,
     this.registerName = 'MAIN',
-    this.saleType = 'CASH',
+    this.saleType = 'Cash',
   });
 
   final String referenceNo;
@@ -54,6 +56,10 @@ class LocalReceipt {
   final double paidAmount;
   final double totalTax;
   final double totalDiscount;
+  /// Sum of per-line item discounts.
+  final double itemDiscount;
+  /// Order-level discount (special discount on the sale).
+  final double orderDiscount;
   final double subtotal;
   final double tenderedAmount;
   final int? serverSaleId;
@@ -79,6 +85,21 @@ class LocalReceipt {
     return lines.fold<double>(0, (s, l) => s + l.total);
   }
 
+  double get computedItemDiscount {
+    if (itemDiscount > 0) return itemDiscount;
+    return lines.fold<double>(0, (s, l) => s + l.discount);
+  }
+
+  double get computedOrderDiscount {
+    if (orderDiscount > 0) return orderDiscount;
+    final item = computedItemDiscount;
+    if (totalDiscount > item) return totalDiscount - item;
+    return 0;
+  }
+
+  double get computedTotalDiscount =>
+      computedItemDiscount + computedOrderDiscount;
+
   String get dailySaleLabel =>
       dailySaleNumber > 0 ? 'L-$dailySaleNumber' : '';
 
@@ -94,8 +115,10 @@ class LocalReceipt {
       cashierName: cashierName,
       dailySaleNumber: 1,
       registerName: 'MAIN',
-      saleType: 'CASH',
+      saleType: 'Cash',
       subtotal: 1009.99,
+      itemDiscount: 50.00,
+      orderDiscount: 51.00,
       totalDiscount: 101.00,
       totalTax: 0,
       grandTotal: 908.99,
@@ -108,6 +131,7 @@ class LocalReceipt {
           qty: 1,
           unitPrice: 66.64,
           total: 66.64,
+          discount: 10,
         ),
         LocalReceiptLine(
           name: 'Sample Product Two',
@@ -144,7 +168,7 @@ class LocalReceipt {
       cashierName: cashierName,
       dailySaleNumber: dailySaleNumber,
       registerName: 'MAIN',
-      saleType: 'CASH',
+      saleType: 'Cash',
       lines: const [],
       subtotal: 0,
       grandTotal: 0,

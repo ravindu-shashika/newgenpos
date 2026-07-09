@@ -140,12 +140,7 @@ class TransferDashboardController extends Controller
                 'show_warehouse_filter' => $user && $user->role_id && $user->role_id <= 2,
             ]);
         } catch (\Throwable $e) {
-            report($e);
-
-            return $this->spaJson($request, [
-                'message' => __('db.Failed to load transfers'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+            return $this->respondLoadError($request, $e, __('db.Failed to load transfers'));
         }
     }
 
@@ -240,12 +235,12 @@ class TransferDashboardController extends Controller
 
             return $this->spaJson($request, ['message' => __('db.Transfer updated successfully')]);
         } catch (\Throwable $e) {
-            report($e);
-
-            return $this->spaJson($request, [
-                'message' => __('db.Failed to approve transfer'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not approve transfer. Please try again.'),
+                422
+            );
         }
     }
 
@@ -264,12 +259,12 @@ class TransferDashboardController extends Controller
 
             return $this->spaJson($request, ['message' => __('db.Transfer deleted successfully')]);
         } catch (\Throwable $e) {
-            report($e);
-
-            return $this->spaJson($request, [
-                'message' => __('db.Failed to delete transfer'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not delete transfer. Please try again.'),
+                422
+            );
         }
     }
 

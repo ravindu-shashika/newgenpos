@@ -1974,6 +1974,13 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 }
             }
             else {
+                $snapshotCost = app(\App\Services\SaleLineCostService::class)
+                    ->lineCostFromSnapshot($product_sale);
+                if ($snapshotCost !== null) {
+                    $product_cost += $snapshotCost;
+                    continue;
+                }
+
                 if($product_sale->product_batch_id) {
                     $product_purchase_data = ProductPurchase::join('purchases', 'product_purchases.purchase_id', '=', 'purchases.id')
                         ->where([
@@ -2404,7 +2411,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                     $nested = [];
                     $nested['imei_numbers'] = $this->findImeis($pid, $vid);
                     $nested['key'] = count($data);
-                    $nested['name'] = $product->name . ' [' . (Variant::select('name')->find($vid)->name ?? 'N/A') . ']' . '<br/>Product Code: ' . $itemCode;
+                    $nested['name'] = $product->name . ' [' . (Variant::find($vid)->name ?? 'N/A') . ']' . '<br/>Product Code: ' . $itemCode;
                     $nested['category'] = optional($product->category)->name;
 
                     $nested['purchased_amount'] = $purchased['amount'];
@@ -2721,7 +2728,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 if($product->is_variant) {
                     $variant_id_all = ProductVariant::where('product_id', $product->id)->pluck('variant_id', 'item_code');
                     foreach ($variant_id_all as $item_code => $variant_id) {
-                        $variant_data = Variant::select('name')->find($variant_id);
+                        $variant_data = Variant::find($variant_id);
                         $nestedData['key'] = count($data);
                         $imeis = $this->findImeis($product->id, $variant_id);
                         $nestedData['name'] = $product->name . ' [' . $variant_data->name . ']'.'<br>'. 'Product Code: ' . $item_code . ($imeis != 'N/A' ? '<br>' . 'IMEI: ' . str_replace("<br/>", ",", $imeis) : '');
@@ -2803,7 +2810,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                     $variant_id_all = ProductVariant::where('product_id', $product->id)->pluck('variant_id', 'item_code');
 
                     foreach ($variant_id_all as $item_code => $variant_id) {
-                        $variant_data = Variant::select('name')->find($variant_id);
+                        $variant_data = Variant::find($variant_id);
                         $nestedData['key'] = count($data);
                         $nestedData['name'] = $product->name . ' [' . $variant_data->name . ']'.'<br>'. 'Product Code: ' . $item_code;
                         $nestedData['category'] = $product->category->name;
@@ -3212,7 +3219,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 if($product->is_variant) {
                     $variant_id_all = ProductVariant::where('product_id', $product->id)->pluck('variant_id', 'item_code');
                     foreach ($variant_id_all as $item_code => $variant_id) {
-                        $variant_data = Variant::select('name')->find($variant_id);
+                        $variant_data = Variant::find($variant_id);
                         $nestedData['key'] = count($data);
                         $imeis = $this->findImeis($product->id, $variant_id);
                         $nestedData['name'] = $product->name . ' [' . $variant_data->name . ']'.'<br>'. 'Product Code: ' . $item_code . ($imeis != 'N/A' ? '<br>' . 'IMEI: ' . str_replace("<br/>", ",", $imeis) : '');
@@ -3321,7 +3328,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                     $variant_id_all = ProductVariant::where('product_id', $product->id)->pluck('variant_id', 'item_code');
 
                     foreach ($variant_id_all as $item_code => $variant_id) {
-                        $variant_data = Variant::select('name')->find($variant_id);
+                        $variant_data = Variant::find($variant_id);
                         $nestedData['key'] = count($data);
                         $nestedData['name'] = $product->name . ' [' . $variant_data->name . ']'.'<br>'. 'Product Code: ' . $item_code;
                         $nestedData['category'] = $product->category->name;
@@ -3531,7 +3538,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
             ->join('warehouses as w', 'pw.warehouse_id', '=', 'w.id')
             ->leftJoin('categories as c', 'p.category_id', '=', 'c.id')
             ->leftJoin('product_variants as pv', 'p.id', '=', 'pv.product_id')
-            ->leftJoin('variants as v', 'pv.variant_id', '=', 'v.id')
+            ->leftJoin('variant_master_values as v', 'pv.variant_id', '=', 'v.id')
             ->where('p.is_active', true)
             ->when($this->own_data, function($q) {
                 $q->where('p.user_id', $this->current_user_id);
@@ -3541,7 +3548,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 'p.created_at',
                 'p.code',
                 'p.name',
-                'v.name as variant',
+                'v.value as variant',
                 'v.id as variant_id',
                 'c.name as category',
                 'c.id as category_id',
@@ -5571,8 +5578,8 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 foreach ($product_transfer_data as $index => $product_transfer) {
                     $product = DB::table('products')->find($product_transfer->product_id);
                     if($product_transfer->variant_id) {
-                        $variant = DB::table('variants')->find($product_transfer->variant_id);
-                        $product->name .= ' ['.$variant->name.']';
+                        $variant = DB::table('variant_master_values')->find($product_transfer->variant_id);
+                        $product->name .= ' ['.($variant->value ?? '').']';
                     }
                     $unit = DB::table('units')->find($product_transfer->purchase_unit_id);
                     if($index){

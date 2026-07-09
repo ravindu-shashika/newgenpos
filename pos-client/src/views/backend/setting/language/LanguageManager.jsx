@@ -66,7 +66,7 @@ const LanguageManager = ({ controllerName }) => {
 
     const [deleteId, setDeleteId] = useState(null);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     const setAddField = (name) => (e) =>
         setAddForm((f) => ({ ...f, [name]: e.target.value }));
@@ -87,7 +87,7 @@ const LanguageManager = ({ controllerName }) => {
             setRows(Array.isArray(data) ? data : []);
             setDefaultLanguage(res.data?.default_language ?? null);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load languages.', 'error');
+            showApiError(err, 'Failed to load languages.');
         } finally {
             setLoading(false);
         }
@@ -144,13 +144,13 @@ const LanguageManager = ({ controllerName }) => {
                 language: addForm.language.trim(),
                 name: addForm.name.trim(),
             });
-            showToast(res.data?.message || res.data?.success || 'Language added.', 'success');
+            showApiSuccess(res, 'Language added.');
             setAddForm(EMPTY_FORM);
             setAddErrors({});
             fetchLanguages();
         } catch (err) {
             if (err.response?.data?.errors) setAddErrors(err.response.data.errors);
-            else showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to add language.', 'error');
+            else showApiError(err, 'Failed to add language.');
         } finally {
             setAdding(false);
         }
@@ -174,12 +174,12 @@ const LanguageManager = ({ controllerName }) => {
                 language: editForm.language.trim(),
                 name: editForm.name.trim(),
             });
-            showToast(res.data?.message || res.data?.success || 'Language updated.', 'success');
+            showApiSuccess(res, 'Language updated.');
             setEditOpen(false);
             fetchLanguages();
         } catch (err) {
             if (err.response?.data?.errors) setEditErrors(err.response.data.errors);
-            else showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to update language.', 'error');
+            else showApiError(err, 'Failed to update language.');
         } finally {
             setSaving(false);
         }
@@ -189,21 +189,21 @@ const LanguageManager = ({ controllerName }) => {
         if (!deleteId) return;
         try {
             const res = await api.delete(`languages/${deleteId}`);
-            showToast(res.data?.message || res.data?.success || 'Language deleted.', 'success');
+            showApiSuccess(res, 'Language deleted.');
             setDeleteId(null);
             fetchLanguages();
         } catch (err) {
-            showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to delete language.', 'error');
+            showApiError(err, 'Failed to delete language.');
         }
     };
 
     const handleSetDefault = async (id) => {
         try {
             const res = await api.post(`languages/${id}/set-default`, {});
-            showToast(res.data?.message || res.data?.success || 'Default language updated.', 'success');
+            showApiSuccess(res, 'Default language updated.');
             fetchLanguages();
         } catch (err) {
-            showToast(err.response?.data?.message || err.response?.data?.error || 'Failed to set default.', 'error');
+            showApiError(err, 'Failed to set default.');
         }
     };
 

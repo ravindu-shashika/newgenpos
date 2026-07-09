@@ -10,17 +10,131 @@ import {
     FileInput,
     Toast,
     useToast,
+    PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
+import usePermissions from '../../../stores/usePermissions';
 
 let nextRowId = 1;
 
-function buildSearchOptions(codes, names, costs) {
-    const options = [];
-    for (let i = 0; i < codes.length; i++) {
-        options.push(`${codes[i]} (${names[i]})|${costs[i]}`);
+function buildSearchCatalog(codes, names, costs, productIds = [], isVariants = [], variantLabels = []) {
+    const singles = [];
+    const variantGroups = new Map();
+
+    for (let i = 0; i < codes.length; i += 1) {
+        const item = {
+            code: codes[i],
+            name: names[i],
+            cost: costs[i],
+            productId: productIds[i] ?? null,
+            isVariant: Boolean(isVariants[i]),
+            variantLabel: variantLabels[i] || '',
+            opt: `${codes[i]} (${names[i]})|${costs[i]}`,
+        };
+
+        if (!item.isVariant || !item.productId) {
+            singles.push({
+                type: 'single',
+                key: `single:${item.code}`,
+                display: `${item.code} — ${item.name}`,
+                ...item,
+            });
+            continue;
+        }
+
+        if (!variantGroups.has(item.productId)) {
+            variantGroups.set(item.productId, {
+                type: 'variant_group',
+                key: `group:${item.productId}`,
+                productId: item.productId,
+                name: item.name,
+                cost: item.cost,
+                codes: [],
+                labels: [],
+                opts: [],
+            });
+        }
+
+        const group = variantGroups.get(item.productId);
+        group.codes.push(item.code);
+        group.labels.push(item.variantLabel || item.code);
+        group.opts.push(item.opt);
     }
-    return options;
+
+    const grouped = [];
+    variantGroups.forEach((group) => {
+        const preview = group.labels.slice(0, 4).join(', ');
+        const suffix = group.labels.length > 4 ? '…' : '';
+        grouped.push({
+            ...group,
+            display: `${group.name} — ${preview}${suffix} (${group.codes.length} variants)`,
+        });
+    });
+
+    return [...grouped, ...singles];
+}
+
+function filterSearchCatalog(catalog, term) {
+    const q = term.trim().toLowerCase();
+    if (!q) return [];
+
+    const exactSingle = catalog.find(
+        (item) => item.type === 'single' && item.code.toLowerCase() === q
+    );
+    if (exactSingle) return [exactSingle];
+
+    const exactGroup = catalog.find(
+        (item) => item.type === 'variant_group'
+            && item.codes.some((code) => code.toLowerCase() === q)
+    );
+    if (exactGroup) return [exactGroup];
+
+    const prefixMatches = catalog.filter((item) => {
+        if (item.type === 'single') {
+            return item.code.toLowerCase().startsWith(q);
+        }
+        return item.codes.some((code) => code.toLowerCase().startsWith(q));
+    });
+    if (prefixMatches.length) return prefixMatches.slice(0, 30);
+
+    const suffixMatches = catalog.filter((item) => {
+        if (item.type === 'single') {
+            const code = item.code.toLowerCase();
+            return code.endsWith(q) || code.endsWith(`-${q}`);
+        }
+        return item.codes.some((code) => {
+            const lower = code.toLowerCase();
+            return lower.endsWith(q) || lower.endsWith(`-${q}`);
+        });
+    });
+    if (suffixMatches.length) return suffixMatches.slice(0, 30);
+
+    return catalog
+        .filter((item) => {
+            if (item.type === 'single') {
+                return item.name.toLowerCase().includes(q)
+                    || item.code.toLowerCase().includes(q);
+            }
+            return item.name.toLowerCase().includes(q)
+                || item.codes.some((code) => code.toLowerCase().includes(q))
+                || item.labels.some((label) => String(label).toLowerCase().includes(q));
+        })
+        .slice(0, 30);
+}
+
+function findExactSearchCatalogItem(catalog, term) {
+    const q = term.trim().toLowerCase();
+    if (!q) return null;
+
+    const exactSingle = catalog.find(
+        (item) => item.type === 'single' && item.code.toLowerCase() === q
+    );
+    if (exactSingle) return exactSingle;
+
+    return catalog.find(
+        (item) => item.type === 'variant_group'
+            && item.codes.some((code) => code.toLowerCase() === q)
+    ) ?? null;
 }
 
 function mapLineToRow(line, isEditMode) {
@@ -37,6 +151,7 @@ function mapLineToRow(line, isEditMode) {
         action: line.action ?? '-',
         variant_id: line.variant_id ?? null,
         product_variant_id: line.product_variant_id ?? line.variant_id ?? null,
+        variant_label: line.variant_label ?? '',
         isExisting: Boolean(isEditMode),
         is_batch: Boolean(line.is_batch),
         batches: line.batches || [],
@@ -52,12 +167,23 @@ function minExpiryDateString() {
     return d.toISOString().slice(0, 10);
 }
 
-export default function AdjustmentCreate() {
+export default function AdjustmentCreate({ controllerName }) {
     const navigate = useNavigate();
     const { id: adjustmentId } = useParams();
     const isEditMode = Boolean(adjustmentId);
     const { toast, showToast } = useToast();
     const searchRef = useRef(null);
+    const permsPrimary = usePermissions(controllerName || 'qty_adjustment');
+    const permsAlt = usePermissions('adjustment');
+    const canAdd = permsPrimary.canAdd || permsAlt.canAdd;
+    const canEdit = permsPrimary.canEdit || permsAlt.canEdit;
+
+    if (isEditMode && !canEdit) {
+        return <PermissionDenied action="edit adjustments" />;
+    }
+    if (!isEditMode && !canAdd) {
+        return <PermissionDenied action="add adjustments" />;
+    }
 
     const [warehouses, setWarehouses] = useState([]);
     const [referenceNo, setReferenceNo] = useState('');
@@ -68,7 +194,7 @@ export default function AdjustmentCreate() {
     const [document, setDocument] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
-    const [searchOptions, setSearchOptions] = useState([]);
+    const [searchCatalog, setSearchCatalog] = useState([]);
     const [stockByCode, setStockByCode] = useState({});
     const [rows, setRows] = useState([]);
 
@@ -85,7 +211,7 @@ export default function AdjustmentCreate() {
 
     const loadWarehouseProducts = useCallback(async (id, rowList = []) => {
         if (!id) {
-            setSearchOptions([]);
+            setSearchCatalog([]);
             setStockByCode({});
             return;
         }
@@ -95,7 +221,17 @@ export default function AdjustmentCreate() {
             const names = res.data?.product_name || [];
             const qtys = res.data?.product_qty || [];
             const costs = res.data?.unit_cost || [];
-            setSearchOptions(buildSearchOptions(codes, names, costs));
+            const productIds = res.data?.product_id || [];
+            const isVariants = res.data?.is_variant || [];
+            const variantLabels = res.data?.variant_label || [];
+            setSearchCatalog(buildSearchCatalog(
+                codes,
+                names,
+                costs,
+                productIds,
+                isVariants,
+                variantLabels,
+            ));
             const stock = {};
             codes.forEach((code, i) => {
                 stock[code] = parseFloat(qtys[i]) || 0;
@@ -103,7 +239,7 @@ export default function AdjustmentCreate() {
             setStockByCode(applyRowStockBoost(stock, rowList));
         } catch {
             showToast('Failed to load warehouse products.', 'error');
-            setSearchOptions([]);
+            setSearchCatalog([]);
             setStockByCode({});
         }
     }, [applyRowStockBoost, showToast]);
@@ -143,11 +279,10 @@ export default function AdjustmentCreate() {
         loadWarehouseProducts(id);
     };
 
-    const filteredOptions = useMemo(() => {
-        if (!searchTerm.trim()) return [];
-        const q = searchTerm.toLowerCase();
-        return searchOptions.filter((opt) => opt.toLowerCase().includes(q)).slice(0, 30);
-    }, [searchTerm, searchOptions]);
+    const filteredOptions = useMemo(
+        () => filterSearchCatalog(searchCatalog, searchTerm),
+        [searchTerm, searchCatalog]
+    );
 
     const getStockQty = (row) => {
         if (row.is_batch && row.action === '-' && row.product_batch_id) {
@@ -162,32 +297,115 @@ export default function AdjustmentCreate() {
         return row.stock_qty ?? stockByCode[row.product_code] ?? 0;
     };
 
-    const addProductFromSearch = async (searchValue) => {
-        if (!searchValue) return;
+    const buildRowFromSearchData = (data, payload, variantLabel = '') => {
+        const [name, code, productId, variantId, unitCost, availableQty] = data;
+        const isBatch = Boolean(payload.is_batch);
+        const batches = payload.batches || [];
+        const cost = parseFloat(unitCost) || 0;
+        const stockQty = isEditMode
+            ? (parseFloat(availableQty) || stockByCode[code] || 0)
+            : (stockByCode[code] ?? (parseFloat(availableQty) || 0));
+
+        return {
+            _id: nextRowId++,
+            product_id: productId,
+            product_code: code,
+            name,
+            unit_cost: cost,
+            available_qty: stockQty,
+            adjustment_qty: 0,
+            stock_qty: stockQty,
+            qty: 1,
+            action: '-',
+            variant_id: variantId || null,
+            product_variant_id: variantId || null,
+            variant_label: variantLabel,
+            isExisting: false,
+            is_batch: isBatch,
+            batches,
+            product_batch_id: '',
+            batch_no: '',
+            expired_date: '',
+        };
+    };
+
+    const addVariantsToGrid = (variants, productName) => {
+        if (!variants?.length) {
+            showToast('No variants found for this product.', 'warning');
+            return;
+        }
+
+        setRows((prev) => {
+            const next = [...prev];
+            let added = 0;
+
+            variants.forEach((variantPayload) => {
+                const data = variantPayload.data;
+                if (!data || data.length < 3) return;
+
+                const code = data[1];
+                const exists = next.find(
+                    (row) => row.product_code === code
+                        && (!variantPayload.is_batch || !row.product_batch_id)
+                );
+                if (exists) return;
+
+                next.push(buildRowFromSearchData(
+                    data,
+                    variantPayload,
+                    variantPayload.variant_label || '',
+                ));
+                added += 1;
+            });
+
+            if (added === 0) {
+                showToast('All variants for this product are already in the table.', 'info');
+            } else {
+                showToast(
+                    `Added ${added} variant${added === 1 ? '' : 's'} for ${productName || 'product'}.`,
+                    'success',
+                );
+            }
+
+            return next;
+        });
+        setTimeout(() => searchRef.current?.focus(), 0);
+    };
+
+    const addProductFromSearch = async (searchValue, catalogItem = null) => {
         if (!warehouseId) {
             showToast('Select a warehouse first.', 'error');
             return;
         }
         setSearchTerm('');
         setShowDropdown(false);
+
         try {
-            const res = await api.get(
-                `qty_adjustment/lims_product_search?data=${encodeURIComponent(searchValue)}&warehouse_id=${encodeURIComponent(warehouseId)}`
-            );
+            let url;
+            if (catalogItem?.type === 'variant_group') {
+                url = `qty_adjustment/lims_product_search?product_id=${encodeURIComponent(catalogItem.productId)}&warehouse_id=${encodeURIComponent(warehouseId)}&unit_cost=${encodeURIComponent(catalogItem.cost)}&expand_variants=1`;
+            } else if (searchValue) {
+                url = `qty_adjustment/lims_product_search?data=${encodeURIComponent(searchValue)}&warehouse_id=${encodeURIComponent(warehouseId)}&expand_variants=1`;
+            } else {
+                return;
+            }
+
+            const res = await api.get(url);
             const payload = res.data || {};
+
+            if (payload.expand_variants && Array.isArray(payload.variants)) {
+                addVariantsToGrid(payload.variants, payload.product_name);
+                return;
+            }
+
             const data = payload.data;
             if (!data || data.length < 3) {
                 showToast('Product not found.', 'error');
                 return;
             }
-            const [name, code, productId, variantId, unitCost, availableQty] = data;
+
+            const [name, code] = data;
             const isBatch = Boolean(payload.is_batch);
-            const batches = payload.batches || [];
-            const cost = parseFloat(unitCost) || 0;
-            const stockQty = isEditMode
-                ? (parseFloat(availableQty) || stockByCode[code] || 0)
-                : (stockByCode[code] ?? 0);
-            const defaultQty = isEditMode ? 1 : 1;
 
             setRows((prev) => {
                 const existing = prev.find(
@@ -197,7 +415,7 @@ export default function AdjustmentCreate() {
                 );
                 if (existing && !isBatch) {
                     const newQty = (parseFloat(existing.qty) || 0) + 1;
-                    if (newQty > getStockQty({ ...existing, available_qty: stockQty }) && existing.action === '-') {
+                    if (newQty > getStockQty({ ...existing }) && existing.action === '-') {
                         showToast('Quantity exceeds stock quantity!', 'error');
                         return prev;
                     }
@@ -205,37 +423,20 @@ export default function AdjustmentCreate() {
                         r.product_code === code ? { ...r, qty: newQty } : r
                     );
                 }
-                return [
-                    ...prev,
-                    {
-                        _id: nextRowId++,
-                        product_id: productId,
-                        product_code: code,
-                        name,
-                        unit_cost: cost,
-                        available_qty: stockQty,
-                        adjustment_qty: 0,
-                        stock_qty: stockQty,
-                        qty: defaultQty,
-                        action: '-',
-                        variant_id: variantId || null,
-                        product_variant_id: variantId || null,
-                        isExisting: false,
-                        is_batch: isBatch,
-                        batches,
-                        product_batch_id: '',
-                        batch_no: '',
-                        expired_date: '',
-                    },
-                ];
+                return [...prev, buildRowFromSearchData(data, payload)];
             });
+            setTimeout(() => searchRef.current?.focus(), 0);
         } catch (err) {
             showToast(err?.message || 'Product lookup failed.', 'error');
         }
     };
 
-    const handleSelectOption = (opt) => {
-        addProductFromSearch(opt);
+    const handleSelectOption = (item) => {
+        if (item.type === 'variant_group') {
+            addProductFromSearch(null, item);
+            return;
+        }
+        addProductFromSearch(item.opt);
     };
 
     const updateRow = (id, field, value) => {
@@ -392,7 +593,7 @@ export default function AdjustmentCreate() {
                                 className="form-control"
                                 placeholder={
                                     warehouseId
-                                        ? 'Type product code and select'
+                                        ? 'Scan barcode or type product code'
                                         : 'Select a warehouse first'
                                 }
                                 disabled={!warehouseId}
@@ -404,9 +605,22 @@ export default function AdjustmentCreate() {
                                 onFocus={() => searchTerm && setShowDropdown(true)}
                                 onBlur={() => setTimeout(() => setShowDropdown(false), 180)}
                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && filteredOptions.length === 1) {
-                                        e.preventDefault();
+                                    if (e.key !== 'Enter') return;
+                                    e.preventDefault();
+                                    const exact = findExactSearchCatalogItem(
+                                        searchCatalog,
+                                        searchTerm
+                                    );
+                                    if (exact) {
+                                        handleSelectOption(exact);
+                                        return;
+                                    }
+                                    if (filteredOptions.length === 1) {
                                         handleSelectOption(filteredOptions[0]);
+                                        return;
+                                    }
+                                    if (searchTerm.trim()) {
+                                        showToast('Product not found.', 'error');
                                     }
                                 }}
                                 autoComplete="off"
@@ -417,14 +631,14 @@ export default function AdjustmentCreate() {
                                 className="list-group position-absolute w-100 shadow-sm"
                                 style={{ zIndex: 50, maxHeight: 220, overflowY: 'auto' }}
                             >
-                                {filteredOptions.map((opt) => (
+                                {filteredOptions.map((item) => (
                                     <li
-                                        key={opt}
+                                        key={item.key}
                                         className="list-group-item list-group-item-action"
                                         style={{ cursor: 'pointer', fontSize: '0.85rem' }}
-                                        onMouseDown={() => handleSelectOption(opt)}
+                                        onMouseDown={() => handleSelectOption(item)}
                                     >
-                                        {opt.split('|')[0]}
+                                        {item.display}
                                     </li>
                                 ))}
                             </ul>
@@ -438,6 +652,7 @@ export default function AdjustmentCreate() {
                             <thead>
                                 <tr>
                                     <th>Name</th>
+                                    <th>Variant</th>
                                     <th>Code</th>
                                     <th>Unit Cost</th>
                                     {isEditMode && <th>Available Qty</th>}
@@ -452,7 +667,7 @@ export default function AdjustmentCreate() {
                             <tbody>
                                 {rows.length === 0 ? (
                                     <tr>
-                                        <td colSpan={isEditMode ? 10 : 8} className="text-center text-muted py-4">
+                                        <td colSpan={isEditMode ? 11 : 9} className="text-center text-muted py-4">
                                             No products — search above to add items
                                         </td>
                                     </tr>
@@ -460,6 +675,7 @@ export default function AdjustmentCreate() {
                                     rows.map((r) => (
                                         <tr key={r._id}>
                                             <td>{r.name}</td>
+                                            <td>{r.variant_label || '—'}</td>
                                             <td>{r.product_code}</td>
                                             <td>{Number(r.unit_cost).toFixed(2)}</td>
                                             {isEditMode && (
@@ -575,7 +791,7 @@ export default function AdjustmentCreate() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <th colSpan={isEditMode ? 7 : 5}>Total</th>
+                                    <th colSpan={isEditMode ? 8 : 6}>Total</th>
                                     <th colSpan={4}>
                                         {totalQty % 1 === 0 ? totalQty : totalQty.toFixed(2)}
                                     </th>

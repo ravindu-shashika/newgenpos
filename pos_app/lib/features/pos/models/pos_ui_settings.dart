@@ -12,6 +12,8 @@ class PosUiSettings {
     this.enableKeyboard = false,
     this.enableAddItemModal = false,
     this.enableReturn = true,
+    this.enableIssueReturnBill = true,
+    this.enableReturnBillSettle = true,
     this.enableExchange = false,
     this.enablePointsPayment = false,
     this.enablePrint = true,
@@ -44,6 +46,13 @@ class PosUiSettings {
   final bool enableKeyboard;
   final bool enableAddItemModal;
   final bool enableReturn;
+
+  /// Sidebar: issue a return credit bill without a sale (scan items, print bill).
+  final bool enableIssueReturnBill;
+
+  /// Scan return bill reference in product field to settle credit on a sale.
+  final bool enableReturnBillSettle;
+
   final bool enableExchange;
   final bool enablePointsPayment;
 
@@ -164,6 +173,8 @@ class PosUiSettings {
     bool? enableKeyboard,
     bool? enableAddItemModal,
     bool? enableReturn,
+    bool? enableIssueReturnBill,
+    bool? enableReturnBillSettle,
     bool? enableExchange,
     bool? enablePointsPayment,
     bool? enablePrint,
@@ -200,6 +211,10 @@ class PosUiSettings {
       enableKeyboard: enableKeyboard ?? this.enableKeyboard,
       enableAddItemModal: enableAddItemModal ?? this.enableAddItemModal,
       enableReturn: enableReturn ?? this.enableReturn,
+      enableIssueReturnBill:
+          enableIssueReturnBill ?? this.enableIssueReturnBill,
+      enableReturnBillSettle:
+          enableReturnBillSettle ?? this.enableReturnBillSettle,
       enableExchange: enableExchange ?? this.enableExchange,
       enablePointsPayment: enablePointsPayment ?? this.enablePointsPayment,
       enablePrint: enablePrint ?? this.enablePrint,
@@ -249,6 +264,10 @@ class PosUiSettings {
       enableAddItemModal:
           _bool(json['enable_add_item_modal'], fallback: false),
       enableReturn: _bool(json['enable_return'], fallback: true),
+      enableIssueReturnBill:
+          _bool(json['enable_issue_return_bill'], fallback: true),
+      enableReturnBillSettle:
+          _bool(json['enable_return_bill_settle'], fallback: true),
       enableExchange: _bool(json['enable_exchange'], fallback: false),
       enablePointsPayment:
           _bool(json['enable_points_payment'], fallback: false),
@@ -294,6 +313,8 @@ class PosUiSettings {
         'enable_keyboard': enableKeyboard,
         'enable_add_item_modal': enableAddItemModal,
         'enable_return': enableReturn,
+        'enable_issue_return_bill': enableIssueReturnBill,
+        'enable_return_bill_settle': enableReturnBillSettle,
         'enable_exchange': enableExchange,
         'enable_points_payment': enablePointsPayment,
         'enable_print': enablePrint,

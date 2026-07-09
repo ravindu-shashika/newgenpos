@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
     PageLayout,
-    FormField,
-    FormRow,
     FormSection,
     TextInput,
     NumberInput,
@@ -12,12 +10,24 @@ import {
 } from '../../../components/ui';
 import { api } from '../../../services';
 import generalSettingStore from '../../../stores/generalSettingStore';
-import { expandProductsToLabels, createLabelPrintWindow, renderLabelPrintWindow } from '../../../utils/barcodeLabelPrinter';
-import { DEFAULT_BARCODE_PRINT_OPTIONS, normalizeBarcodePrintOptions } from '../../../utils/barcodeTemplateDefaults';
+import { expandProductsToLabels, createLabelPrintWindow } from '../../../utils/barcodeLabelPrinter';
+import {
+    render32InchLabelPrintWindow,
+    INCH_32_DEFAULT_PRINT_OPTIONS,
+    INCH_32_BARCODE_SPEC,
+} from '../../../utils/3.2inch_barcode';
+import { BARCODE_PRICE_DISPLAY } from '../../../utils/barcodeTemplateDefaults';
 import SafeFontAwesomeIcon from '../../../components/SafeFontAwesomeIcon';
-import { faBarcode, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faBarcode, faTrash } from '@fortawesome/free-solid-svg-icons';
 
+function hasValidMaxPrice(product) {
+    const n = Number(product.max_price);
+    return product.max_price !== '' && product.max_price != null && Number.isFinite(n) && n > 0;
+}
+
+/** Map lims_product_search row (barcode=1) to print form state. */
 function mapApiRowToProduct(row) {
+    // [16]=barcode_symbology [17]=alt_code [18]=max_price
     return {
         id: row[8],
         name: row[0],
@@ -38,14 +48,10 @@ function mapApiRowToProduct(row) {
             }))
             : [],
         selected_price: row[14] === true ? '' : row[2],
-        barcode_symbology: row[17] || 'C128',
-        alt_code: row[18] || '',
+        barcode_symbology: row[16] || 'C128',
+        alt_code: row[17] ?? '',
+        max_price: row[18] ?? '',
     };
-}
-
-function formatSettingLabel(setting) {
-    const base = setting.description ? `${setting.name}, ${setting.description}` : setting.name;
-    return setting.is_continuous ? `${base} (Continuous roll)` : base;
 }
 
 export default function BackendProductPrintBarcode() {
@@ -57,11 +63,7 @@ export default function BackendProductPrintBarcode() {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [selectedProducts, setSelectedProducts] = useState([]);
-    const [barcodeSettings, setBarcodeSettings] = useState([]);
-    const [selectedSettingId, setSelectedSettingId] = useState('');
     const [productCatalog, setProductCatalog] = useState([]);
-
-    const [printOptions, setPrintOptions] = useState({ ...DEFAULT_BARCODE_PRINT_OPTIONS });
 
     useEffect(() => {
         fetchInitialData();
@@ -69,11 +71,6 @@ export default function BackendProductPrintBarcode() {
             generalSettingStore.fetchSetting().catch(() => {});
         }
     }, [location.search]);
-
-    useEffect(() => {
-        const setting = barcodeSettings.find((s) => String(s.id) === String(selectedSettingId));
-        setPrintOptions(normalizeBarcodePrintOptions(setting?.print_options));
-    }, [selectedSettingId, barcodeSettings]);
 
     const fetchInitialData = async () => {
         try {
@@ -85,16 +82,6 @@ export default function BackendProductPrintBarcode() {
                 : 'products/print_barcode';
             const res = await api.get(url);
             const data = res.data;
-
-            const bSettings = data.barcode_settings || [];
-            setBarcodeSettings(bSettings);
-
-            if (data.default_barcode_setting_id) {
-                setSelectedSettingId(String(data.default_barcode_setting_id));
-            } else if (bSettings.length > 0) {
-                const defaultSetting = bSettings.find((s) => s.is_default) || bSettings[0];
-                setSelectedSettingId(String(defaultSetting.id));
-            }
 
             setProductCatalog(Array.isArray(data.product_catalog) ? data.product_catalog : []);
 
@@ -147,7 +134,11 @@ export default function BackendProductPrintBarcode() {
             const res = await api.get(
                 `products/lims_product_search?data=${encodeURIComponent(label)}&barcode=1`
             );
-            const rows = Array.isArray(res.data) ? res.data : [];
+            const rows = Array.isArray(res.data?.data)
+                ? res.data.data
+                : Array.isArray(res.data)
+                    ? res.data
+                    : [];
             if (rows[0]) {
                 addProduct(rows[0]);
             } else {
@@ -179,8 +170,10 @@ export default function BackendProductPrintBarcode() {
             return;
         }
 
-        if (!selectedSettingId) {
-            showToast('Please select a paper size', 'warning');
+        const missingMaxPrice = selectedProducts.filter((p) => !hasValidMaxPrice(p));
+        if (missingMaxPrice.length > 0) {
+            const names = missingMaxPrice.map((p) => p.code || p.name).join(', ');
+            showToast(`Cannot print — max price is not set for: ${names}`, 'error');
             return;
         }
 
@@ -189,14 +182,6 @@ export default function BackendProductPrintBarcode() {
         );
         if (missingPrice) {
             showToast('Please choose warehouse / price for all products', 'warning');
-            return;
-        }
-
-        const selectedSetting = barcodeSettings.find(
-            (s) => String(s.id) === String(selectedSettingId)
-        );
-        if (!selectedSetting) {
-            showToast('Selected paper size is invalid', 'error');
             return;
         }
 
@@ -216,10 +201,14 @@ export default function BackendProductPrintBarcode() {
                 businessName = generalSettingStore.getSetting()?.company_name || '';
             }
 
+            const printOptions = {
+                ...INCH_32_DEFAULT_PRINT_OPTIONS,
+                price_display: BARCODE_PRICE_DISPLAY.maxPrice,
+            };
             const labels = expandProductsToLabels(selectedProducts, printOptions);
-            renderLabelPrintWindow(printWindow, {
+
+            render32InchLabelPrintWindow(printWindow, {
                 labels,
-                barcodeDetails: selectedSetting,
                 printOptions,
                 businessName,
             });
@@ -242,7 +231,7 @@ export default function BackendProductPrintBarcode() {
         );
     }
 
-    const selectedSetting = barcodeSettings.find((s) => String(s.id) === String(selectedSettingId));
+    const spec = INCH_32_BARCODE_SPEC;
 
     return (
         <PageLayout eyebrow="Products" title="Print Barcode">
@@ -259,7 +248,7 @@ export default function BackendProductPrintBarcode() {
 
             <FormSection>
                 <p className="text-muted mb-4" style={{ fontSize: '0.85rem' }}>
-                    Select a saved barcode template for paper size, layout, and label content (name, price, codes, and so on). Edit those options under Manage templates.
+                    Labels use the fixed 3.2&quot; roll layout — 2 stickers per row. Each label prints the <strong>max price</strong> (required).
                 </p>
 
                 <div className="mb-4">
@@ -297,6 +286,7 @@ export default function BackendProductPrintBarcode() {
                                 <th>Code</th>
                                 <th>Alt code</th>
                                 <th>Quantity</th>
+                                <th>Max price</th>
                                 <th>Warehouse / Price</th>
                                 <th style={{ width: '50px' }} aria-label="Actions" />
                             </tr>
@@ -312,6 +302,16 @@ export default function BackendProductPrintBarcode() {
                                             value={p.quantity}
                                             onChange={(e) => updateProduct(i, 'quantity', parseInt(e.target.value, 10) || 1)}
                                             min="1"
+                                        />
+                                    </td>
+                                    <td style={{ width: '140px' }}>
+                                        <NumberInput
+                                            value={p.max_price ?? ''}
+                                            onChange={(e) => updateProduct(i, 'max_price', e.target.value)}
+                                            min="0"
+                                            step="any"
+                                            placeholder="Required"
+                                            className={!hasValidMaxPrice(p) ? 'is-invalid' : ''}
                                         />
                                     </td>
                                     <td>
@@ -346,7 +346,7 @@ export default function BackendProductPrintBarcode() {
                             ))}
                             {selectedProducts.length === 0 && (
                                 <tr>
-                                    <td colSpan="6" className="text-center p-4 text-muted">
+                                    <td colSpan="7" className="text-center p-4 text-muted">
                                         No products selected. Use the search bar above to add products.
                                     </td>
                                 </tr>
@@ -357,64 +357,16 @@ export default function BackendProductPrintBarcode() {
 
                 <hr className="my-4" />
 
-                <h6 className="ui-section-divider mb-4">Barcode template *</h6>
-                <FormRow cols={2}>
-                    <FormField label="Label template">
-                        <SelectInput
-                            value={selectedSettingId}
-                            onChange={(e) => setSelectedSettingId(e.target.value)}
-                        >
-                            <option value="">Select template</option>
-                            {barcodeSettings.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                    {formatSettingLabel(s)}
-                                    {s.is_default ? ' (default)' : ''}
-                                </option>
-                            ))}
-                        </SelectInput>
-                        {selectedSetting && (
-                            <p className="text-muted mt-2 mb-0" style={{ fontSize: '0.85rem' }}>
-                                {selectedSetting.is_continuous ? (
-                                    <>
-                                        Continuous roll {selectedSetting.paper_width}&quot; wide — {selectedSetting.stickers_in_one_row} label(s) per row, each{' '}
-                                        {selectedSetting.width}&quot; × {selectedSetting.height}&quot;
-                                        {(selectedSetting.top_margin > 0 || selectedSetting.left_margin > 0) && (
-                                            <>, margins top {selectedSetting.top_margin}&quot; / left {selectedSetting.left_margin}&quot;</>
-                                        )}
-                                        {(selectedSetting.top_margin > 0.2 || selectedSetting.left_margin > 0.2) && (
-                                            <span style={{ color: '#b45309' }}> — large margins may clip content on small labels</span>
-                                        )}
-                                    </>
-                                ) : (
-                                    <>
-                                        Sheet layout — {selectedSetting.stickers_in_one_row} per row,{' '}
-                                        {selectedSetting.stickers_in_one_sheet} per sheet, paper{' '}
-                                        {selectedSetting.paper_width}&quot; × {selectedSetting.paper_height}&quot;
-                                    </>
-                                )}
-                                {(() => {
-                                    const fields = [
-                                        printOptions.business_name && 'Business name',
-                                        printOptions.name && 'Product name',
-                                        printOptions.brand_name && 'Brand',
-                                        printOptions.product_code !== false && 'Product code',
-                                        printOptions.alt_code !== false && 'Alt code',
-                                        printOptions.price && 'Price',
-                                        printOptions.promo_price && 'Promo price',
-                                    ].filter(Boolean);
-                                    return fields.length > 0 ? (
-                                        <>
-                                            <br />
-                                            Label fields: {fields.join(', ')}
-                                        </>
-                                    ) : null;
-                                })()}
-                            </p>
-                        )}
-                    </FormField>
-                </FormRow>
+                <h6 className="ui-section-divider mb-4">Print layout</h6>
+                <p className="text-muted mb-4" style={{ fontSize: '0.85rem' }}>
+                    3.2&quot; roll — 2 labels per row (1.5&quot; × 1&quot; each, 0.1&quot; gap between).
+                    <br />
+                    Business name, product name, barcode, code, and max price (centered).
+                    <br />
+                    On Zebra ZD230: set paper to <strong>80 mm × 24 mm</strong>, rotation <strong>0° Portrait</strong>, margins <strong>None</strong>.
+                </p>
 
-                <div className="d-flex flex-wrap gap-3 mt-5">
+                <div className="d-flex flex-wrap gap-3 mt-2">
                     <button
                         type="button"
                         className="ui-btn primary"
@@ -424,10 +376,6 @@ export default function BackendProductPrintBarcode() {
                     >
                         {submitting ? 'Generating...' : 'Print labels'}
                     </button>
-                    <Link to="/barcodes" className="ui-btn info">
-                        <SafeFontAwesomeIcon icon={faPlus} className="me-2" />
-                        Manage templates
-                    </Link>
                 </div>
             </FormSection>
         </PageLayout>

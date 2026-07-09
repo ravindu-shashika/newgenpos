@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
     PageLayout,
@@ -12,8 +12,10 @@ import {
     Toast,
     useToast,
     Modal,
+    PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
+import usePermissions from '../../../stores/usePermissions';
 
 let lineId = 1;
 
@@ -58,6 +60,21 @@ function calcMarginFromPrice(cost, price, marginType) {
     return ((p - c) / c) * 100;
 }
 
+/** Resolve unit discount amount (flat money) from type + value + cost. */
+function resolveUnitDiscountAmount(unitCost, unitDiscount, discountType) {
+    const cost = parseFloat(unitCost) || 0;
+    const discount = parseFloat(unitDiscount) || 0;
+    if (discountType === 'percentage') {
+        return (cost * discount) / 100;
+    }
+    return discount;
+}
+
+/** Line total money discount from unit discount settings. */
+function resolveLineDiscountAmount(unitCost, qty, unitDiscount, discountType) {
+    return resolveUnitDiscountAmount(unitCost, unitDiscount, discountType) * (parseFloat(qty) || 0);
+}
+
 function calcLineTotals(line, taxMethod = 1) {
     const qty = parseFloat(line.qty) || 0;
     const netUnitCost = parseFloat(line.net_unit_cost) || 0;
@@ -82,6 +99,10 @@ function marginTypeLabel(type) {
     return type === 'flat' ? 'Flat' : 'Percentage (%)';
 }
 
+function discountTypeLabel(type) {
+    return type === 'percentage' ? '%' : 'Flat';
+}
+
 function receivedForStatus(qty, status, current) {
     const q = parseFloat(qty) || 0;
     if (status === 1) return q;
@@ -94,6 +115,12 @@ function unitCostFromNet(netCost, taxRate) {
     const net = parseFloat(netCost) || 0;
     const rate = parseFloat(taxRate) || 0;
     return net + (net * rate) / 100;
+}
+
+function findExactProductHit(hits, term) {
+    const q = term.trim().toLowerCase();
+    if (!q || !Array.isArray(hits)) return null;
+    return hits.find((p) => String(p.code || '').toLowerCase() === q) ?? null;
 }
 
 function formatDateForInput(value) {
@@ -112,20 +139,33 @@ function formatDateForInput(value) {
     return '';
 }
 
-export default function PurchaseForm() {
+export default function PurchaseForm({ controllerName }) {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
     const duplicateFrom = searchParams.get('duplicate_from');
     const isEdit = Boolean(id);
     const navigate = useNavigate();
     const { toast, showToast } = useToast();
+    const perms = usePermissions(controllerName || 'purchases');
+
+    if (isEdit && !perms.canEdit) {
+        return <PermissionDenied action="edit purchases" />;
+    }
+    if (!isEdit && !perms.canAdd) {
+        return <PermissionDenied action="add purchases" />;
+    }
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [meta, setMeta] = useState(null);
+    const productSearchRef = useRef(null);
     const [productSearch, setProductSearch] = useState('');
     const [searchHits, setSearchHits] = useState([]);
     const [showHits, setShowHits] = useState(false);
+
+    const focusProductSearch = useCallback(() => {
+        setTimeout(() => productSearchRef.current?.focus(), 0);
+    }, []);
     const [variantPicker, setVariantPicker] = useState({
         open: false,
         product: null,
@@ -172,8 +212,28 @@ export default function PurchaseForm() {
     const mapEditLines = (existing) =>
         (existing || []).map((l) => {
             const qty = parseFloat(l.qty) || 0;
-            const unitDiscount = qty > 0 ? (parseFloat(l.discount) || 0) / qty : 0;
+            const discountType = l.discount_type === 'percentage' ? 'percentage' : 'flat';
+            const totalDiscount = parseFloat(l.discount) || 0;
             const netUnitCost = parseFloat(l.net_unit_cost) || 0;
+            let unitDiscount = 0;
+            let baseUnitCost = netUnitCost;
+            if (discountType === 'percentage') {
+                // Reconstruct input % and base cost from stored money discount + net cost
+                // net = cost - (cost * pct / 100) => cost = net / (1 - pct/100)
+                // We only store total money discount, so recover flat unit discount first
+                // then leave percent input as 0 unless we can derive (prefer stored absolute).
+                const flatUnit = qty > 0 ? totalDiscount / qty : 0;
+                if (netUnitCost + flatUnit > 0 && flatUnit > 0) {
+                    unitDiscount = (flatUnit / (netUnitCost + flatUnit)) * 100;
+                    baseUnitCost = netUnitCost + flatUnit;
+                } else {
+                    unitDiscount = 0;
+                    baseUnitCost = netUnitCost;
+                }
+            } else {
+                unitDiscount = qty > 0 ? totalDiscount / qty : 0;
+                baseUnitCost = netUnitCost + unitDiscount;
+            }
             const isBatch = Boolean(l.is_batch);
             return {
                 _id: lineId++,
@@ -190,8 +250,9 @@ export default function PurchaseForm() {
                 net_unit_margin_type: l.net_unit_margin_type || 'percentage',
                 net_unit_price: l.net_unit_price ?? 0,
                 discount: l.discount || 0,
+                discount_type: discountType,
                 unit_discount: unitDiscount,
-                base_unit_cost: netUnitCost + unitDiscount,
+                base_unit_cost: baseUnitCost,
                 units: [],
                 tax_rate: l.tax_rate || 0,
                 tax_name: l.tax_name || 'No Tax',
@@ -554,6 +615,7 @@ export default function PurchaseForm() {
                     net_unit_margin_type: data.net_unit_margin_type || line.net_unit_margin_type,
                     base_unit_cost: Number.isFinite(cost) ? cost : line.base_unit_cost,
                     unit_discount: 0,
+                    discount_type: 'flat',
                     discount: 0,
                 };
                 const { subtotal, tax } = calcLine(next);
@@ -583,6 +645,7 @@ export default function PurchaseForm() {
             base_unit_cost: details.cost,
             units: details.units || [],
             unit_discount: 0,
+            discount_type: 'flat',
             net_unit_cost: details.cost,
             net_unit_margin: details.margin,
             net_unit_margin_type: details.marginType,
@@ -610,6 +673,7 @@ export default function PurchaseForm() {
             nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
         }
         setLines((prev) => [...prev, nextLine]);
+        focusProductSearch();
     };
 
     const incrementLine = (productId, code) => {
@@ -626,6 +690,7 @@ export default function PurchaseForm() {
                 return { ...next, subtotal, tax };
             })
         );
+        focusProductSearch();
     };
 
     const openVariantPicker = async (product, filter = '') => {
@@ -654,6 +719,45 @@ export default function PurchaseForm() {
             return;
         }
         addProduct(product);
+    };
+
+    const handleProductSearchKeyDown = async (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const term = productSearch.trim();
+        if (!term) return;
+
+        const exactInHits = findExactProductHit(searchHits, term);
+        if (exactInHits) {
+            handleSearchSelect(exactInHits);
+            return;
+        }
+        if (searchHits.length === 1) {
+            handleSearchSelect(searchHits[0]);
+            return;
+        }
+
+        if (term.length >= 3) {
+            try {
+                const res = await api.get(`purchases/product-search?term=${encodeURIComponent(term)}`);
+                const hits = res.data?.data ?? res.data;
+                const list = Array.isArray(hits) ? hits : [];
+                const exact = findExactProductHit(list, term);
+                if (exact) {
+                    handleSearchSelect(exact);
+                    return;
+                }
+                if (list.length === 1) {
+                    handleSearchSelect(list[0]);
+                    return;
+                }
+            } catch (err) {
+                showToast(err?.message || 'Product lookup failed.', 'error');
+                return;
+            }
+        }
+
+        showToast('Product not found.', 'error');
     };
 
     const addVariantFromPicker = async (variant) => {
@@ -720,7 +824,20 @@ export default function PurchaseForm() {
                     next.recieved = receivedForStatus(value, header.status, l.recieved);
                     const unitDiscount = parseFloat(l.unit_discount);
                     if (Number.isFinite(unitDiscount)) {
-                        next.discount = unitDiscount * (parseFloat(value) || 0);
+                        const displayCost = Number.isFinite(parseFloat(l.base_unit_cost))
+                            ? parseFloat(l.base_unit_cost)
+                            : (parseFloat(l.net_unit_cost) || 0)
+                                + resolveUnitDiscountAmount(
+                                    parseFloat(l.net_unit_cost) || 0,
+                                    unitDiscount,
+                                    l.discount_type || 'flat'
+                                );
+                        next.discount = resolveLineDiscountAmount(
+                            displayCost,
+                            value,
+                            unitDiscount,
+                            l.discount_type || 'flat'
+                        );
                     }
                 }
                 const { subtotal, tax } = calcLine(next);
@@ -824,7 +941,10 @@ export default function PurchaseForm() {
         let units = line.units || [];
         let baseCost = parseFloat(line.base_unit_cost);
         if (!Number.isFinite(baseCost)) {
-            baseCost = (parseFloat(line.net_unit_cost) || 0) + (parseFloat(line.unit_discount) || 0);
+            const flatUnitDisc = (line.discount_type || 'flat') === 'percentage'
+                ? ((parseFloat(line.discount) || 0) / (parseFloat(line.qty) || 1))
+                : (parseFloat(line.unit_discount) || 0);
+            baseCost = (parseFloat(line.net_unit_cost) || 0) + flatUnitDisc;
         }
         let taxMethod = line.tax_method || 1;
 
@@ -857,12 +977,16 @@ export default function PurchaseForm() {
         );
         const unit = units[unitIndex] || units[0];
         const unitDiscount = parseFloat(line.unit_discount);
+        const discountType = line.discount_type === 'percentage' ? 'percentage' : 'flat';
         const resolvedUnitDiscount = Number.isFinite(unitDiscount)
             ? unitDiscount
-            : (parseFloat(line.discount) || 0) / (parseFloat(line.qty) || 1);
+            : (discountType === 'percentage'
+                ? 0
+                : (parseFloat(line.discount) || 0) / (parseFloat(line.qty) || 1));
         const displayCost = unit
             ? displayCostFromBase(baseCost, unit)
-            : (parseFloat(line.net_unit_cost) || 0) + resolvedUnitDiscount;
+            : (parseFloat(line.net_unit_cost) || 0)
+                + resolveUnitDiscountAmount(baseCost || parseFloat(line.net_unit_cost) || 0, resolvedUnitDiscount, discountType);
 
         setLineEditModal({
             open: true,
@@ -872,6 +996,7 @@ export default function PurchaseForm() {
             draft: {
                 qty: line.qty,
                 unit_discount: resolvedUnitDiscount,
+                discount_type: discountType,
                 unit_cost: displayCost,
                 profit_margin_type: line.net_unit_margin_type || 'percentage',
                 profit_margin: line.net_unit_margin,
@@ -892,9 +1017,15 @@ export default function PurchaseForm() {
         const unit = units[draft.unit_index] || units[0];
         const displayCost = parseFloat(draft.unit_cost) || 0;
         const unitDiscount = parseFloat(draft.unit_discount) || 0;
+        const discountType = draft.discount_type === 'percentage' ? 'percentage' : 'flat';
+        const unitDiscountAmount = resolveUnitDiscountAmount(displayCost, unitDiscount, discountType);
 
-        if (unitDiscount > displayCost) {
+        if (unitDiscountAmount > displayCost) {
             showToast('Invalid Discount Input!', 'error');
+            return;
+        }
+        if (discountType === 'percentage' && unitDiscount > 100) {
+            showToast('Discount percent cannot exceed 100.', 'error');
             return;
         }
 
@@ -905,9 +1036,9 @@ export default function PurchaseForm() {
         }
 
         const baseCost = unit ? baseCostFromDisplay(displayCost, unit) : displayCost;
-        const netUnitCost = displayCost - unitDiscount;
+        const netUnitCost = displayCost - unitDiscountAmount;
         const taxRate = parseFloat(draft.tax_rate) || 0;
-        const discount = unitDiscount * qty;
+        const discount = unitDiscountAmount * qty;
         const taxMeta = (meta?.taxes || []).find((t) => parseFloat(t.rate) === taxRate);
 
         const currentLine = lines.find((l) => l._id === lineId);
@@ -922,6 +1053,7 @@ export default function PurchaseForm() {
             purchase_unit: unit?.name || currentLine.purchase_unit,
             purchase_unit_id: unit?.id ?? currentLine.purchase_unit_id,
             unit_discount: unitDiscount,
+            discount_type: discountType,
             net_unit_cost: netUnitCost,
             net_unit_margin: parseFloat(draft.profit_margin) || 0,
             net_unit_margin_type: draft.profit_margin_type || 'percentage',
@@ -997,6 +1129,7 @@ export default function PurchaseForm() {
             net_unit_margin_type: l.net_unit_margin_type,
             net_unit_price: l.net_unit_price,
             discount: l.discount,
+            discount_type: l.discount_type || 'flat',
             tax_rate: l.tax_rate,
             tax: l.tax,
             subtotal: l.subtotal,
@@ -1074,6 +1207,10 @@ export default function PurchaseForm() {
     const marginTypeOptions = [
         { value: 'percentage', label: 'Percentage (%)' },
         { value: 'flat', label: 'Flat' },
+    ];
+    const discountTypeOptions = [
+        { value: 'flat', label: 'Flat' },
+        { value: 'percentage', label: 'Percentage (%)' },
     ];
     const minExpiryDate = useMemo(() => {
         const d = new Date();
@@ -1180,11 +1317,14 @@ export default function PurchaseForm() {
                 <FormSection title="Products">
                     <div style={{ position: 'relative', maxWidth: 480, marginBottom: 16 }}>
                         <TextInput
-                            placeholder="Search product (min 3 characters)…"
+                            inputRef={productSearchRef}
+                            placeholder="Scan barcode or search product (min 3 characters)…"
                             value={productSearch}
                             onChange={(e) => { setProductSearch(e.target.value); setShowHits(true); }}
                             onFocus={() => setShowHits(true)}
                             onBlur={() => setTimeout(() => setShowHits(false), 200)}
+                            onKeyDown={handleProductSearchKeyDown}
+                            autoComplete="off"
                         />
                         {showHits && searchHits.length > 0 && (
                             <ul className="list-group position-absolute w-100 shadow-sm" style={{ zIndex: 50 }}>
@@ -1213,8 +1353,8 @@ export default function PurchaseForm() {
                         )}
                     </div>
 
-                    <div className="table-responsive">
-                        <table className="table table-sm table-hover">
+                    <div className="ui-table-wrap">
+                        <table className="ui-table">
                             <thead>
                                 <tr>
                                     <th>Product</th>
@@ -1227,6 +1367,7 @@ export default function PurchaseForm() {
                                     <th>Margin type</th>
                                     <th>Price</th>
                                     <th>Discount</th>
+                                    <th>Disc. type</th>
                                     <th>Tax</th>
                                     <th>Subtotal</th>
                                     <th />
@@ -1236,8 +1377,8 @@ export default function PurchaseForm() {
                                 {lines.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={(header.status === 2 ? 12 : 11) + (hasBatchLines ? 2 : 0)}
-                                            className="text-center text-muted py-4"
+                                            colSpan={(header.status === 2 ? 13 : 12) + (hasBatchLines ? 2 : 0)}
+                                            className="ui-empty"
                                         >
                                             No products — search above to add
                                         </td>
@@ -1253,84 +1394,80 @@ export default function PurchaseForm() {
                                                         <div className="d-flex align-items-center gap-2 flex-wrap">
                                                             <span>{l.name}</span>
                                                             {l.is_variant && (
-                                                                <span className="badge bg-info text-dark" style={{ fontSize: '0.7rem' }}>
+                                                                <span className="cell-tag">
                                                                     Variant
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <small className="text-muted">{l.code}</small>
+                                                        <div className="cell-muted">{l.code}</div>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        className="btn btn-link btn-sm p-0"
+                                                        className="ui-btn ghost sm"
                                                         title="Edit line"
                                                         onClick={() => openLineEditor(l)}
                                                     >
-                                                        ✎
+                                                        <i className="fa fa-pencil ui-btn-icon" />
                                                     </button>
                                                 </div>
                                             </td>
                                             <td>
-                                                <input
-                                                    type="number"
-                                                    className="form-control form-control-sm"
+                                                <NumberInput
+                                                    className="sm"
                                                     min="0"
                                                     step="any"
                                                     value={l.qty}
                                                     onChange={(e) => updateLine(l._id, 'qty', e.target.value)}
-                                                    style={{ maxWidth: 72 }}
                                                 />
                                             </td>
                                             {header.status === 2 && (
                                                 <td>
-                                                    <input
-                                                        type="number"
-                                                        className="form-control form-control-sm"
+                                                    <NumberInput
+                                                        className="sm"
                                                         min="0"
                                                         step="any"
                                                         value={l.recieved}
                                                         onChange={(e) => updateLine(l._id, 'recieved', e.target.value)}
-                                                        style={{ maxWidth: 72 }}
                                                     />
                                                 </td>
                                             )}
                                             {hasBatchLines && (
                                                 <td>
                                                     {l.is_batch ? (
-                                                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', minWidth: 150 }}>
-                                                            <input
-                                                                type="text"
-                                                                className="form-control form-control-sm bg-light"
-                                                                value={l.batch_no || ''}
-                                                                placeholder="Auto"
-                                                                readOnly
-                                                                title="Batch number is set automatically, or by choosing an existing batch"
-                                                                style={{ width: 64, flexShrink: 0 }}
-                                                            />
-                                                            <select
-                                                                className="form-control form-control-sm"
-                                                                value={
-                                                                    l.batch_locked && l.product_batch_id
-                                                                        ? String(l.batch_no)
-                                                                        : '__auto__'
-                                                                }
-                                                                title="Auto-increment, or select an existing batch to load its cost and price"
-                                                                onChange={(e) => applyBatchSelection(l._id, e.target.value)}
-                                                                style={{ minWidth: 88 }}
-                                                            >
-                                                                <option value="__auto__">Auto</option>
-                                                                {(l.batch_options || []).map((b) => (
-                                                                    <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
-                                                                        {b.batch_no}
-                                                                        {b.net_unit_cost != null
-                                                                            ? ` (${Number(b.net_unit_cost).toFixed(2)})`
-                                                                            : ''}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
+                                                        <div className="ui-inline-field" style={{ minWidth: 150 }}>
+                                                            <div className="ui-inline-field-main">
+                                                                <TextInput
+                                                                    className="sm"
+                                                                    value={l.batch_no || ''}
+                                                                    placeholder="Auto"
+                                                                    readOnly
+                                                                />
+                                                            </div>
+                                                            <div className="ui-inline-field-action">
+                                                                <select
+                                                                    className="ui-select-field"
+                                                                    value={
+                                                                        l.batch_locked && l.product_batch_id
+                                                                            ? String(l.batch_no)
+                                                                            : '__auto__'
+                                                                    }
+                                                                    title="Auto-increment, or select an existing batch to load its cost and price"
+                                                                    onChange={(e) => applyBatchSelection(l._id, e.target.value)}
+                                                                >
+                                                                    <option value="__auto__">Auto</option>
+                                                                    {(l.batch_options || []).map((b) => (
+                                                                        <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
+                                                                            {b.batch_no}
+                                                                            {b.net_unit_cost != null
+                                                                                ? ` (${Number(b.net_unit_cost).toFixed(2)})`
+                                                                                : ''}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-muted">—</span>
+                                                        <span className="cell-muted">—</span>
                                                     )}
                                                 </td>
                                             )}
@@ -1339,27 +1476,28 @@ export default function PurchaseForm() {
                                                     {l.is_batch ? (
                                                         <input
                                                             type="date"
-                                                            className="form-control form-control-sm"
+                                                            className="ui-input sm"
                                                             value={l.expired_date || ''}
                                                             min={minExpiryDate}
                                                             required
                                                             onChange={(e) => updateLine(l._id, 'expired_date', e.target.value)}
                                                         />
                                                     ) : (
-                                                        <span className="text-muted">—</span>
+                                                        <span className="cell-muted">—</span>
                                                     )}
                                                 </td>
                                             )}
-                                            <td>{Number(l.net_unit_cost).toFixed(2)}</td>
-                                            <td>{Number(l.net_unit_margin).toFixed(2)}</td>
+                                            <td className="cell-num">{Number(l.net_unit_cost).toFixed(2)}</td>
+                                            <td className="cell-num">{Number(l.net_unit_margin).toFixed(2)}</td>
                                             <td>{marginTypeLabel(l.net_unit_margin_type)}</td>
-                                            <td>{Number(l.net_unit_price).toFixed(2)}</td>
-                                            <td>{Number(l.discount).toFixed(2)}</td>
-                                            <td>{Number(tax).toFixed(2)}</td>
-                                            <td>{Number(subtotal).toFixed(2)}</td>
+                                            <td className="cell-num">{Number(l.net_unit_price).toFixed(2)}</td>
+                                            <td className="cell-num">{Number(l.discount).toFixed(2)}</td>
+                                            <td>{discountTypeLabel(l.discount_type)}</td>
+                                            <td className="cell-num">{Number(tax).toFixed(2)}</td>
+                                            <td className="cell-num">{Number(subtotal).toFixed(2)}</td>
                                             <td>
-                                                <button type="button" className="btn btn-sm btn-danger" onClick={() => removeLine(l._id)}>
-                                                    Delete
+                                                <button type="button" className="ui-btn danger sm" onClick={() => removeLine(l._id)}>
+                                                    <i className="fa fa-trash ui-btn-icon" /> Delete
                                                 </button>
                                             </td>
                                         </tr>
@@ -1369,13 +1507,13 @@ export default function PurchaseForm() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <th
+                                    <td
                                         colSpan={(header.status === 2 ? 12 : 11) + (hasBatchLines ? 2 : 0) - 2}
-                                        className="text-end"
+                                        style={{ textAlign: 'right' }}
                                     >
                                         Grand total
-                                    </th>
-                                    <th colSpan={2}>{totals.grandTotal.toFixed(2)}</th>
+                                    </td>
+                                    <td colSpan={2} className="cell-num">{totals.grandTotal.toFixed(2)}</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1480,12 +1618,13 @@ export default function PurchaseForm() {
                     </FormSection>
                 )}
 
-                <div className="d-flex gap-2">
-                    <button type="submit" className="ui-btn primary" disabled={submitting}>
+                <div className="ui-btn-group">
+                    <button type="submit" className="ui-btn primary sm" disabled={submitting}>
+                        <i className={`fa ${submitting ? 'fa-spinner fa-spin' : isEdit ? 'fa-save' : 'fa-check'} ui-btn-icon`} />
                         {submitting ? 'Saving…' : isEdit ? 'Update' : 'Submit'}
                     </button>
-                    <button type="button" className="ui-btn" onClick={() => navigate('/purchases')}>
-                        Cancel
+                    <button type="button" className="ui-btn ghost sm" onClick={() => navigate('/purchases')}>
+                        <i className="fa fa-times ui-btn-icon" /> Cancel
                     </button>
                 </div>
             </form>
@@ -1496,16 +1635,16 @@ export default function PurchaseForm() {
                 onClose={closeLineEditor}
                 footer={(
                     <>
-                        <button type="button" className="ui-btn" onClick={closeLineEditor}>
-                            Cancel
+                        <button type="button" className="ui-btn ghost sm" onClick={closeLineEditor}>
+                            <i className="fa fa-times ui-btn-icon" /> Cancel
                         </button>
                         <button
                             type="button"
-                            className="ui-btn primary"
+                            className="ui-btn primary sm"
                             disabled={lineEditModal.loading || !lineEditModal.draft}
                             onClick={saveLineEditor}
                         >
-                            Update
+                            <i className="fa fa-check ui-btn-icon" /> Update
                         </button>
                     </>
                 )}
@@ -1520,6 +1659,13 @@ export default function PurchaseForm() {
                                 step="1"
                                 value={lineEditModal.draft.qty}
                                 onChange={(e) => patchLineEditDraft({ qty: e.target.value })}
+                            />
+                        </FormField>
+                        <FormField label="Unit discount type">
+                            <SelectInput
+                                value={lineEditModal.draft.discount_type || 'flat'}
+                                onChange={(e) => patchLineEditDraft({ discount_type: e.target.value })}
+                                options={discountTypeOptions}
                             />
                         </FormField>
                         <FormField label="Unit discount">
@@ -1615,8 +1761,8 @@ export default function PurchaseForm() {
                                 {addedVariantsInPicker.size} variant{addedVariantsInPicker.size !== 1 ? 's' : ''} added to grid — select more or click Done.
                             </p>
                         )}
-                        <div className="table-responsive">
-                            <table className="table table-sm table-hover">
+                        <div className="ui-table-wrap">
+                            <table className="ui-table">
                                 <thead>
                                     <tr>
                                         <th>Code</th>
@@ -1630,7 +1776,7 @@ export default function PurchaseForm() {
                                 <tbody>
                                     {filteredVariants.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} className="text-center text-muted py-3">
+                                            <td colSpan={6} className="ui-empty">
                                                 No variants found
                                             </td>
                                         </tr>
@@ -1640,27 +1786,28 @@ export default function PurchaseForm() {
                                             return (
                                                 <tr
                                                     key={v.id}
-                                                    className={inGrid ? 'table-success' : undefined}
+                                                    className={inGrid ? 'sel-row' : undefined}
                                                 >
                                                     <td><code>{v.item_code}</code></td>
                                                     <td>{v.variant_name}</td>
-                                                    <td>{Number(v.qty).toFixed(2)}</td>
-                                                    <td>{Number(v.cost).toFixed(2)}</td>
+                                                    <td className="cell-num">{Number(v.qty).toFixed(2)}</td>
+                                                    <td className="cell-num">{Number(v.cost).toFixed(2)}</td>
                                                     <td>
                                                         {inGrid ? (
-                                                            <span className="badge bg-success">
+                                                            <span className="cell-tag">
                                                                 In grid · qty {inGrid.qty}
                                                             </span>
                                                         ) : (
-                                                            <span className="text-muted">—</span>
+                                                            <span className="cell-muted">—</span>
                                                         )}
                                                     </td>
                                                     <td>
                                                         <button
                                                             type="button"
-                                                            className={`btn btn-sm ${inGrid ? 'btn-outline-success' : 'btn-primary'}`}
+                                                            className={`ui-btn sm ${inGrid ? 'ghost' : 'primary'}`}
                                                             onClick={() => addVariantFromPicker(v)}
                                                         >
+                                                            <i className={`fa ${inGrid ? 'fa-plus' : 'fa-plus-circle'} ui-btn-icon`} />
                                                             {inGrid ? '+ Qty' : 'Add'}
                                                         </button>
                                                     </td>
@@ -1671,9 +1818,9 @@ export default function PurchaseForm() {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="d-flex justify-content-end mt-3">
-                            <button type="button" className="ui-btn primary" onClick={closeVariantPicker}>
-                                Done
+                        <div className="ui-form-footer">
+                            <button type="button" className="ui-btn primary sm" onClick={closeVariantPicker}>
+                                <i className="fa fa-check ui-btn-icon" /> Done
                             </button>
                         </div>
                     </>

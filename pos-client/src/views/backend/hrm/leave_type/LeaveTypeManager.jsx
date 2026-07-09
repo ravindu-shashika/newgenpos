@@ -67,7 +67,7 @@ const LeaveTypeManager = ({ controllerName }) => {
     const [form, setForm] = useState(INITIAL_FORM);
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchForm = (patch) => setForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -81,7 +81,7 @@ const LeaveTypeManager = ({ controllerName }) => {
             const res = await api.get('leave-type');
             setAllRows(res.data?.leave_types || []);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load leave types.', 'error');
+            showApiError(err, 'Failed to load leave types.');
         } finally {
             setLoading(false);
         }
@@ -191,12 +191,12 @@ const LeaveTypeManager = ({ controllerName }) => {
         try {
             setSaving(true);
             const res = await api.post('leave-type', buildPayload());
-            showToast(res.data?.message || 'Leave type added.', 'success');
+            showApiSuccess(res, 'Leave type added.');
             applyListResponse(res);
             setAddOpen(false);
             setForm(INITIAL_FORM);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to add leave type.', 'error');
+            showApiError(err, 'Failed to add leave type.');
         } finally {
             setSaving(false);
         }
@@ -210,12 +210,12 @@ const LeaveTypeManager = ({ controllerName }) => {
                 ...buildPayload(),
                 leave_types: form.id,
             });
-            showToast(res.data?.message || 'Leave type updated.', 'success');
+            showApiSuccess(res, 'Leave type updated.');
             applyListResponse(res);
             setEditOpen(false);
             setForm(INITIAL_FORM);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to update leave type.', 'error');
+            showApiError(err, 'Failed to update leave type.');
         } finally {
             setSaving(false);
         }
@@ -225,7 +225,7 @@ const LeaveTypeManager = ({ controllerName }) => {
         if (!deleteId) return;
         try {
             const res = await api.delete(`leave-type/${deleteId}`);
-            showToast(res.data?.message || 'Leave type deleted.', 'success');
+            showApiSuccess(res, 'Leave type deleted.');
             applyListResponse(res);
             setSelected((prev) => {
                 const next = new Set(prev);
@@ -234,7 +234,7 @@ const LeaveTypeManager = ({ controllerName }) => {
             });
             setDeleteId(null);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to delete leave type.', 'error');
+            showApiError(err, 'Failed to delete leave type.');
         }
     };
 
@@ -243,12 +243,12 @@ const LeaveTypeManager = ({ controllerName }) => {
             const res = await api.post('leave-type/deletebyselection', {
                 leaveTypeIdArray: [...selected],
             });
-            showToast(res.data?.message || 'Selected leave types deleted.', 'success');
+            showApiSuccess(res, 'Selected leave types deleted.');
             applyListResponse(res);
             setSelected(new Set());
             setBulkDeleteOpen(false);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

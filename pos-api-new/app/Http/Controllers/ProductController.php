@@ -12,7 +12,10 @@ use App\Models\Barcode;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Variant;
+use App\Services\VariantMasterResolver;
+use App\Services\VariantMasterImportService;
 use App\Models\Category;
+use App\Models\Currency;
 use App\Models\Purchase;
 use App\Models\Supplier;
 use App\Models\Warehouse;
@@ -27,6 +30,7 @@ use App\Models\GeneralSetting;
 use App\Models\ProductVariant;
 use App\Models\ProductPurchase;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use App\Models\Product_Supplier;
 use App\Models\Product_Warehouse;
 use Illuminate\Support\Facades\DB;
@@ -544,6 +548,7 @@ class ProductController extends Controller
             'role_id' => Auth::user()->role_id,
             'combo_product_codes' => $comboCodes,
             'has_woocommerce' => \Schema::hasColumn('products', 'woocommerce_product_id'),
+            'variant_masters' => VariantMasterController::listForProductForm(),
             'kitchens' => [],
             'menu_type_list' => [],
         ];
@@ -589,25 +594,61 @@ class ProductController extends Controller
 
         $variantOptions = $product->variant_option ? json_decode($product->variant_option, true) : [];
         $variantValues = $product->variant_value ? json_decode($product->variant_value, true) : [];
+        $mastersByName = collect(VariantMasterController::listForProductForm())->keyBy('name');
+        $productSelections = app(VariantMasterImportService::class)->productVariantSelections((int) $product->id);
         $variants = [];
-        if (is_array($variantOptions)) {
+        if (is_array($variantOptions) && count($variantOptions) > 0) {
             foreach ($variantOptions as $idx => $option) {
+                $valueStr = $variantValues[$idx] ?? '';
+                $selected = array_values(array_filter(array_map('trim', explode(',', (string) $valueStr))));
+                if (!empty($productSelections[$option])) {
+                    $selected = array_values(array_unique(array_merge($selected, $productSelections[$option])));
+                }
+                $master = $mastersByName->get($option);
+                $available = $master
+                    ? array_map(fn ($v) => $v['value'], $master['values'] ?? [])
+                    : $selected;
+                $available = array_values(array_unique(array_merge($available, $selected)));
                 $variants[] = [
+                    'master_id' => $master['id'] ?? null,
                     'name' => $option,
-                    'values' => $variantValues[$idx] ?? '',
+                    'selectedValues' => $selected,
+                    'availableValues' => $available,
+                ];
+            }
+        } elseif (!empty($productSelections)) {
+            foreach ($productSelections as $option => $selected) {
+                $master = $mastersByName->get($option);
+                $available = $master
+                    ? array_map(fn ($v) => $v['value'], $master['values'] ?? [])
+                    : $selected;
+                $available = array_values(array_unique(array_merge($available, $selected)));
+                $variants[] = [
+                    'master_id' => $master['id'] ?? null,
+                    'name' => $option,
+                    'selectedValues' => $selected,
+                    'availableValues' => $available,
                 ];
             }
         }
 
         $variantCombinations = [];
+        $variantQtyById = Product_Warehouse::where('product_id', $product->id)
+            ->whereNotNull('variant_id')
+            ->whereNull('product_batch_id')
+            ->select('variant_id', DB::raw('SUM(qty) as qty'))
+            ->groupBy('variant_id')
+            ->pluck('qty', 'variant_id');
         $productVariants = ProductVariant::where('product_id', $product->id)->orderBy('position')->get();
         foreach ($productVariants as $pv) {
-            $variantName = Variant::find($pv->variant_id)?->name ?? '';
+            $variantName = Variant::find($pv->variant_id)?->value ?? '';
             $variantCombinations[] = [
+                'variant_id' => (int) $pv->variant_id,
                 'name' => $variantName,
                 'item_code' => $pv->item_code,
                 'additional_cost' => (float) $pv->additional_cost,
                 'additional_price' => (float) $pv->additional_price,
+                'qty' => (float) ($variantQtyById[$pv->variant_id] ?? 0),
             ];
         }
 
@@ -650,6 +691,11 @@ class ProductController extends Controller
             }
         }
 
+        $warehouseStock = $this->currentStockByWarehouse($product->id);
+        $variantWarehouseStock = $product->is_variant
+            ? $this->variantWarehouseStockRows($product->id)
+            : [];
+
         $relatedIds = array_filter(array_map('trim', explode(',', (string) $product->related_products)));
         $extraIds = array_filter(array_map('trim', explode(',', (string) $product->extras)));
         $relatedProducts = $relatedIds
@@ -681,6 +727,8 @@ class ProductController extends Controller
             'variant_combinations' => $variantCombinations,
             'combo_products' => $comboProducts,
             'diff_prices' => $diffPrices,
+            'warehouse_stock' => $warehouseStock,
+            'variant_warehouse_stock' => $variantWarehouseStock,
             'related_products_selected' => $relatedProducts,
             'extras_selected' => $extras,
             'previous_images' => $previousImages,
@@ -1160,6 +1208,69 @@ class ProductController extends Controller
         }
 
         return $initialStock;
+    }
+
+    /**
+     * Current on-hand qty per warehouse from product_warehouse (non-variant rows).
+     */
+    private function currentStockByWarehouse(int $productId): array
+    {
+        $rows = Product_Warehouse::where('product_id', $productId)
+            ->whereNull('variant_id')
+            ->whereNull('product_batch_id')
+            ->where(function ($query) {
+                $query->whereNull('imei_number')
+                    ->orWhere('imei_number', '')
+                    ->orWhere('imei_number', 'null');
+            })
+            ->select('warehouse_id', DB::raw('SUM(qty) as qty'))
+            ->groupBy('warehouse_id')
+            ->get();
+
+        $stock = [];
+        foreach ($rows as $row) {
+            $stock[(int) $row->warehouse_id] = (float) $row->qty;
+        }
+
+        return $stock;
+    }
+
+    /**
+     * Per-warehouse variant stock rows from product_warehouse.
+     *
+     * @return list<array{warehouse_id:int,warehouse_name:string,variant_id:int,variant_name:string,qty:float}>
+     */
+    private function variantWarehouseStockRows(int $productId): array
+    {
+        $rows = Product_Warehouse::where('product_id', $productId)
+            ->whereNotNull('variant_id')
+            ->whereNull('product_batch_id')
+            ->orderBy('warehouse_id')
+            ->orderBy('variant_id')
+            ->get();
+
+        $warehouseNames = Warehouse::whereIn(
+            'id',
+            $rows->pluck('warehouse_id')->unique()->filter()
+        )->pluck('name', 'id');
+
+        $variantNames = Variant::whereIn(
+            'id',
+            $rows->pluck('variant_id')->unique()->filter()
+        )->pluck('value', 'id');
+
+        $result = [];
+        foreach ($rows as $row) {
+            $result[] = [
+                'warehouse_id' => (int) $row->warehouse_id,
+                'warehouse_name' => (string) ($warehouseNames[$row->warehouse_id] ?? ''),
+                'variant_id' => (int) $row->variant_id,
+                'variant_name' => (string) ($variantNames[$row->variant_id] ?? ''),
+                'qty' => (float) $row->qty,
+            ];
+        }
+
+        return $result;
     }
 
     public function history(Request $request)
@@ -1702,12 +1813,12 @@ class ProductController extends Controller
     public function variantData($id)
     {
         if(Auth::user()->role_id > 2) {
-            return ProductVariant::join('variants', 'product_variants.variant_id', '=', 'variants.id')
+            return ProductVariant::join('variant_master_values', 'product_variants.variant_id', '=', 'variant_master_values.id')
                 ->join('product_warehouse', function($join) {
                     $join->on('product_variants.product_id', '=', 'product_warehouse.product_id');
                     $join->on('product_variants.variant_id', '=', 'product_warehouse.variant_id');
                 })
-                ->select('variants.name', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_warehouse.qty')
+                ->select('variant_master_values.value as name', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_warehouse.qty')
                 ->where([
                     ['product_warehouse.product_id', $id],
                     ['product_warehouse.warehouse_id', Auth::user()->warehouse_id]
@@ -1716,8 +1827,8 @@ class ProductController extends Controller
                 ->get();
         }
         else {
-            return ProductVariant::join('variants', 'product_variants.variant_id', '=', 'variants.id')
-                ->select('variants.name', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_variants.qty')
+            return ProductVariant::join('variant_master_values', 'product_variants.variant_id', '=', 'variant_master_values.id')
+                ->select('variant_master_values.value as name', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_variants.qty')
                 ->orderBy('product_variants.position')
                 ->where('product_id', $id)
                 ->get();
@@ -1785,6 +1896,15 @@ class ProductController extends Controller
 
     public function updateProduct(Request $request)
     {
+        if (!$this->userCanProductEdit()) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, [
+                    'message' => __('db.Sorry! You are not allowed to access this module'),
+                ], 403);
+            }
+
+            return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
+        }
 
         DB::beginTransaction();
         try {
@@ -1909,7 +2029,7 @@ class ProductController extends Controller
                 $lims_product_data->image = implode(",", $previous_images);
                 $lims_product_data->save();
             }
-            else {
+            elseif (!$this->wantsSpaResponse($request)) {
                 $lims_product_data->image = null;
                 $lims_product_data->save();
             }
@@ -1960,14 +2080,13 @@ class ProductController extends Controller
                 $data['file'] = $fileName;
             }
 
-            $old_product_variant_ids = ProductVariant::where('product_id', $request->input('id'))->pluck('id')->toArray();
-            $new_product_variant_ids = [];
             //dealing with product variant
             if(isset($data['is_variant'])) {
                 if(isset($data['variant_option']) && isset($data['variant_value'])) {
                     $data['variant_option'] = json_encode(array_unique($data['variant_option']));
                     $data['variant_value'] = json_encode(array_unique($data['variant_value']));
                 }
+                if (!empty($data['variant_name']) && is_array($data['variant_name'])) {
                 foreach ($data['variant_name'] as $key => $variant_name) {
                     $lims_variant_data = Variant::firstOrCreate(['name' => $data['variant_name'][$key]]);
                     $lims_product_variant_data = ProductVariant::where([
@@ -2013,7 +2132,7 @@ class ProductController extends Controller
                         }
                     }
 
-                    $new_product_variant_ids[] = $lims_product_variant_data->id;
+                }
                 }
             }
             else {
@@ -2021,22 +2140,7 @@ class ProductController extends Controller
                 $data['variant_option'] = null;
                 $data['variant_value'] = null;
             }
-            //deleting old product variant if not exist
-            foreach ($old_product_variant_ids as $key => $product_variant_id) {
-                if (!in_array($product_variant_id, $new_product_variant_ids)) {
-                    $productVariant = ProductVariant::find($product_variant_id);
-                    if ($productVariant->qty > 0) {
-                        DB::rollBack();
-                        // return dd($productVariant);
-                        return redirect()->back()->with('not_permitted', __('db.This variant has a quantity; you cannot delete it'));
-                    }
-                    Product_Warehouse::where('product_id', $productVariant->product_id)
-                        ->where('variant_id', $productVariant->variant_id)
-                        ->delete();
-
-                    $productVariant->delete();
-                }
-            }
+            // Variants are upserted only — never deleted on product save (add missing, keep existing).
 
             if(isset($data['is_diffPrice'])) {
                 foreach ($data['diff_price'] as $key => $diff_price) {
@@ -2102,6 +2206,15 @@ class ProductController extends Controller
                 return $this->spaJson($request, ['message' => __('db.Product updated successfully')]);
             }
             return redirect('products')->with('edit_message', 'Product updated successfully');
+        } catch (ValidationException $e) {
+            DB::rollBack();
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, [
+                    'message' => collect($e->errors())->flatten()->first() ?? __('db.Validation failed'),
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+            throw $e;
         } catch (\Exception $e) {
             DB::rollBack();
             if ($request->ajax() || $this->wantsSpaResponse($request)) {
@@ -2195,13 +2308,16 @@ class ProductController extends Controller
         $product_variant_warehouse = [];
         $lims_product_data = Product::select('id', 'is_variant')->find($id);
         if($lims_product_data->is_variant) {
-            $lims_product_variant_warehouse_data = Product_Warehouse::where('product_id', $lims_product_data->id)->orderBy('warehouse_id')->get();
+            $lims_product_variant_warehouse_data = Product_Warehouse::where('product_id', $lims_product_data->id)
+                ->whereNotNull('variant_id')
+                ->orderBy('warehouse_id')
+                ->get();
             $lims_product_warehouse_data = Product_Warehouse::select('warehouse_id', DB::raw('sum(qty) as qty'))->where('product_id', $id)->groupBy('warehouse_id')->get();
             foreach ($lims_product_variant_warehouse_data as $key => $product_variant_warehouse_data) {
                 $lims_warehouse_data = Warehouse::find($product_variant_warehouse_data->warehouse_id);
                 $lims_variant_data = Variant::find($product_variant_warehouse_data->variant_id);
                 $warehouse_name[] = $lims_warehouse_data->name;
-                $variant_name[] = $lims_variant_data->name ?? '';
+                $variant_name[] = $lims_variant_data->value ?? '';
                 $variant_qty[] = $product_variant_warehouse_data->qty;
             }
         }
@@ -2360,6 +2476,9 @@ class ProductController extends Controller
 
         if ($result instanceof \Illuminate\Http\JsonResponse) {
             $decoded = $result->getData(true);
+            if (isset($decoded['data']) && is_array($decoded['data'])) {
+                return $decoded['data'];
+            }
 
             return is_array($decoded) ? $decoded : [];
         }
@@ -2389,6 +2508,15 @@ class ProductController extends Controller
                 ->where('product_variants.product_id', $lims_product_list[0]->id)
                 ->get();
         }
+        $currencySymbol = config('currency');
+        $generalSetting = GeneralSetting::latest()->first();
+        if ($generalSetting?->currency) {
+            $defaultCurrency = Currency::find($generalSetting->currency);
+            if ($defaultCurrency) {
+                $currencySymbol = $defaultCurrency->symbol ?: $defaultCurrency->code ?: $currencySymbol;
+            }
+        }
+
         foreach($lims_product_list as $lims_product_data) {
             $product = [];
             $product[] = $lims_product_data->name;
@@ -2429,7 +2557,7 @@ class ProductController extends Controller
             $product[] = $lims_product_data->price + $additional_price;
             $product[] = null;
             $product[] = $lims_product_data->promotion_price;
-            $product[] = config('currency');
+            $product[] = $currencySymbol;
             $product[] = config('currency_position');
             $product[] = $lims_product_data->qty;
             $product[] = $lims_product_data->id;
@@ -2453,6 +2581,7 @@ class ProductController extends Controller
             $product[] = $warehouse_product ?? 'N/A';
             $product[] = $lims_product_data->barcode_symbology ?? 'C128';
             $product[] = $lims_product_data->alt_code;
+            $product[] = $lims_product_data->max_price;
             $products[] = $product;
 
         }

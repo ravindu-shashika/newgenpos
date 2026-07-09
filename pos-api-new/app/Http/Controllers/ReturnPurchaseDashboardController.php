@@ -128,7 +128,7 @@ class ReturnPurchaseDashboardController extends Controller
             ]);
         } catch (\Throwable $e) {
             report($e);
-            return $this->spaJson($request, ['message' => __('db.Failed to load purchase returns'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+            return $this->spaJson($request, ['message' => __('db.Failed to load purchase returns'), 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -168,7 +168,7 @@ class ReturnPurchaseDashboardController extends Controller
             ]);
         } catch (\Throwable $e) {
             report($e);
-            return $this->spaJson($request, ['message' => __('db.Failed to load purchase return form'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+            return $this->spaJson($request, ['message' => __('db.Failed to load purchase return form'), 'error' => $e->getMessage()], 500);
         }
     }
 
@@ -186,7 +186,7 @@ class ReturnPurchaseDashboardController extends Controller
             return $this->spaJson($request, ['message' => __('db.Data deleted successfully')]);
         } catch (\Throwable $e) {
             report($e);
-            return $this->spaJson($request, ['message' => __('db.Failed to delete return'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+            return $this->spaJson($request, ['message' => __('db.Failed to delete return'), 'error' => $e->getMessage()], 500);
         }
     }
 

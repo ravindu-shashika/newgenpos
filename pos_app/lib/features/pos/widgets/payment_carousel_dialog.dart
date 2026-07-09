@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../../core/theme/pos_theme.dart';
 import 'pos_toast.dart';
@@ -243,6 +243,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
   _MixPaymentLineState? _activeMixLine;
   _MixFieldKind _activeMixField = _MixFieldKind.amount;
   bool _cashFieldActive = true;
+  bool _quickCashInitial = true;
 
   List<_CheckoutTab> _buildOrderedTabs() {
     final byKey = <String, PosPaymentMethod>{
@@ -366,6 +367,7 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     final text = due % 1 == 0 ? due.toStringAsFixed(0) : due.toStringAsFixed(2);
     _cashReceivedCtrl.text = text;
     _cashReceivedCtrl.selection = TextSelection.collapsed(offset: text.length);
+    _quickCashInitial = true;
   }
 
   String get _discountAmountText {
@@ -512,16 +514,25 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
     _onAmountChanged();
   }
 
-  /// Quick-cash denominations add to the current tendered amount (e.g. 5000 + 2000).
+  /// First quick-cash tap replaces received; later taps add (e.g. 5000 then +2000).
   void _addTendered(double amount) {
-    final current = double.tryParse(_cashReceivedCtrl.text.trim()) ?? 0;
-    _setTendered(current + amount);
+    if (_quickCashInitial) {
+      _setTendered(amount);
+    } else {
+      final current = double.tryParse(_cashReceivedCtrl.text.trim()) ?? 0;
+      _setTendered(current + amount);
+    }
+    _quickCashInitial = false;
   }
 
-  void _applyExactChange() => _setTendered(_grandTotal);
+  void _applyExactChange() {
+    _setTendered(_grandTotal);
+    _quickCashInitial = true;
+  }
 
   void _clearCashReceived() {
     _cashReceivedCtrl.clear();
+    _quickCashInitial = true;
     _onAmountChanged();
   }
 
@@ -733,7 +744,9 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
             saleNote: _saleNoteCtrl.text.trim(),
             staffNote: widget.initialStaffNote,
             cardNumber: firstCard?.cardDigitsCtrl.text.trim() ?? '',
-            cardHolderName: '',
+            cardHolderName: firstCard != null
+                ? resolveCardHolderName('')
+                : '',
             cardType: firstCard?.cardType ?? '',
             chequeNo: '',
             printInvoice: widget.printOnComplete,
@@ -764,8 +777,9 @@ class _PaymentCarouselDialogState extends State<_PaymentCarouselDialog> {
           saleNote: _saleNoteCtrl.text.trim(),
           staffNote: widget.initialStaffNote,
           cardNumber: method.key == 'card' ? _cardNumberCtrl.text.trim() : '',
-          cardHolderName:
-              method.key == 'card' ? _cardHolderCtrl.text.trim() : '',
+          cardHolderName: method.key == 'card'
+              ? resolveCardHolderName(_cardHolderCtrl.text)
+              : '',
           cardType: method.key == 'card' ? _cardType : '',
           chequeNo: method.key == 'cheque' ? _chequeNoCtrl.text.trim() : '',
           printInvoice: widget.printOnComplete,

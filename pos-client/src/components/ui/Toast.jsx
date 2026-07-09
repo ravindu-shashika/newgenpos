@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
+import { apiSuccessMessage, apiErrorMessage } from '../../services/apiMessages';
 
 /**
  * Toast — a self-dismissing notification.
  * useToast() — hook to manage toast state.
  *
  * Usage:
- *   const { toast, showToast } = useToast();
+ *   const { toast, showToast, showApiSuccess, showApiError } = useToast();
  *   showToast('Saved!');
- *   showToast('Error!', 'error');
+ *   showApiSuccess(res, 'Saved!');
+ *   showApiError(err, 'Save failed.');
  *   <Toast toast={toast} />
  */
 export function useToast(duration = 3000) {
@@ -17,7 +19,21 @@ export function useToast(duration = 3000) {
     setTimeout(() => setToast(null), duration);
   }, [duration]);
 
-  return { toast, showToast };
+  const showApiSuccess = useCallback(
+    (response, fallback = 'Saved successfully.') => {
+      showToast(apiSuccessMessage(response, fallback), 'success');
+    },
+    [showToast],
+  );
+
+  const showApiError = useCallback(
+    (err, fallback = 'Request failed.') => {
+      showToast(apiErrorMessage(err, fallback), 'error');
+    },
+    [showToast],
+  );
+
+  return { toast, showToast, showApiSuccess, showApiError };
 }
 
 export function Toast({ toast }) {

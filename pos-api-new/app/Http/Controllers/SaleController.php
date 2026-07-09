@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\CustomerTypeEnum;
 use App\Http\Requests\Sale\StoreSaleRequest;
+use App\Services\SaleLineCostService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use App\Models\Customer;
@@ -1064,6 +1065,7 @@ class SaleController extends Controller
             $tax_rate = $data['tax_rate'];
             $tax = $data['tax'];
             $total = $data['subtotal'];
+            $net_unit_cost = $data['net_unit_cost'] ?? [];
             $product_sale = [];
             $log_data['item_description'] = '';
 
@@ -1193,7 +1195,7 @@ class SaleController extends Controller
                 }
 
                 if($product_sale['variant_id']) {
-                    $variant_data = Variant::select('name')->find($product_sale['variant_id']);
+                    $variant_data = Variant::find($product_sale['variant_id']);
                     $mail_data['products'][$i] = $lims_product_data->name . ' ['. $variant_data->name .']';
                 }
                 else
@@ -1255,6 +1257,14 @@ class SaleController extends Controller
                         $product_sale['topping_id'] = $data['topping_product'][$i];
                     }
                 }
+
+                $this->attachSaleLineUnitCost(
+                    $product_sale,
+                    is_array($net_unit_cost) ? $net_unit_cost : [],
+                    $i,
+                    $lims_product_data,
+                    $product_sale['product_batch_id'] ?? null,
+                );
 
                 Product_Sale::create($product_sale);
             }
@@ -1399,9 +1409,9 @@ class SaleController extends Controller
                         // Check Payment Method is Card
                         if($paying_method == 'Credit Card'){
                             $cardDetails = [];
-                            $cardDetails['card_number'] = $data['card_number'];
-                            $cardDetails['card_holder_name'] = $data['card_holder_name'];
-                            $cardDetails['card_type'] = $data['card_type'];
+                            $cardDetails['card_number'] = $data['card_number'] ?? '';
+                            $cardDetails['card_holder_name'] = $data['card_holder_name'] ?? '';
+                            $cardDetails['card_type'] = $data['card_type'] ?? '';
                             $data['charge_id'] = '12345';
                             $data['data'] = json_encode($cardDetails);
 
@@ -1561,6 +1571,21 @@ class SaleController extends Controller
         return preg_replace('/[\s-]+/', '', trim($reference));
     }
 
+    protected function attachSaleLineUnitCost(
+        array &$productSale,
+        array $requestedCosts,
+        int $index,
+        Product $product,
+        ?int $batchId = null,
+    ): void {
+        $productSale['net_unit_cost'] = app(SaleLineCostService::class)->resolveNetUnitCost(
+            $requestedCosts,
+            $index,
+            $product,
+            $batchId,
+        );
+    }
+
     public function getSoldItem($id)
     {
         $sale = Sale::select('warehouse_id')->find($id);
@@ -1590,7 +1615,7 @@ class SaleController extends Controller
             $data[$key]['product_id'] = $product_sale->product_id.'|'.$product_sale->variant_id;
             $data[$key]['type'] = $product->type;
             if($product_sale->variant_id) {
-                $variant_data = Variant::select('name')->find($product_sale->variant_id);
+                $variant_data = Variant::find($product_sale->variant_id);
                 $product_variant_data = ProductVariant::select('item_code')->where([
                     ['product_id', $product_sale->product_id],
                     ['variant_id', $product_sale->variant_id]
@@ -1616,6 +1641,19 @@ class SaleController extends Controller
 
             $data[$key]['unit_price'] = $product_sale->total / $product_sale->qty;
             $data[$key]['total_price'] = $product_sale->total;
+            $unitCost = (float) ($product_sale->net_unit_cost ?? 0);
+            if ($unitCost <= 0) {
+                $unitCost = app(SaleLineCostService::class)->resolveNetUnitCost(
+                    [],
+                    0,
+                    Product::find($product_sale->product_id),
+                    $product_sale->product_batch_id,
+                );
+            }
+            $lineQty = (float) $product_sale->qty;
+            $data[$key]['net_unit_cost'] = $unitCost;
+            $data[$key]['line_cost'] = round($unitCost * $lineQty, (int) config('decimal', 2));
+            $data[$key]['line_profit'] = app(SaleLineCostService::class)->lineProfit($product_sale);
             if($product_sale->is_packing) {
                 $data['amount'] = 0;
             }
@@ -1678,7 +1716,7 @@ class SaleController extends Controller
             foreach ($lims_product_sale_data as $key => $product_sale_data) {
                 $lims_product_data = Product::find($product_sale_data->product_id);
                 if($product_sale_data->variant_id) {
-                    $variant_data = Variant::select('name')->find($product_sale_data->variant_id);
+                    $variant_data = Variant::find($product_sale_data->variant_id);
                     $mail_data['products'][$key] = $lims_product_data->name . ' [' . $variant_data->name . ']';
                 }
                 else
@@ -3129,6 +3167,12 @@ class SaleController extends Controller
                 $product_sale->tax_rate = $tax[$key]['rate'];
                 $product_sale->tax = number_format((float)$product_tax, config('decimal'), '.', '');
                 $product_sale->total = $mail_data['total'][$key] = number_format((float)$total, config('decimal'), '.', '');
+                $product_sale->net_unit_cost = app(SaleLineCostService::class)->resolveNetUnitCost(
+                    [],
+                    $key,
+                    $product,
+                    null,
+                );
                 $product_sale->save();
                 $lims_sale_data->total_qty += $qty[$key];
                 $lims_sale_data->total_discount += $discount[$key] * $qty[$key];
@@ -3285,6 +3329,7 @@ class SaleController extends Controller
         $tax_rate = $data['tax_rate'];
         $tax = $data['tax'];
         $total = $data['subtotal'];
+        $net_unit_cost = $data['net_unit_cost'] ?? [];
         $old_product_id = [];
         $product_sale = [];
         foreach ($lims_product_sale_data as  $key => $product_sale_data) {
@@ -3527,7 +3572,7 @@ class SaleController extends Controller
 
             //collecting mail data
             if($product_sale['variant_id']) {
-                $variant_data = Variant::select('name')->find($product_sale['variant_id']);
+                $variant_data = Variant::find($product_sale['variant_id']);
                 $mail_data['products'][$key] = $lims_product_data->name . ' [' . $variant_data->name . ']';
             }
             else
@@ -3562,6 +3607,13 @@ class SaleController extends Controller
             $product_sale['tax_rate'] = $tax_rate[$key];
             $product_sale['tax'] = $tax[$key];
             $product_sale['total'] = $mail_data['total'][$key] = $total[$key];
+            $this->attachSaleLineUnitCost(
+                $product_sale,
+                is_array($net_unit_cost) ? $net_unit_cost : [],
+                $key,
+                $lims_product_data,
+                $product_sale['product_batch_id'] ?? null,
+            );
             //return $old_product_variant_id;
 
             if(in_array('restaurant',explode(',',$general_setting->modules))){

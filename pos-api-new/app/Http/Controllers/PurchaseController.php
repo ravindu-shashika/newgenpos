@@ -91,7 +91,7 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, $payload);
             } catch (\Throwable $e) {
                 report($e);
-                return $this->spaJson($request, ['message' => __('db.Failed to load purchases'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load purchases'));
             }
         }
 
@@ -173,7 +173,7 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, $this->purchaseFormMeta());
             } catch (\Throwable $e) {
                 report($e);
-                return $this->spaJson($request, ['message' => __('db.Failed to load purchase form'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load purchase form'));
             }
         }
 
@@ -313,6 +313,7 @@ class PurchaseController extends Controller
             $net_unit_margin_type = $data['net_unit_margin_type'];
             $net_unit_price = $data['net_unit_price'];
             $discount = $data['discount'];
+            $discount_type = $data['discount_type'] ?? [];
             $tax_rate = $data['tax_rate'];
             $tax = $data['tax'];
             $total = $data['subtotal'];
@@ -480,6 +481,9 @@ class PurchaseController extends Controller
                 $product_purchase['net_unit_margin_type'] = $net_unit_margin_type[$i];
                 $product_purchase['net_unit_price'] = $net_unit_price[$i];
                 $product_purchase['discount'] = $discount[$i];
+                $product_purchase['discount_type'] = in_array($discount_type[$i] ?? 'flat', ['flat', 'percentage'], true)
+                    ? $discount_type[$i]
+                    : 'flat';
                 $product_purchase['tax_rate'] = $tax_rate[$i];
                 $product_purchase['tax'] = $tax[$i];
                 $product_purchase['total'] = $total[$i];
@@ -544,12 +548,16 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, ['success' => true, 'message' => __('db.Purchase created successfully')], 201);
             }
             return redirect('purchases')->with('message', __('db.Purchase created successfully'));
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['success' => false, 'message' => 'Transaction failed: ' . $e->getMessage()], 400);
-            }
-            return redirect('purchases/create')->with('not_permitted', 'Transaction failed: ' . $e->getMessage());
+
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save purchase. Please check your entries and try again.'),
+                422,
+                'purchases/create'
+            );
         }
     }
 
@@ -812,16 +820,16 @@ class PurchaseController extends Controller
             return redirect('purchases')
                 ->with('message', 'Purchase created successfully.');
 
-        } catch (\Exception $e) {
-
+        } catch (\Throwable $e) {
             DB::rollBack();
 
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['message' => $e->getMessage()], 422);
-            }
-
-            return redirect('purchases/purchase_by_csv')
-                ->with('not_permitted', $e->getMessage());
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not import purchases from CSV. Please check the file and try again.'),
+                422,
+                'purchases/purchase_by_csv'
+            );
         }
     }
 
@@ -1378,6 +1386,7 @@ class PurchaseController extends Controller
                         'net_unit_margin_type' => $line->net_unit_margin_type,
                         'net_unit_price' => $line->net_unit_price,
                         'discount' => $line->discount,
+                        'discount_type' => $line->discount_type ?? 'flat',
                         'tax_rate' => $line->tax_rate,
                         'tax' => $line->tax,
                         'subtotal' => $line->total,
@@ -1413,7 +1422,7 @@ class PurchaseController extends Controller
                 ]);
             } catch (\Throwable $e) {
                 report($e);
-                return $this->spaJson($request, ['message' => __('db.Failed to load purchase'), 'error' => config('app.debug') ? $e->getMessage() : null], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load purchase'));
             }
         }
 
@@ -1536,6 +1545,7 @@ class PurchaseController extends Controller
             $net_unit_margin_type = $data['net_unit_margin_type'];
             $net_unit_price = $data['net_unit_price'];
             $discount = $data['discount'];
+            $discount_type = $data['discount_type'] ?? [];
             $tax_rate = $data['tax_rate'];
             $tax = $data['tax'];
             $total = $data['subtotal'];
@@ -1777,6 +1787,9 @@ class PurchaseController extends Controller
                 $product_purchase['net_unit_margin'] = $net_unit_margin[$key];
                 $product_purchase['net_unit_margin_type'] = $net_unit_margin_type[$key];
                 $product_purchase['discount'] = $discount[$key];
+                $product_purchase['discount_type'] = in_array($discount_type[$key] ?? 'flat', ['flat', 'percentage'], true)
+                    ? $discount_type[$key]
+                    : 'flat';
                 $product_purchase['tax_rate'] = $tax_rate[$key];
                 $product_purchase['tax'] = $tax[$key];
                 $product_purchase['total'] = $total[$key];
@@ -1820,12 +1833,15 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, ['success' => true, 'message' => __('db.Purchase updated successfully')]);
             }
             return redirect('purchases')->with('message', __('db.Purchase updated successfully'));
-        } catch(\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, ['success' => false, 'message' => $e->getMessage()], 400);
-            }
-            return redirect()->route('purchases.edit', $id)->with('not_permitted', $e->getMessage());
+
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not update purchase. Please check your entries and try again.'),
+                422
+            );
         }
     }
 
@@ -1862,6 +1878,7 @@ class PurchaseController extends Controller
                         'net_unit_margin_type' => $line->net_unit_margin_type,
                         'net_unit_price' => $line->net_unit_price,
                         'discount' => $line->discount,
+                        'discount_type' => $line->discount_type ?? 'flat',
                         'tax_rate' => $line->tax_rate,
                         'tax' => $line->tax,
                         'subtotal' => $line->total,
@@ -1895,10 +1912,7 @@ class PurchaseController extends Controller
                 ]);
             } catch (\Throwable $e) {
                 report($e);
-                return $this->spaJson($request, [
-                    'message' => __('db.Failed to load purchase duplicate'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load purchase duplicate'));
             }
         }
 
@@ -2034,10 +2048,7 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, ['payments' => $payments]);
             } catch (\Throwable $e) {
                 report($e);
-                return $this->spaJson($request, [
-                    'message' => __('db.Failed to load payments'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load payments'));
             }
         }
 
@@ -2373,9 +2384,15 @@ class PurchaseController extends Controller
             }
             DB::commit();
             return response()->json(['deleted' => [], 'message' =>  'Purchase deleted successfully!']);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            return response()->json(['deleted' => [], 'message' =>  $e->getMessage()]);
+
+            return response()->json([
+                'deleted' => [],
+                'success' => false,
+                'message' => humanize_db_message(__('db.Could not delete purchase. Please try again.')),
+                'error' => $e->getMessage(),
+            ], 422);
         }
     }
 
@@ -3344,10 +3361,7 @@ class PurchaseController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return $this->spaJson($request, [
-                'message' => __('db.Failed to load purchase details'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
-            ], 500);
+            return $this->respondLoadError($request, $e, __('db.Failed to load purchase details'));
         }
     }
 
@@ -3401,9 +3415,9 @@ class PurchaseController extends Controller
             return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
         }
         $taxRate = $product->tax_id ? (float) (Tax::find($product->tax_id)?->rate ?? 0) : 0;
-        $variants = DB::table('product_variants')->join('variants', 'product_variants.variant_id', '=', 'variants.id')
+        $variants = DB::table('product_variants')->join('variant_master_values', 'product_variants.variant_id', '=', 'variant_master_values.id')
             ->where('product_variants.product_id', $productId)->orderBy('product_variants.position')
-            ->select('product_variants.id', 'product_variants.variant_id', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_variants.qty', 'variants.name as variant_name')
+            ->select('product_variants.id', 'product_variants.variant_id', 'product_variants.item_code', 'product_variants.additional_cost', 'product_variants.additional_price', 'product_variants.qty', 'variant_master_values.value as variant_name')
             ->get()->map(function ($v) use ($product, $taxRate) {
                 return [
                     'id' => $v->id, 'variant_id' => $v->variant_id, 'item_code' => $v->item_code, 'variant_name' => $v->variant_name,

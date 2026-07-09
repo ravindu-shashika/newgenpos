@@ -59,12 +59,14 @@ import 'services/return_receipt_print_service.dart';
 import 'widgets/return_credit_amount_dialog.dart';
 import 'widgets/return_credit_dialog.dart';
 import 'widgets/return_session_panel.dart';
+import 'widgets/issue_return_bill_dialog.dart';
 import 'widgets/pos_professional_dialog.dart';
 import 'widgets/pos_toast.dart';
 import 'widgets/show_pos_dialog.dart';
 import 'widgets/pos_touch_keyboard_controller.dart';
 import 'widgets/pos_touch_keyboard_host.dart';
 import 'widgets/pos_customer_picker.dart';
+import 'widgets/checkout_party_required_dialog.dart';
 import 'widgets/pos_touch_text_field.dart';
 import 'widgets/pos_batch_picker_dialog.dart';
 import 'widgets/pos_catalog_entry_bar.dart';
@@ -98,6 +100,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
   int? _openCashRegisterId;
   bool _returnFlowActive = false;
   ProviderSubscription<int>? _returnTriggerSub;
+  ProviderSubscription<int>? _issueReturnBillTriggerSub;
 
   @override
   void initState() {
@@ -112,6 +115,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
           (prev, next) {
             if (prev == null || next <= prev) return;
             unawaited(_showReturnFlow());
+          },
+        );
+        _issueReturnBillTriggerSub = ref.listenManual<int>(
+          posIssueReturnBillTriggerProvider,
+          (prev, next) {
+            if (prev == null || next <= prev) return;
+            unawaited(_showIssueReturnBillFlow());
           },
         );
       });
@@ -326,6 +336,181 @@ class _PosScreenState extends ConsumerState<PosScreen>
     ));
   }
 
+  CheckoutPartyIds _resolveServerCheckoutParties({
+    required PosSettings? settings,
+    required SyncMetaData? syncMeta,
+    required List<Customer> customers,
+    required List<Biller> billers,
+    required List<Warehouse> warehouses,
+    required int? sessionWarehouseId,
+  }) {
+    final ui = ref.read(posUiSettingsProvider);
+    return resolveCheckoutPartyIds(
+      ui: ui,
+      settings: settings,
+      syncMeta: syncMeta,
+      sessionCustomerId: null,
+      sessionBillerId: null,
+      sessionWarehouseId: sessionWarehouseId,
+      customers: customers,
+      billers: billers,
+      warehouses: warehouses,
+      includeSessionFallback: false,
+      useUiDefaults: false,
+    );
+  }
+
+  String? _catalogPartyName({
+    required int? id,
+    required Iterable<({int id, String name})> items,
+  }) {
+    if (id == null) return null;
+    for (final item in items) {
+      if (item.id == id) return item.name;
+    }
+    return null;
+  }
+
+  Future<bool> _applyServerCheckoutDefaults() async {
+    PosSettings? settings = ref.read(posSettingsProvider).value;
+    final link = ref.read(posLinkStatusProvider).valueOrNull;
+    if (link?.serverOnline == true) {
+      try {
+        settings = await _fetchAndCachePosSettings() ?? settings;
+      } catch (_) {}
+    }
+    if (!mounted) return false;
+
+    final meta = await ref.read(posLocalMetaProvider.future);
+    final syncMeta = await ref.read(appDatabaseProvider).getSyncMeta();
+    final session = ref.read(sessionServiceProvider);
+    final checkout = ref.read(posCheckoutProvider);
+
+    final parties = _resolveServerCheckoutParties(
+      settings: settings,
+      syncMeta: syncMeta,
+      customers: meta.customers,
+      billers: meta.billers,
+      warehouses: meta.warehouses,
+      sessionWarehouseId: session.warehouseId,
+    );
+
+    final missingBefore = checkoutPartyMissingParts(
+      checkoutCustomerId: checkout.customerId,
+      checkoutBillerId: checkout.billerId,
+    );
+
+    final customerId = checkout.customerId ??
+        (missingBefore.missingCustomer ? parties.customerId : null);
+    final billerId = checkout.billerId ??
+        (missingBefore.missingBiller ? parties.billerId : null);
+
+    if ((missingBefore.missingCustomer && customerId == null) ||
+        (missingBefore.missingBiller && billerId == null)) {
+      _showSnack(
+        'No default customer or biller in server POS settings',
+        error: true,
+      );
+      return false;
+    }
+
+    if (customerId != null) await session.setCustomerId(customerId);
+    if (billerId != null) await session.setBillerId(billerId);
+
+    _setCheckout(checkout.copyWith(
+      customerId: customerId,
+      billerId: billerId,
+      warehouseId: parties.warehouseId ?? checkout.warehouseId,
+      clearCustomerId: customerId == null,
+      clearBillerId: billerId == null,
+    ));
+
+    if (!checkoutPartiesMissing(
+      checkoutCustomerId: customerId,
+      checkoutBillerId: billerId,
+    )) {
+      _showSnack('Default customer and biller applied');
+    }
+    return true;
+  }
+
+  Future<bool> _ensureCheckoutParties() async {
+    var checkout = ref.read(posCheckoutProvider);
+    if (!checkoutPartiesMissing(
+      checkoutCustomerId: checkout.customerId,
+      checkoutBillerId: checkout.billerId,
+    )) {
+      return true;
+    }
+
+    while (mounted) {
+      checkout = ref.read(posCheckoutProvider);
+      final missing = checkoutPartyMissingParts(
+        checkoutCustomerId: checkout.customerId,
+        checkoutBillerId: checkout.billerId,
+      );
+      if (!missing.missingCustomer && !missing.missingBiller) return true;
+
+      final meta = await ref.read(posLocalMetaProvider.future);
+      final settings = ref.read(posSettingsProvider).value;
+      final syncMeta = await ref.read(appDatabaseProvider).getSyncMeta();
+      if (!mounted) return false;
+
+      final serverParties = _resolveServerCheckoutParties(
+        settings: settings,
+        syncMeta: syncMeta,
+        customers: meta.customers,
+        billers: meta.billers,
+        warehouses: meta.warehouses,
+        sessionWarehouseId: ref.read(sessionServiceProvider).warehouseId,
+      );
+
+      final canApplyDefaults =
+          (!missing.missingCustomer || serverParties.customerId != null) &&
+              (!missing.missingBiller || serverParties.billerId != null);
+
+      final result = await showCheckoutPartyRequiredDialog(
+        context: context,
+        missingCustomer: missing.missingCustomer,
+        missingBiller: missing.missingBiller,
+        defaultCustomerLabel: missing.missingCustomer
+            ? _catalogPartyName(
+                id: serverParties.customerId,
+                items: meta.customers
+                    .map((c) => (id: c.id, name: c.name))
+                    .toList(),
+              )
+            : null,
+        defaultBillerLabel: missing.missingBiller
+            ? _catalogPartyName(
+                id: serverParties.billerId,
+                items: meta.billers
+                    .map((b) => (id: b.id, name: b.name))
+                    .toList(),
+              )
+            : null,
+        canApplyDefaults: canApplyDefaults,
+      );
+      if (!mounted ||
+          result == null ||
+          result == CheckoutPartyDialogResult.cancelled) {
+        return false;
+      }
+
+      final applied = await _applyServerCheckoutDefaults();
+      if (!applied) continue;
+
+      checkout = ref.read(posCheckoutProvider);
+      if (!checkoutPartiesMissing(
+        checkoutCustomerId: checkout.customerId,
+        checkoutBillerId: checkout.billerId,
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _resetCheckoutForNewSale() async {
     final session = ref.read(sessionServiceProvider);
     final meta = await ref.read(posLocalMetaProvider.future);
@@ -497,6 +682,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
   @override
   void dispose() {
     _returnTriggerSub?.close();
+    _issueReturnBillTriggerSub?.close();
     WidgetsBinding.instance.removeObserver(this);
     _onlinePollTimer?.cancel();
     _catalogScrollCtrl.removeListener(_onCatalogScroll);
@@ -775,6 +961,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       code: resolved.code,
       name: resolved.name,
       netUnitPrice: resolved.price,
+      netUnitCost: resolved.cost,
       taxRate: resolved.taxRate,
       taxMethod: resolved.taxMethod,
       qty: addQty,
@@ -1101,6 +1288,72 @@ class _PosScreenState extends ConsumerState<PosScreen>
     }));
   }
 
+  Future<bool> _tryApplyReturnBillFromScan(String term) async {
+    final ui = ref.read(posUiSettingsProvider);
+    if (!ui.enableReturn || !ui.enableReturnBillSettle) return false;
+    if (_checkout.hasReturnSession) return false;
+
+    final trimmed = term.trim();
+    if (trimmed.isEmpty) return false;
+
+    if (_checkout.lines.isEmpty) {
+      final maybeReturn = normalizeSaleReference(trimmed).startsWith('rr');
+      if (maybeReturn) {
+        _showSnack('Add sale items first, then scan return bill', error: true);
+        return true;
+      }
+      return false;
+    }
+
+    final session = ref.read(sessionServiceProvider);
+    final warehouseId = session.warehouseId ?? _checkout.warehouseId;
+    final customerId = _checkout.customerId;
+    if (warehouseId == null || customerId == null) return false;
+
+    final credit = await ref
+        .read(localReturnRepositoryProvider)
+        .lookupCreditByReference(
+          referenceNo: trimmed,
+          warehouseId: warehouseId,
+          customerId: customerId,
+        );
+    if (credit == null) return false;
+
+    if (_checkout.returnSettlements
+        .any((s) => s.returnClientUuid == credit.clientUuid)) {
+      _showSnack('Return bill already applied', error: true);
+      return true;
+    }
+
+    final maxApply = _calcTotals(_checkout).grandTotal;
+    final apply =
+        credit.creditRemaining.clamp(0, maxApply).toDouble();
+    if (apply <= 0) {
+      _showSnack('Nothing left to apply from this return bill', error: true);
+      return true;
+    }
+
+    _setCheckout(
+      _checkout.copyWith(
+        returnSettlements: [
+          ..._checkout.returnSettlements,
+          AppliedReturnSettlement(
+            returnClientUuid: credit.clientUuid,
+            returnReferenceNo: credit.referenceNo,
+            amount: apply,
+            returnId: credit.returnId,
+          ),
+        ],
+      ),
+    );
+    _showSnack(
+      'Return bill ${formatSaleReferenceDisplay(credit.referenceNo)} applied — '
+      'credit ${formatPosMoney(apply)}',
+      success: true,
+    );
+    return true;
+  }
+
   Future<void> _handleBarcodeSubmit([String? codeOverride]) async {
     final term = (codeOverride ?? _scanCtrl.text).trim();
     if (term.isEmpty) return;
@@ -1129,6 +1382,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
     _scanCtrl.clear();
 
     try {
+      if (await _tryApplyReturnBillFromScan(term)) {
+        if (mounted) _focusEntryField();
+        return;
+      }
+
       final product = await ref
           .read(productLookupRepositoryProvider)
           .lookupBarcodeExact(
@@ -1184,6 +1442,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
     setState(() => _busy = true);
     try {
+      if (await _tryApplyReturnBillFromScan(term)) {
+        return;
+      }
+
       final exact = await ref.read(productLookupRepositoryProvider).lookup(
             code: term,
             warehouseId: warehouseId,
@@ -1224,6 +1486,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
     required double paidAmount,
     bool? printInvoice,
   }) async {
+    if (!await _ensureCheckoutParties()) return;
+
     final session = ref.read(sessionServiceProvider);
     final warehouseId = session.warehouseId;
     final customerId = _checkout.customerId;
@@ -1389,6 +1653,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       return;
     }
 
+    if (!await _ensureCheckoutParties()) return;
+
     if (hasReturnLines && !hasSaleLines) {
       await _completeReturnOnly(
         paidById: paidById,
@@ -1423,8 +1689,9 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final session = ref.read(sessionServiceProvider);
     final warehouseId = session.warehouseId;
     final customerId = _checkout.customerId;
-    if (warehouseId == null || customerId == null) {
-      _showSnack('Customer and warehouse required', error: true);
+    final billerId = _checkout.billerId;
+    if (warehouseId == null || customerId == null || billerId == null) {
+      _showSnack('Customer, biller and warehouse required', error: true);
       return;
     }
 
@@ -1623,6 +1890,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
   }
 
   Future<void> _showMixPaymentModal() async {
+    if (!await _ensureCheckoutParties()) return;
+
     final totals = _totals;
     final settings = ref.read(posSettingsProvider).value;
     final uiSettings = ref.read(posUiSettingsProvider);
@@ -1679,6 +1948,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
       await _completeReturnOnly(paidById: '1', paidAmount: 0);
       return;
     }
+
+    if (!await _ensureCheckoutParties()) return;
 
     final settings = ref.read(posSettingsProvider).value;
     final uiSettings = ref.read(posUiSettingsProvider);
@@ -1798,6 +2069,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
   }
 
   Future<void> _showPaymentModal(String paidById, String label) async {
+    if (!await _ensureCheckoutParties()) return;
+
     final totals = _totals;
     final settings = ref.read(posSettingsProvider).value;
     final uiSettings = ref.read(posUiSettingsProvider);
@@ -1830,6 +2103,38 @@ class _PosScreenState extends ConsumerState<PosScreen>
       cardType: result.cardType,
       chequeNo: result.chequeNo,
       printInvoice: uiSettings.shouldAutoPrintBill,
+    );
+  }
+
+  Future<void> _showIssueReturnBillFlow() async {
+    final ui = ref.read(posUiSettingsProvider);
+    if (!ui.enableReturn || !ui.enableIssueReturnBill) return;
+
+    final session = ref.read(sessionServiceProvider);
+    final warehouseId = session.warehouseId;
+    final customerId = _checkout.customerId;
+    if (warehouseId == null || customerId == null) {
+      _showSnack('Customer and warehouse required', error: true);
+      return;
+    }
+
+    ref.read(posTouchKeyboardControllerProvider).detach();
+    if (!mounted) return;
+
+    final result = await showIssueReturnBillDialog(
+      context: context,
+      ref: ref,
+      warehouseId: warehouseId,
+      customerId: customerId,
+      billerId: _checkout.billerId ?? session.billerId,
+    );
+
+    if (result == null || !mounted) return;
+    ref.read(syncRevisionProvider.notifier).state++;
+    _syncSalesInBackground();
+    _showSnack(
+      'Return bill ${formatSaleReferenceDisplay(result.referenceNo)} issued',
+      success: true,
     );
   }
 
@@ -2241,6 +2546,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
                   name: l.name,
                   qty: l.qty,
                   netUnitPrice: l.netUnitPrice,
+                  netUnitCost: l.netUnitCost,
                   discount: l.discount,
                   taxRate: l.taxRate,
                   taxMethod: l.taxMethod,
@@ -2815,6 +3121,43 @@ class _PosScreenState extends ConsumerState<PosScreen>
                       ],
                     ),
                   ),
+                  if (ui.enableReturn &&
+                      ui.enableReturnBillSettle &&
+                      checkout.returnSettlements.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final settlement in checkout.returnSettlements)
+                          InputChip(
+                            label: Text(
+                              '${formatSaleReferenceDisplay(settlement.returnReferenceNo)} '
+                              '−${formatPosMoney(settlement.amount)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            deleteIcon: const Icon(Icons.close, size: 16),
+                            onDeleted: _busy
+                                ? null
+                                : () {
+                                    _setCheckout(
+                                      checkout.copyWith(
+                                        returnSettlements: checkout
+                                            .returnSettlements
+                                            .where(
+                                              (s) =>
+                                                  s.returnClientUuid !=
+                                                  settlement.returnClientUuid,
+                                            )
+                                            .toList(),
+                                      ),
+                                    );
+                                    setState(() {});
+                                  },
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ],
             ),

@@ -130,6 +130,7 @@ use App\Http\Controllers\TransferDashboardController;
 use App\Http\Controllers\TranslationController;
 use App\Http\Controllers\UnitController as DashboardUnitController;
 use App\Http\Controllers\UnitController;
+use App\Http\Controllers\VariantMasterController;
 use App\Http\Controllers\UniqueCodeController;
 use App\Http\Controllers\UserController as DashboardUserController;
 use App\Http\Controllers\UserController;
@@ -262,6 +263,10 @@ Route::controller(DashboardBrandController::class)->group(function () {
             Route::post('unit/deletebyselection', 'deleteBySelection');
         });
         Route::resource('unit', DashboardUnitController::class);
+
+        Route::resource('variant-masters', VariantMasterController::class)->except(['show', 'create']);
+        Route::post('variant-masters/import-legacy', [VariantMasterController::class, 'importLegacy']);
+        Route::post('variant-masters/migrate-links', [VariantMasterController::class, 'migrateLinks']);
 
         /*
         |----------------------------------------------------------------------

@@ -8,6 +8,8 @@ class ProductVariant extends Model
 {
     protected $fillable = ['product_id', 'variant_id', 'position', 'item_code', 'additional_cost', 'additional_price', 'qty'];
 
+    /** variant_id references variant_master_values.id */
+
     public function scopeFindExactProduct($query, $product_id, $variant_id)
     {
     	return $query->where([

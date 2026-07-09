@@ -133,6 +133,13 @@ class _PosMainShellState extends ConsumerState<PosMainShell>
                       posReturnSaleTriggerProvider,
                     )
                 : null,
+            onIssueReturnBill: uiSettings.enableReturn &&
+                    uiSettings.enableIssueReturnBill
+                ? () => _fireRegisterAction(
+                      ref,
+                      posIssueReturnBillTriggerProvider,
+                    )
+                : null,
             onPendingSync: () => showPendingSyncDialog(
               context: context,
               ref: ref,

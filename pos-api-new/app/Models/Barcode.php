@@ -32,7 +32,7 @@ class Barcode extends Model
             'product_code_size' => 12,
             'alt_code' => true,
             'alt_code_size' => 12,
-            'price' => true,
+            'price_display' => 'price',
             'price_size' => 12,
             'promo_price' => false,
             'promo_price_size' => 15,

@@ -536,6 +536,7 @@ class AdjustmentController extends Controller
                         ->on('product_variants.variant_id', '=', "{$pwTable}.variant_id")
                         ->where("{$pwTable}.warehouse_id", '=', $warehouseId);
                 })
+                ->leftJoin('variant_master_values', 'product_variants.variant_id', '=', 'variant_master_values.id')
                 ->where('products.is_variant', 1)
                 ->where('products.is_active', 1)
                 ->groupBy(
@@ -543,7 +544,8 @@ class AdjustmentController extends Controller
                     'products.name',
                     'products.cost',
                     'product_variants.item_code',
-                    'product_variants.variant_id'
+                    'product_variants.variant_id',
+                    'variant_master_values.value'
                 )
                 ->select(
                     'products.id',
@@ -551,7 +553,8 @@ class AdjustmentController extends Controller
                     'products.cost',
                     DB::raw("COALESCE(SUM({$pwTable}.qty), 0) as qty"),
                     'product_variants.item_code',
-                    'product_variants.variant_id as variant_id'
+                    'product_variants.variant_id as variant_id',
+                    'variant_master_values.value as variant_label'
                 )
                 ->get();
 
@@ -562,6 +565,9 @@ class AdjustmentController extends Controller
             $product_name = [];
             $product_qty = [];
             $product_cost = [];
+            $product_ids = [];
+            $is_variant_flags = [];
+            $variant_labels = [];
 
             foreach ($products as $p) {
                 $key = $p->id . '_0';
@@ -575,6 +581,9 @@ class AdjustmentController extends Controller
                 $product_name[] = $p->name;
                 $product_qty[] = $p->qty;
                 $product_cost[] = $cost;
+                $product_ids[] = (int) $p->id;
+                $is_variant_flags[] = 0;
+                $variant_labels[] = '';
             }
 
             foreach ($variantProducts as $p) {
@@ -589,6 +598,9 @@ class AdjustmentController extends Controller
                 $product_name[] = $p->name;
                 $product_qty[] = $p->qty;
                 $product_cost[] = $cost;
+                $product_ids[] = (int) $p->id;
+                $is_variant_flags[] = 1;
+                $variant_labels[] = $p->variant_label ?? '';
             }
 
             if ($this->wantsSpaResponse($request)) {
@@ -597,36 +609,212 @@ class AdjustmentController extends Controller
                     'product_name' => $product_name,
                     'product_qty' => $product_qty,
                     'unit_cost' => $product_cost,
+                    'product_id' => $product_ids,
+                    'is_variant' => $is_variant_flags,
+                    'variant_label' => $variant_labels,
                 ]);
             }
 
             return [$product_code, $product_name, $product_qty, $product_cost];
         } catch (\Throwable $e) {
             if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.Failed to load warehouse products'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load warehouse products'));
             }
 
             throw $e;
         }
     }
 
+    protected function purchaseSummaryForWarehouse(int $warehouseId)
+    {
+        $purchaseQuery = DB::table('product_purchases')
+            ->join('purchases', 'product_purchases.purchase_id', '=', 'purchases.id')
+            ->where('purchases.warehouse_id', $warehouseId);
+
+        if (Schema::hasColumn('purchases', 'deleted_at')) {
+            $purchaseQuery->whereNull('purchases.deleted_at');
+        }
+
+        return $purchaseQuery
+            ->groupBy('product_purchases.product_id', 'product_purchases.variant_id')
+            ->selectRaw('
+                product_purchases.product_id,
+                product_purchases.variant_id,
+                SUM(product_purchases.qty) AS total_qty,
+                SUM(product_purchases.total) AS total_cost
+            ')
+            ->get()
+            ->keyBy(function ($row) {
+                return $row->product_id . '_' . ($row->variant_id ?? 0);
+            });
+    }
+
+    protected function unitCostFromSummary($summary, $fallbackCost): float
+    {
+        if ($summary && $summary->total_qty > 0) {
+            return round($summary->total_cost / $summary->total_qty, 4);
+        }
+
+        return (float) $fallbackCost;
+    }
+
+    protected function buildSingleSearchPayload(Product $product, ?int $productVariantId, float $unitCost, int $warehouseId): array
+    {
+        $code = $product->is_variant
+            ? ProductVariant::find($productVariantId)?->item_code
+            : $product->code;
+
+        $payload = [
+            'data' => [
+                $product->name,
+                $code,
+                $product->id,
+                $productVariantId,
+                $unitCost,
+            ],
+            'is_batch' => (bool) $product->is_batch,
+            'batches' => [],
+        ];
+
+        if ($payload['is_batch'] && $warehouseId) {
+            $payload['batches'] = $this->warehouseBatchesForProduct((int) $product->id, $warehouseId);
+        }
+
+        return $payload;
+    }
+
+    protected function buildExpandedVariantPayload(Product $product, int $warehouseId, ?float $defaultUnitCost = null): array
+    {
+        $pwTable = Product_Warehouse::resolveTable();
+        $purchaseSummary = $warehouseId > 0
+            ? $this->purchaseSummaryForWarehouse($warehouseId)
+            : collect();
+
+        $rows = DB::table('product_variants')
+            ->leftJoin('variant_master_values', 'product_variants.variant_id', '=', 'variant_master_values.id')
+            ->where('product_variants.product_id', $product->id)
+            ->orderBy('product_variants.position')
+            ->orderBy('product_variants.id')
+            ->select(
+                'product_variants.id as product_variant_id',
+                'product_variants.item_code',
+                'product_variants.variant_id',
+                'variant_master_values.value as variant_label'
+            )
+            ->get();
+
+        $batches = ($product->is_batch && $warehouseId)
+            ? $this->warehouseBatchesForProduct((int) $product->id, $warehouseId)
+            : [];
+
+        $variants = [];
+        foreach ($rows as $row) {
+            $warehouseQty = 0.0;
+            if ($warehouseId > 0) {
+                $warehouseQty = (float) DB::table($pwTable)
+                    ->where('product_id', $product->id)
+                    ->where('variant_id', $row->variant_id)
+                    ->where('warehouse_id', $warehouseId)
+                    ->sum('qty');
+            }
+
+            $summaryKey = $product->id . '_' . ($row->variant_id ?? 0);
+            $summary = $purchaseSummary[$summaryKey] ?? null;
+            $unitCost = $this->unitCostFromSummary(
+                $summary,
+                $defaultUnitCost ?? $product->cost
+            );
+
+            $variants[] = [
+                'data' => [
+                    $product->name,
+                    $row->item_code,
+                    $product->id,
+                    (int) $row->product_variant_id,
+                    $unitCost,
+                    $warehouseQty,
+                ],
+                'variant_label' => $row->variant_label ?? '',
+                'is_batch' => (bool) $product->is_batch,
+                'batches' => $batches,
+            ];
+        }
+
+        return [
+            'expand_variants' => true,
+            'product_name' => $product->name,
+            'variants' => $variants,
+        ];
+    }
+
     public function limsProductSearch(Request $request)
     {
+        $warehouseId = (int) $request->input('warehouse_id', 0);
+        $expandVariants = $request->boolean('expand_variants', true);
+
+        if ($request->filled('product_id')) {
+            $product = Product::where('id', (int) $request->input('product_id'))
+                ->where('is_active', true)
+                ->first();
+
+            if (!$product) {
+                if ($this->wantsSpaResponse($request)) {
+                    return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
+                }
+
+                return [];
+            }
+
+            if ($product->is_variant && $expandVariants && $this->wantsSpaResponse($request)) {
+                return $this->spaJson(
+                    $request,
+                    $this->buildExpandedVariantPayload(
+                        $product,
+                        $warehouseId,
+                        $request->input('unit_cost') !== null ? (float) $request->input('unit_cost') : null
+                    )
+                );
+            }
+
+            $unitCost = $request->input('unit_cost') !== null
+                ? (float) $request->input('unit_cost')
+                : (float) $product->cost;
+
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson(
+                    $request,
+                    $this->buildSingleSearchPayload($product, null, $unitCost, $warehouseId)
+                );
+            }
+
+            return [
+                $product->name,
+                $product->code,
+                $product->id,
+                null,
+                $unitCost,
+            ];
+        }
+
         $product_code = explode("(", $request['data']);
         $product_info = explode("|", $request['data']);
         $product_code[0] = rtrim($product_code[0], " ");
 
-        //return $product_info;
         $lims_product_data = Product::where([
             ['code', $product_code[0]],
             ['is_active', true]
         ])->first();
         if(!$lims_product_data) {
             $lims_product_data = Product::join('product_variants', 'products.id', 'product_variants.product_id')
-                ->select('products.id', 'products.name', 'products.is_variant', 'product_variants.id as product_variant_id', 'product_variants.item_code')
+                ->select(
+                    'products.id',
+                    'products.name',
+                    'products.is_variant',
+                    'products.is_batch',
+                    'products.cost',
+                    'product_variants.id as product_variant_id',
+                    'product_variants.item_code'
+                )
                 ->where([
                     ['product_variants.item_code', $product_code[0]],
                     ['products.is_active', true]
@@ -641,41 +829,36 @@ class AdjustmentController extends Controller
             return [];
         }
 
-        $product[] = $lims_product_data->name;
-        $product_variant_id = null;
-        if($lims_product_data->is_variant) {
-            $product[] = $lims_product_data->item_code;
-            $product_variant_id = $lims_product_data->product_variant_id;
-        }
-        else
-            $product[] = $lims_product_data->code;
+        $product = Product::find($lims_product_data->id);
+        if (!$product) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
+            }
 
-        $product[] = $lims_product_data->id;
-        $product[] = $product_variant_id;
-        $product[] = $product_info[1];
+            return [];
+        }
+
+        $unitCost = isset($product_info[1]) ? (float) $product_info[1] : (float) $product->cost;
+        $productVariantId = $product->is_variant ? (int) $lims_product_data->product_variant_id : null;
+
+        if ($product->is_variant && $expandVariants && $this->wantsSpaResponse($request)) {
+            return $this->spaJson(
+                $request,
+                $this->buildExpandedVariantPayload($product, $warehouseId, $unitCost)
+            );
+        }
+
+        $payload = $this->buildSingleSearchPayload($product, $productVariantId, $unitCost, $warehouseId);
         $quantity = explode("|", $request['data']);
         if (count($quantity) >= 3) {
-            $product[] =  $quantity[2];
+            $payload['data'][] = $quantity[2];
         }
 
         if ($this->wantsSpaResponse($request)) {
-            $warehouseId = (int) $request->input('warehouse_id', 0);
-            $payload = [
-                'data' => $product,
-                'is_batch' => (bool) ($lims_product_data->is_batch ?? false),
-                'batches' => [],
-            ];
-            if ($payload['is_batch'] && $warehouseId) {
-                $payload['batches'] = $this->warehouseBatchesForProduct(
-                    (int) $lims_product_data->id,
-                    $warehouseId
-                );
-            }
-
             return $this->spaJson($request, $payload);
         }
 
-        return $product;
+        return $payload['data'];
     }
 
     // public function limsProductSearch(Request $request)
@@ -890,14 +1073,13 @@ class AdjustmentController extends Controller
         }catch(\Throwable $e){
             DB::rollBack();
 
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.Someting Error Please try again'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 422);
-            }
-
-             return redirect('qty_adjustment')->with('not_permitted', __('db.Someting Error Please try again'));
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save adjustment. Please check your entries and try again.'),
+                422,
+                'qty_adjustment'
+            );
         }
     }
 
@@ -1170,14 +1352,13 @@ class AdjustmentController extends Controller
         }catch(\Throwable $e){
             DB::rollBack();
 
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.Someting Error Please try again'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 422);
-            }
-
-            return redirect('qty_adjustment')->with('not_permitted', __('db.Someting Error Please try again'));
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not update adjustment. Please check your entries and try again.'),
+                422,
+                'qty_adjustment'
+            );
         }
     }
 

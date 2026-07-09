@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/services/server_reconnect_auth_guard.dart';
 import '../../core/providers/local_reverb_settings_provider.dart';
 import '../../core/providers/pos_ui_settings_provider.dart';
 import '../../core/realtime/pos_realtime_service.dart';
@@ -162,6 +163,7 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(serverReconnectAuthGuardProvider);
     ref.watch(syncUploadSchedulerProvider);
     ref.watch(databaseBackupSchedulerProvider);
     ref.watch(posStockFallbackSchedulerProvider);

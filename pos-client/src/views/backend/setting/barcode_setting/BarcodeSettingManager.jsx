@@ -23,6 +23,7 @@ import {
     DEFAULT_BARCODE_PRINT_OPTIONS,
     ZEBRA_80MM_PRESET,
     normalizeBarcodePrintOptions,
+    BARCODE_PRICE_DISPLAY,
 } from '../../../../utils/barcodeTemplateDefaults';
 
 const PAGE_SIZES = [10, 25, 50];
@@ -86,7 +87,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     const setField = (name) => (e) => {
         const { type, value, checked } = e.target;
@@ -137,7 +138,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
             const data = res.data?.data ?? res.data ?? [];
             setRows(Array.isArray(data) ? data : []);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load barcode settings.', 'error');
+            showApiError(err, 'Failed to load barcode settings.');
         } finally {
             setLoading(false);
         }
@@ -243,7 +244,7 @@ const BarcodeSettingManager = ({ controllerName }) => {
             setEditId(row.id);
             setModalOpen(true);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load setting.', 'error');
+            showApiError(err, 'Failed to load setting.');
         }
     };
 
@@ -255,12 +256,12 @@ const BarcodeSettingManager = ({ controllerName }) => {
             const res = isEditing
                 ? await api.put(`barcodes/${editId}`, payload)
                 : await api.post('barcodes', payload);
-            showToast(res.data?.message || 'Barcode setting saved.', 'success');
+            showApiSuccess(res, 'Barcode setting saved.');
             setModalOpen(false);
             fetchRows();
         } catch (err) {
             if (err.response?.data?.errors) setFormErrors(err.response.data.errors);
-            else showToast(err.response?.data?.message || 'Failed to save setting.', 'error');
+            else showApiError(err, 'Failed to save setting.');
         } finally {
             setSaving(false);
         }
@@ -268,22 +269,22 @@ const BarcodeSettingManager = ({ controllerName }) => {
 
     const handleDelete = async (id) => {
         try {
-            await api.delete(`barcodes/${id}`);
-            showToast('Barcode setting deleted.', 'success');
+            const res = await api.delete(`barcodes/${id}`);
+            showApiSuccess(res, 'Barcode setting deleted.');
             setDeleteId(null);
             fetchRows();
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to delete setting.', 'error');
+            showApiError(err, 'Failed to delete setting.');
         }
     };
 
     const handleSetDefault = async (id) => {
         try {
-            await api.post(`barcodes/${id}/set-default`, {});
-            showToast('Default barcode setting updated.', 'success');
+            const res = await api.post(`barcodes/${id}/set-default`, {});
+            showApiSuccess(res, 'Default barcode setting updated.');
             fetchRows();
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to set default.', 'error');
+            showApiError(err, 'Failed to set default.');
         }
     };
 
@@ -549,19 +550,46 @@ const BarcodeSettingManager = ({ controllerName }) => {
                             disabled={!form.print_options?.name}
                         />
                     </FormField>
-                    <FormField label="Price">
-                        <CheckboxInput
-                            label="Show"
-                            checked={!!form.print_options?.price}
-                            onChange={(e) => setPrintOption('price', e.target.checked)}
-                        />
+                    <FormField label="Price on label">
+                        <div className="d-flex flex-column gap-2">
+                            <label className="d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                                <input
+                                    type="radio"
+                                    name="barcode_price_display"
+                                    checked={form.print_options?.price_display === BARCODE_PRICE_DISPLAY.off}
+                                    onChange={() => setPrintOption('price_display', BARCODE_PRICE_DISPLAY.off)}
+                                />
+                                <span>Hide price</span>
+                            </label>
+                            <label className="d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                                <input
+                                    type="radio"
+                                    name="barcode_price_display"
+                                    checked={
+                                        (form.print_options?.price_display ?? BARCODE_PRICE_DISPLAY.price)
+                                        === BARCODE_PRICE_DISPLAY.price
+                                    }
+                                    onChange={() => setPrintOption('price_display', BARCODE_PRICE_DISPLAY.price)}
+                                />
+                                <span>Sale price</span>
+                            </label>
+                            <label className="d-flex align-items-center gap-2" style={{ cursor: 'pointer' }}>
+                                <input
+                                    type="radio"
+                                    name="barcode_price_display"
+                                    checked={form.print_options?.price_display === BARCODE_PRICE_DISPLAY.maxPrice}
+                                    onChange={() => setPrintOption('price_display', BARCODE_PRICE_DISPLAY.maxPrice)}
+                                />
+                                <span>Max price</span>
+                            </label>
+                        </div>
                         <NumberInput
                             className="mt-2"
                             value={form.print_options?.price_size ?? 12}
                             onChange={(e) => setPrintOption('price_size', parseInt(e.target.value, 10) || 12)}
                             min={8}
                             max={24}
-                            disabled={!form.print_options?.price}
+                            disabled={form.print_options?.price_display === BARCODE_PRICE_DISPLAY.off}
                         />
                     </FormField>
                 </FormRow>

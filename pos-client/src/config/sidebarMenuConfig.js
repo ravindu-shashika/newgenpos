@@ -23,6 +23,7 @@ export const SIDEBAR_MENU = [
     children: [
       { label: 'Category', path: '/category', permission: 'categories-index', controller: 'categories' },
       { label: 'Brand', path: '/brand', permission: 'brand', controller: 'brand' },
+      { label: 'Variant Types', path: '/variant-masters', permission: 'products-index', controller: 'variant-masters' },
       { label: 'Unit', path: '/unit', permission: 'unit', controller: 'unit' },
       { label: 'Product List', path: '/products', permission: 'products-index', controller: 'products' },
       { label: 'Add Product', path: '/products/create', permission: 'products-add', controller: 'products' },
@@ -220,7 +221,7 @@ export const SIDEBAR_MENU = [
       { label: 'Discount', path: '/discounts', permission: 'discount', controller: 'discounts' },
       { label: 'All Notification', path: '/notifications', permission: 'all_notification', controller: 'notifications' },
       { label: 'Send Notification', path: '/notifications', permission: 'send_notification', controller: 'notifications' },
-      { label: 'Warehouse', path: '/warehouse', permission: 'warehouse', controller: 'warehouse' },
+      { label: 'Warehouse', path: '/warehouse', permission: 'warehouse.*', controller: 'warehouse' },
       { label: 'Tables', path: '/tables', permission: 'role_permission', roleMax: 2, controller: 'tables' },
       { label: 'Customer Group', path: '/customer_group', permission: 'customer_group', controller: 'customer_group' },
       { label: 'Currency', path: '/currency', permission: 'currency', controller: 'currency' },

@@ -16,6 +16,7 @@ class SessionService {
   bool _loaded = false;
 
   static const _legacyMigratedKey = 'drift_session_migrated';
+  static const _serverOfflineReauthKey = 'pos_server_offline_reauth';
 
   Future<void> ensureLoaded() async {
     if (_loaded) return;
@@ -335,6 +336,34 @@ class SessionService {
         billerId: Value(null),
       ),
     );
+  }
+
+  /// Set when the POS API was online then went offline while a cashier is signed in.
+  Future<void> markServerOfflineReauthPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_serverOfflineReauthKey, true);
+  }
+
+  Future<bool> isServerOfflineReauthPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_serverOfflineReauthKey) ?? false;
+  }
+
+  Future<void> clearServerOfflineReauthPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_serverOfflineReauthKey);
+  }
+
+  /// After backend restarts, require PIN login again instead of keeping the session.
+  Future<bool> applyServerOfflineReauthIfNeeded() async {
+    if (!isLoggedIn) {
+      await clearServerOfflineReauthPending();
+      return false;
+    }
+    if (!await isServerOfflineReauthPending()) return false;
+    await clearServerOfflineReauthPending();
+    await clear();
+    return true;
   }
 
   Future<void> _persist(DeviceSessionCompanion companion) async {

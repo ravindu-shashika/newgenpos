@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
     PageLayout,
     FormField,
@@ -15,11 +15,12 @@ import {
     Modal,
 } from '../../../components/ui';
 import { api, generateUniqueCode, assertCodeAvailable } from '../../../services';
+import { masterValueList, mergeVariantSelectionsFromCombinations, normalizeProductVariantRow, normalizeProductVariantRows } from '../../../utils/productVariantHelpers';
 
 // --- Sub-components (Modals) ---
 const BrandModal = ({ isOpen, onClose, onRefresh, modules }) => {
     const [form, setForm] = useState({ title: '', image: null, page_title: '', short_description: '' });
-    const { showToast } = useToast();
+    const { toast, showApiSuccess, showApiError } = useToast();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -32,16 +33,17 @@ const BrandModal = ({ isOpen, onClose, onRefresh, modules }) => {
         data.append('ajax', 1);
 
         try {
-            await api.post('brand', data);
-            showToast('Brand added successfully', 'success');
+            const res = await api.post('brand', data);
+            showApiSuccess(res, 'Brand added successfully');
             onRefresh();
             onClose();
             setForm({ title: '', image: null, page_title: '', short_description: '' });
-        } catch (error) { showToast('Failed to add brand', 'error'); }
+        } catch (error) { showApiError(error, 'Failed to add brand'); }
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Add Brand">
+            <Toast toast={toast} />
             <form onSubmit={handleSubmit}>
                 <FormField label="Brand Title *">
                     <TextInput value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
@@ -74,7 +76,7 @@ const BrandModal = ({ isOpen, onClose, onRefresh, modules }) => {
 const CategoryModal = ({ isOpen, onClose, onRefresh, categories }) => {
     const [name, setName] = useState('');
     const [parentId, setParentId] = useState('');
-    const { showToast } = useToast();
+    const { toast, showApiSuccess, showApiError } = useToast();
     const handleSubmit = async (e) => {
         e.preventDefault();
         const data = new FormData();
@@ -82,15 +84,16 @@ const CategoryModal = ({ isOpen, onClose, onRefresh, categories }) => {
         if (parentId) data.append('parent_id', parentId);
         data.append('is_active', true);
         try {
-            await api.post('category', data);
-            showToast('Category added successfully', 'success');
+            const res = await api.post('category', data);
+            showApiSuccess(res, 'Category added successfully');
             onRefresh();
             onClose();
             setName(''); setParentId('');
-        } catch (error) { showToast('Failed to add category', 'error'); }
+        } catch (error) { showApiError(error, 'Failed to add category'); }
     };
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Add Category">
+            <Toast toast={toast} />
             <form onSubmit={handleSubmit}>
                 <FormField label="Category Name *">
                     <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
@@ -112,19 +115,20 @@ const CategoryModal = ({ isOpen, onClose, onRefresh, categories }) => {
 
 const UnitModal = ({ isOpen, onClose, onRefresh, baseUnits = [] }) => {
     const [form, setForm] = useState({ unit_code: '', unit_name: '', base_unit: '', operator: '*', operation_value: 1 });
-    const { showToast } = useToast();
+    const { toast, showApiSuccess, showApiError } = useToast();
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await api.post('unit', form);
-            showToast('Unit added successfully', 'success');
+            const res = await api.post('unit', form);
+            showApiSuccess(res, 'Unit added successfully');
             onRefresh();
             onClose();
             setForm({ unit_code: '', unit_name: '', base_unit: '', operator: '*', operation_value: 1 });
-        } catch (error) { showToast('Failed to add unit', 'error'); }
+        } catch (error) { showApiError(error, 'Failed to add unit'); }
     };
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Add Unit">
+            <Toast toast={toast} />
             <form onSubmit={handleSubmit}>
                 <FormField label="Unit Code *">
                     <TextInput value={form.unit_code} onChange={(e) => setForm({ ...form, unit_code: e.target.value })} required />
@@ -160,19 +164,20 @@ const UnitModal = ({ isOpen, onClose, onRefresh, baseUnits = [] }) => {
 const TaxModal = ({ isOpen, onClose, onRefresh }) => {
     const [name, setName] = useState('');
     const [rate, setRate] = useState('');
-    const { showToast } = useToast();
+    const { toast, showApiSuccess, showApiError } = useToast();
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await api.post('tax', { name, rate, is_active: true, ajax: 1 });
-            showToast('Tax added successfully', 'success');
+            const res = await api.post('tax', { name, rate, is_active: true, ajax: 1 });
+            showApiSuccess(res, 'Tax added successfully');
             onRefresh();
             onClose();
             setName(''); setRate('');
-        } catch (error) { showToast('Failed to add tax', 'error'); }
+        } catch (error) { showApiError(error, 'Failed to add tax'); }
     };
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Add Tax">
+            <Toast toast={toast} />
             <form onSubmit={handleSubmit}>
                 <FormField label="Tax Name *">
                     <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
@@ -250,7 +255,7 @@ export default function ProductCreate() {
     const navigate = useNavigate();
     const { id: productId } = useParams();
     const isEditMode = Boolean(productId);
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     // --- State ---
     const [loading, setLoading] = useState(true);
@@ -267,6 +272,7 @@ export default function ProductCreate() {
         custom_fields: [],
         combo_product_codes: [],
         has_woocommerce: false,
+        variant_masters: [],
         decimal: 2,
         margin_type: 2,
     });
@@ -329,9 +335,12 @@ export default function ProductCreate() {
     // Dynamic state for tables/lists
     const [comboProducts, setComboProducts] = useState([]);
     const [initialStock, setInitialStock] = useState({}); // {warehouse_id: qty}
+    const [warehouseStock, setWarehouseStock] = useState({}); // current product_warehouse qty
+    const [variantWarehouseStock, setVariantWarehouseStock] = useState([]);
     const [diffPrices, setDiffPrices] = useState({}); // {warehouse_id: price}
-    const [variants, setVariants] = useState([{ name: '', values: '' }]);
-    const [variantCombinations, setVariantCombinations] = useState([]); // List of combinations with props
+    const [variants, setVariants] = useState([]);
+    const [variantCombinations, setVariantCombinations] = useState([]);
+    const [addVariantMasterId, setAddVariantMasterId] = useState('');
     const [selectedImages, setSelectedImages] = useState([]);
     const [previousImages, setPreviousImages] = useState([]);
     const [digitalFile, setDigitalFile] = useState(null);
@@ -358,9 +367,12 @@ export default function ProductCreate() {
     const resetDynamicState = () => {
         setComboProducts([]);
         setInitialStock({});
+        setWarehouseStock({});
+        setVariantWarehouseStock([]);
         setDiffPrices({});
-        setVariants([{ name: '', values: '' }]);
+        setVariants([]);
         setVariantCombinations([]);
+        setAddVariantMasterId('');
         setSelectedImages([]);
         setPreviousImages([]);
         setDigitalFile(null);
@@ -392,6 +404,7 @@ export default function ProductCreate() {
             custom_fields: data.custom_fields || [],
             combo_product_codes: data.combo_product_codes || [],
             has_woocommerce: !!data.has_woocommerce,
+            variant_masters: data.variant_masters || [],
             decimal: data.decimal ?? 2,
             margin_type: data.margin_type ?? 2,
         });
@@ -399,6 +412,7 @@ export default function ProductCreate() {
 
         const customValues = data.custom_field_values || {};
         const initialStockMap = data.initial_stock || {};
+        const warehouseStockMap = data.warehouse_stock || {};
         const hasInitialStock = !!data.has_initial_stock || Object.values(initialStockMap).some((qty) => Number(qty) > 0);
 
         const decimals = data.decimal ?? 2;
@@ -457,9 +471,14 @@ export default function ProductCreate() {
         });
 
         setInitialStock(hasInitialStock ? initialStockMap : {});
+        setWarehouseStock(warehouseStockMap);
+        setVariantWarehouseStock(Array.isArray(data.variant_warehouse_stock) ? data.variant_warehouse_stock : []);
 
         if (data.variants?.length) {
-            setVariants(data.variants);
+            const masters = data.variant_masters || [];
+            const combos = data.variant_combinations || [];
+            const normalized = normalizeProductVariantRows(data.variants, masters);
+            setVariants(mergeVariantSelectionsFromCombinations(normalized, combos));
         }
         if (data.variant_combinations?.length) {
             setVariantCombinations(data.variant_combinations);
@@ -508,6 +527,7 @@ export default function ProductCreate() {
                     custom_fields: data.custom_fields || [],
                     combo_product_codes: data.combo_product_codes || [],
                     has_woocommerce: !!data.has_woocommerce,
+                    variant_masters: data.variant_masters || [],
                     decimal: data.decimal ?? 2,
                     margin_type: data.margin_type ?? 2,
                 });
@@ -546,6 +566,25 @@ export default function ProductCreate() {
             handleGenerateCode();
         }
     }, [productId]);
+
+    useEffect(() => {
+        if (!formData.is_variant) return;
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await api.get('variant-masters');
+                const data = res.data?.data ?? res.data ?? [];
+                if (cancelled || !Array.isArray(data)) return;
+                setOptions((prev) => ({ ...prev, variant_masters: data }));
+                setVariants((prev) => prev.map((row) => normalizeProductVariantRow(row, data)));
+            } catch {
+                // Keep initial-data payload if refresh fails.
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [formData.is_variant]);
 
     const modules = options.modules || [];
     const hasEcom = modules.includes('ecommerce') || modules.includes('restaurant');
@@ -771,9 +810,18 @@ export default function ProductCreate() {
             showToast('Please attach a file for digital products.', 'error');
             return false;
         }
-        if (formData.is_variant && variantCombinations.length === 0) {
-            showToast('Please define at least one variant combination.', 'error');
-            return false;
+        if (formData.is_variant) {
+            const hasSelected = variants.some((v) => (v.selectedValues || []).length > 0);
+            if (!hasSelected) {
+                showToast('Select at least one attribute for your variant types.', 'error');
+                return false;
+            }
+            const codes = variantCombinations.map((v) => String(v.item_code || '').trim()).filter(Boolean);
+            const dup = codes.find((code, i) => codes.indexOf(code) !== i);
+            if (dup) {
+                showToast(`Duplicate variant item code "${dup}". Each size/variant needs a unique item code.`, 'error');
+                return false;
+            }
         }
         const maxPrice = parseFloat(formData.max_price);
         const salePrice = parseFloat(formData.price);
@@ -803,42 +851,91 @@ export default function ProductCreate() {
         }
     }, [comboProducts, formData.type]);
 
-    // --- Variant Logic ---
-    const handleVariantInputChange = (index, field, value) => {
-        const newV = [...variants];
-        newV[index][field] = value;
-        setVariants(newV);
+    const variantMasters = options.variant_masters || [];
+    const availableVariantMasters = variantMasters.filter(
+        (m) => !variants.some((v) => Number(v.master_id) === Number(m.id)),
+    );
+
+    const addVariantMaster = (masterId) => {
+        const master = variantMasters.find((m) => String(m.id) === String(masterId));
+        if (!master) return;
+        if (variants.some((v) => Number(v.master_id) === Number(master.id))) {
+            showToast('This variant type is already added.', 'warning');
+            return;
+        }
+        setVariants((prev) => [
+            ...prev,
+            {
+                master_id: master.id,
+                name: master.name,
+                selectedValues: [],
+                availableValues: masterValueList(master),
+            },
+        ]);
+        setAddVariantMasterId('');
+    };
+
+    const removeVariantRow = (index) => {
+        setVariants((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const toggleVariantValue = (variantIndex, value) => {
+        setVariants((prev) => prev.map((row, i) => {
+            if (i !== variantIndex) return row;
+            const set = new Set(row.selectedValues || []);
+            if (set.has(value)) set.delete(value);
+            else set.add(value);
+            return { ...row, selectedValues: Array.from(set) };
+        }));
+    };
+
+    const selectAllVariantValues = (variantIndex) => {
+        setVariants((prev) => prev.map((row, i) => (
+            i === variantIndex
+                ? { ...row, selectedValues: [...(row.availableValues || [])] }
+                : row
+        )));
+    };
+
+    const clearVariantValues = (variantIndex) => {
+        setVariants((prev) => prev.map((row, i) => (
+            i === variantIndex ? { ...row, selectedValues: [] } : row
+        )));
     };
 
     useEffect(() => {
         if (!formData.is_variant) return;
-        const activeVariants = variants.filter(v => v.values.trim() !== '');
+        const activeVariants = variants.filter((v) => (v.selectedValues || []).length > 0);
         if (activeVariants.length === 0) {
-            setVariantCombinations([]);
+            setVariantCombinations((prev) => (
+                prev.some((row) => row.variant_id != null) ? prev : []
+            ));
             return;
         }
 
-        const arrays = activeVariants.map(v => v.values.split(',').map(s => s.trim()).filter(s => s));
+        const arrays = activeVariants.map((v) => v.selectedValues);
         const combine = (arrs) => {
             if (arrs.length === 0) return [];
-            if (arrs.length === 1) return arrs[0].map(v => [v]);
+            if (arrs.length === 1) return arrs[0].map((v) => [v]);
             const res = [];
             const rest = combine(arrs.slice(1));
-            for (let v of arrs[0]) {
-                for (let r of rest) res.push([v, ...r]);
+            for (const v of arrs[0]) {
+                for (const r of rest) res.push([v, ...r]);
             }
             return res;
         };
 
         const combs = combine(arrays);
-        setVariantCombinations(combs.map(c => {
+        setVariantCombinations((prev) => combs.map((c) => {
             const name = c.join('/');
-            const existing = variantCombinations.find(v => v.name === name);
+            const existing = prev.find(
+                (v) => String(v.name ?? '').toLowerCase() === name.toLowerCase(),
+            );
             return existing || {
                 name,
                 item_code: `${name}-${formData.code}`,
                 additional_cost: 0,
-                additional_price: 0
+                additional_price: 0,
             };
         }));
     }, [variants, formData.is_variant, formData.code]);
@@ -872,7 +969,7 @@ export default function ProductCreate() {
         try {
             await assertCodeAvailable('product', formData.code, isEditMode ? productId : null);
         } catch (err) {
-            showToast(err.message, 'error');
+            showApiError(err, 'Product code is not available.');
             return;
         }
 
@@ -908,7 +1005,7 @@ export default function ProductCreate() {
         if (formData.is_variant) {
             variants.forEach((v) => {
                 if (v.name?.trim()) data.append('variant_option[]', v.name.trim());
-                if (v.values?.trim()) data.append('variant_value[]', v.values.trim());
+                if (v.selectedValues?.length) data.append('variant_value[]', v.selectedValues.join(','));
             });
             variantCombinations.forEach(v => {
                 data.append('variant_name[]', v.name);
@@ -966,12 +1063,12 @@ export default function ProductCreate() {
 
         try {
             if (isEditMode) {
-                await api.post('products/update', data);
-                showToast('Product updated successfully', 'success');
+                const res = await api.post('products/update', data);
+                showApiSuccess(res, 'Product updated successfully');
                 navigate('/products');
             } else {
-                await api.post('product', data);
-                showToast('Product created successfully', 'success');
+                const res = await api.post('product', data);
+                showApiSuccess(res, 'Product created successfully');
                 if (submitModeRef.current === 'another') {
                     await resetFormAfterSave();
                 } else {
@@ -979,10 +1076,10 @@ export default function ProductCreate() {
                 }
             }
         } catch (error) {
-            const msg = error?.message
-                || Object.values(error?.errors || {}).flat().join(' ')
-                || (isEditMode ? 'Failed to update product' : 'Failed to create product');
-            showToast(msg, 'error');
+            showApiError(
+                error,
+                isEditMode ? 'Failed to update product' : 'Failed to create product',
+            );
         }
     };
 
@@ -1521,6 +1618,24 @@ export default function ProductCreate() {
                     )}
                 </FormPanel>
 
+                {isEditMode && isStandard && !formData.is_variant && !formData.is_batch && !formData.is_imei && (
+                    <FormPanel title="Current warehouse stock">
+                        <div className="ui-table-wrap">
+                            <table className="ui-table">
+                                <thead><tr><th>Warehouse</th><th>Current qty</th></tr></thead>
+                                <tbody>
+                                    {options.warehouses.map((w) => (
+                                        <tr key={w.id}>
+                                            <td>{w.name}</td>
+                                            <td>{warehouseStock[w.id] ?? warehouseStock[String(w.id)] ?? 0}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </FormPanel>
+                )}
+
                 {isStandard && formData.is_initial_stock && (
                     <FormPanel title={`Initial stock${isEditMode ? ' (read-only)' : ''}`}>
                         <div className="ui-table-wrap">
@@ -1568,16 +1683,74 @@ export default function ProductCreate() {
 
                 {isStandard && formData.is_variant && (
                     <FormPanel title="Variants">
-                        {variants.map((v, i) => (
-                            <div key={i} className="ui-variant-row">
-                                <TextInput placeholder="Option (e.g. Size)" value={v.name} onChange={(e) => handleVariantInputChange(i, 'name', e.target.value)} />
-                                <TextInput placeholder="Values (e.g. S, M, L)" value={v.values} onChange={(e) => handleVariantInputChange(i, 'values', e.target.value)} />
-                                <button type="button" className="ui-btn danger sm" onClick={() => setVariants(prev => prev.filter((_, idx) => idx !== i))}>×</button>
+                        <p className="text-muted mb-3" style={{ fontSize: '0.88rem' }}>
+                            Pick variant types (Size, Color, etc.) and tick the attributes to use on this product.
+                            {' '}
+                            <Link to="/variant-masters">Manage variant types</Link>
+                        </p>
+
+                        {variants.length > 0 && variants.map((v, i) => (
+                            <div key={`${v.master_id || v.name}-${i}`} className="ui-variant-master-block mb-4">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>{v.name}</strong>
+                                    <div className="d-flex gap-2">
+                                        <button type="button" className="ui-btn ghost sm" onClick={() => selectAllVariantValues(i)}>All</button>
+                                        <button type="button" className="ui-btn ghost sm" onClick={() => clearVariantValues(i)}>Clear</button>
+                                        <button type="button" className="ui-btn danger sm" onClick={() => removeVariantRow(i)} aria-label="Remove variant type">×</button>
+                                    </div>
+                                </div>
+                                <div className="d-flex flex-wrap gap-2">
+                                    {(v.availableValues || []).map((value) => {
+                                        const checked = (v.selectedValues || []).some(
+                                            (s) => String(s).toLowerCase() === String(value).toLowerCase(),
+                                        );
+                                        return (
+                                            <label
+                                                key={value}
+                                                className={`ui-variant-chip${checked ? ' is-active' : ''}`}
+                                                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', border: '1px solid var(--ui-border)', borderRadius: 20, background: checked ? 'var(--ui-surface2)' : 'transparent' }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    onChange={() => toggleVariantValue(i, value)}
+                                                />
+                                                {value}
+                                            </label>
+                                        );
+                                    })}
+                                    {(v.availableValues || []).length === 0 && (
+                                        <span className="text-muted">No attributes defined for this type.</span>
+                                    )}
+                                </div>
                             </div>
                         ))}
-                        <button type="button" className="ui-btn ghost sm" style={{ marginBottom: 16 }} onClick={() => setVariants([...variants, { name: '', values: '' }])}>
-                            + Add option
-                        </button>
+
+                        {availableVariantMasters.length > 0 ? (
+                            <div className="d-flex flex-wrap gap-2 align-items-center mb-4">
+                                <SelectInput
+                                    value={addVariantMasterId}
+                                    onChange={(e) => {
+                                        const id = e.target.value;
+                                        setAddVariantMasterId(id);
+                                        if (id) addVariantMaster(id);
+                                    }}
+                                    style={{ maxWidth: 280 }}
+                                >
+                                    <option value="">+ Add variant type...</option>
+                                    {availableVariantMasters.map((m) => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                    ))}
+                                </SelectInput>
+                            </div>
+                        ) : (
+                            variantMasters.length === 0 && (
+                                <p className="text-muted mb-4">
+                                    No master variant types yet. <Link to="/variant-masters">Create Size, Color, etc.</Link>
+                                </p>
+                            )
+                        )}
+
                         <div className="ui-table-wrap">
                             <table className="ui-table">
                                 <thead>
@@ -1586,23 +1759,49 @@ export default function ProductCreate() {
                                         <th>Item code</th>
                                         <th>Addl. cost</th>
                                         <th>Addl. price</th>
+                                        {isEditMode && <th>Total qty</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {variantCombinations.map((v, i) => (
-                                        <tr key={i}>
+                                    {variantCombinations.map((v) => (
+                                        <tr key={v.variant_id ?? v.name}>
                                             <td>{v.name}</td>
                                             <td><input type="text" className="ui-input sm" value={v.item_code} onChange={(e) => updateVariantComb(v.name, 'item_code', e.target.value)} /></td>
                                             <td><input type="number" className="ui-input sm" value={v.additional_cost} onChange={(e) => updateVariantComb(v.name, 'additional_cost', e.target.value)} /></td>
                                             <td><input type="number" className="ui-input sm" value={v.additional_price} onChange={(e) => updateVariantComb(v.name, 'additional_price', e.target.value)} /></td>
+                                            {isEditMode && <td>{v.qty ?? 0}</td>}
                                         </tr>
                                     ))}
                                     {variantCombinations.length === 0 && (
-                                        <tr><td colSpan="4" className="ui-empty">No variants defined.</td></tr>
+                                        <tr><td colSpan={isEditMode ? 5 : 4} className="ui-empty">Select attributes above to build variant combinations.</td></tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
+
+                        {isEditMode && variantWarehouseStock.length > 0 && (
+                            <div className="ui-table-wrap mt-3">
+                                <div className="ui-form-card-title mb-2">Variant stock by warehouse</div>
+                                <table className="ui-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Warehouse</th>
+                                            <th>Variant</th>
+                                            <th>Current qty</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {variantWarehouseStock.map((row, index) => (
+                                            <tr key={`${row.warehouse_id}-${row.variant_id}-${index}`}>
+                                                <td>{row.warehouse_name || row.warehouse_id}</td>
+                                                <td>{row.variant_name || row.variant_id}</td>
+                                                <td>{row.qty ?? 0}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </FormPanel>
                 )}
 

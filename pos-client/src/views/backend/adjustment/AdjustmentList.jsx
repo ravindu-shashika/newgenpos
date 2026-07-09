@@ -10,6 +10,7 @@ import {
     ActionMenu,
     Pagination,
     SelectionBar,
+    PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions from '../../../stores/usePermissions';
@@ -31,9 +32,11 @@ export default function AdjustmentList({ controllerName }) {
 
     const permsAdjustments = usePermissions(controllerName || 'adjustments');
     const permsAdjustment = usePermissions('adjustment');
-    const canAdd = permsAdjustments.canAdd || permsAdjustment.canAdd;
-    const canEdit = permsAdjustments.canEdit || permsAdjustment.canEdit;
-    const canDelete = permsAdjustments.canDelete || permsAdjustment.canDelete;
+    const permsQty = usePermissions('qty_adjustment');
+    const canView = permsAdjustments.canView || permsAdjustment.canView || permsQty.canView;
+    const canAdd = permsAdjustments.canAdd || permsAdjustment.canAdd || permsQty.canAdd;
+    const canEdit = permsAdjustments.canEdit || permsAdjustment.canEdit || permsQty.canEdit;
+    const canDelete = permsAdjustments.canDelete || permsAdjustment.canDelete || permsQty.canDelete;
 
     const fetchList = useCallback(async () => {
         setLoading(true);
@@ -150,6 +153,15 @@ export default function AdjustmentList({ controllerName }) {
             ),
         },
     ];
+
+    if (!canView) {
+        return (
+            <PermissionDenied
+                title="Adjustment List"
+                action="view adjustments"
+            />
+        );
+    }
 
     return (
         <PageLayout eyebrow="Product" title="Adjustment List">

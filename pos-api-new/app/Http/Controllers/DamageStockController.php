@@ -225,10 +225,7 @@ class DamageStockController extends Controller
             return [$product_code, $product_name, $product_qty, $product_cost];
         } catch (\Throwable $e) {
             if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.Failed to load warehouse products'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 500);
+                return $this->respondLoadError($request, $e, __('db.Failed to load warehouse products'));
             }
 
             throw $e;
@@ -440,14 +437,13 @@ class DamageStockController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => __('db.Someting Error Please try again'),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 422);
-            }
-
-            return redirect('damage-stock')->with('not_permitted', __('db.Someting Error Please try again'));
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save damage stock record. Please check your entries and try again.'),
+                422,
+                'damage-stock'
+            );
         }
     }
 
@@ -699,14 +695,13 @@ class DamageStockController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            if ($this->wantsSpaResponse($request)) {
-                return $this->spaJson($request, [
-                    'message' => $e->getMessage(),
-                    'error' => config('app.debug') ? $e->getMessage() : null,
-                ], 422);
-            }
-
-            return redirect('damage-stock')->with('not_permitted', 'Error: ' . $e->getMessage());
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not update damage stock record. Please check your entries and try again.'),
+                422,
+                'damage-stock'
+            );
         }
     }
 

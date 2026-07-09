@@ -1158,8 +1158,8 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable return'),
                     subtitle: const Text(
-                      'Inline return at checkout offsets new items. Use Settle '
-                      'return only for return bills from a previous visit.',
+                      'Inline return at checkout — scan return items on the '
+                      'register and offset new items in the same visit.',
                       style: TextStyle(fontSize: 12),
                     ),
                     value: uiSettings.enableReturn,
@@ -1167,6 +1167,34 @@ class _CheckoutOptionsCard extends ConsumerWidget {
                         .read(posUiSettingsProvider.notifier)
                         .patch((s) => s.copyWith(enableReturn: v)),
                   ),
+                  if (uiSettings.enableReturn) ...[
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Issue return bill'),
+                      subtitle: const Text(
+                        'Sidebar button to scan return items and issue a '
+                        'credit bill for the customer to use later.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: uiSettings.enableIssueReturnBill,
+                      onChanged: (v) => ref
+                          .read(posUiSettingsProvider.notifier)
+                          .patch((s) => s.copyWith(enableIssueReturnBill: v)),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Return bill settle'),
+                      subtitle: const Text(
+                        'Scan a prior return bill in the product search field '
+                        'to apply store credit on a normal sale.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      value: uiSettings.enableReturnBillSettle,
+                      onChanged: (v) => ref
+                          .read(posUiSettingsProvider.notifier)
+                          .patch((s) => s.copyWith(enableReturnBillSettle: v)),
+                    ),
+                  ],
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable print bill'),

@@ -145,7 +145,7 @@ class QuotationDashboardController extends Controller
             report($e);
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load quotations'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -441,7 +441,7 @@ class QuotationDashboardController extends Controller
             report($e);
             return $this->spaJson($request, [
                 'message' => __('db.Failed to delete quotation'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

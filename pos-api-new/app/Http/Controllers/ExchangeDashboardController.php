@@ -130,7 +130,7 @@ class ExchangeDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load sale exchanges'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -201,7 +201,7 @@ class ExchangeDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Exchange not found'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 404);
         }
     }

@@ -132,7 +132,7 @@ class IncomeDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load incomes'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

@@ -712,6 +712,13 @@ class HomeController extends Controller
             else {
                 // For normal products (not combo)
 
+                $snapshotCost = app(\App\Services\SaleLineCostService::class)
+                    ->lineCostFromSnapshot($product_sale);
+                if ($snapshotCost !== null) {
+                    $product_cost += $snapshotCost;
+                    continue;
+                }
+
                 // Fetch purchase data depending on batch or variant
                 if($product_sale->product_batch_id) {
                     $product_purchase_data = ProductPurchase::join('purchases', 'product_purchases.purchase_id', '=', 'purchases.id')

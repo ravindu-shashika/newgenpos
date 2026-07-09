@@ -2,7 +2,7 @@ import { useSelector } from 'react-redux';
 import { useState, useEffect } from 'react';
 import { selectPermissions } from '../store/authSlice';
 import { ALL_PERMISSIONS_GRANTED, permissionsBypassed, hasPermission } from '../config/permissions';
-import { MODULE_SINGLE_PERMISSION, permissionImplies, controllerWildcardHeld, userHoldsDotWildcard } from '../config/permissionWildcards';
+import { MODULE_SINGLE_PERMISSION, permissionImplies, controllerWildcardHeld, userHoldsDotWildcard, permissionBasesForController } from '../config/permissionWildcards';
 import generalSettingStore from '../stores/generalSettingStore';
 
 // ─── Core lookup (no hook, safe to call anywhere) ─────────────────────────────
@@ -16,26 +16,29 @@ export function resolvePermissions(permissions, controller) {
   }
 
   const perms = Array.isArray(permissions) ? permissions : [];
-  const c = controller.toLowerCase();
+  const bases = permissionBasesForController(controller);
 
-  const singlePerm = MODULE_SINGLE_PERMISSION[c];
-  if (singlePerm && (permissionImplies(perms, singlePerm) || userHoldsDotWildcard(perms, singlePerm))) {
+  for (const base of bases) {
+    const singlePerm = MODULE_SINGLE_PERMISSION[base];
+    if (singlePerm && (permissionImplies(perms, singlePerm) || userHoldsDotWildcard(perms, singlePerm))) {
+      return { ...ALL_PERMISSIONS_GRANTED };
+    }
+  }
+
+  if (controllerWildcardHeld(perms, controller)) {
     return { ...ALL_PERMISSIONS_GRANTED };
   }
 
   const implies = (name) => permissionImplies(perms, name);
 
-  if (controllerWildcardHeld(perms, c)) {
-    return { ...ALL_PERMISSIONS_GRANTED };
-  }
-
   const check = (...keys) =>
-    keys.some((k) => implies(`${c}-${k}`) || implies(`${c}.${k}`));
+    bases.some((base) =>
+      keys.some((k) => implies(`${base}-${k}`) || implies(`${base}.${k}`))
+    );
 
   const canView =
     check('view', 'read', 'list', 'index') ||
-    implies(`${c}-index`) ||
-    implies(c);
+    bases.some((base) => implies(`${base}-index`) || implies(base));
 
   return {
     canView,

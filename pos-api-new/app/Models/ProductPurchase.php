@@ -9,7 +9,7 @@ class ProductPurchase extends Model
     protected $table = 'product_purchases';
     protected $fillable =[
 
-        "purchase_id", "product_id", "product_batch_id", "variant_id", "imei_number", "qty", "recieved", "return_qty", "purchase_unit_id", "net_unit_cost", "net_unit_price", "net_unit_margin", "net_unit_margin_type", "discount", "tax_rate", "tax", "total"
+        "purchase_id", "product_id", "product_batch_id", "variant_id", "imei_number", "qty", "recieved", "return_qty", "purchase_unit_id", "net_unit_cost", "net_unit_price", "net_unit_margin", "net_unit_margin_type", "discount", "discount_type", "tax_rate", "tax", "total"
     ];
 
     /**

@@ -185,6 +185,7 @@ class IncomeController extends Controller
 
     public function store(Request $request)
     {
+        try {
         $validated = $request->validate([
             'income_category_id' => ['required', 'exists:income_categories,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
@@ -217,6 +218,15 @@ class IncomeController extends Controller
         }
 
         return redirect('incomes')->with('message', $message);
+        } catch (\Throwable $e) {
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not save income. Please check your entries and try again.'),
+                422,
+                'incomes'
+            );
+        }
     }
 
     public function show(string $id)
@@ -253,6 +263,7 @@ class IncomeController extends Controller
 
     public function update(Request $request, $id)
     {
+        try {
         $validated = $request->validate([
             'income_category_id' => ['required', 'exists:income_categories,id'],
             'warehouse_id' => ['required', 'exists:warehouses,id'],
@@ -285,6 +296,15 @@ class IncomeController extends Controller
         }
 
         return redirect('incomes')->with('message', $message);
+        } catch (\Throwable $e) {
+            return $this->respondTransactionError(
+                $request,
+                $e,
+                __('db.Could not update income. Please check your entries and try again.'),
+                422,
+                'incomes'
+            );
+        }
     }
 
     public function deleteBySelection(Request $request)

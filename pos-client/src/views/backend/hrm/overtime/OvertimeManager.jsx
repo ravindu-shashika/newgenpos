@@ -75,7 +75,7 @@ const OvertimeManager = ({ controllerName }) => {
     const [form, setForm] = useState(INITIAL_FORM);
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchForm = (patch) => setForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -90,7 +90,7 @@ const OvertimeManager = ({ controllerName }) => {
             setAllRows(res.data?.overtimes || []);
             setEmployees(res.data?.employees || []);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load overtime records.', 'error');
+            showApiError(err, 'Failed to load overtime records.');
         } finally {
             setLoading(false);
         }
@@ -222,12 +222,12 @@ const OvertimeManager = ({ controllerName }) => {
         try {
             setSaving(true);
             const res = await api.post('overtime', buildPayload(false));
-            showToast(res.data?.message || 'Overtime added.', 'success');
+            showApiSuccess(res, 'Overtime added.');
             applyListResponse(res);
             setAddOpen(false);
             setForm(INITIAL_FORM);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to add overtime.', 'error');
+            showApiError(err, 'Failed to add overtime.');
         } finally {
             setSaving(false);
         }
@@ -238,12 +238,12 @@ const OvertimeManager = ({ controllerName }) => {
         try {
             setSaving(true);
             const res = await api.put(`overtime/${form.id}`, buildPayload(true));
-            showToast(res.data?.message || 'Overtime updated.', 'success');
+            showApiSuccess(res, 'Overtime updated.');
             applyListResponse(res);
             setEditOpen(false);
             setForm(INITIAL_FORM);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to update overtime.', 'error');
+            showApiError(err, 'Failed to update overtime.');
         } finally {
             setSaving(false);
         }
@@ -253,7 +253,7 @@ const OvertimeManager = ({ controllerName }) => {
         if (!deleteId) return;
         try {
             const res = await api.delete(`overtime/${deleteId}`);
-            showToast(res.data?.message || 'Overtime deleted.', 'success');
+            showApiSuccess(res, 'Overtime deleted.');
             applyListResponse(res);
             setSelected((prev) => {
                 const next = new Set(prev);
@@ -262,7 +262,7 @@ const OvertimeManager = ({ controllerName }) => {
             });
             setDeleteId(null);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to delete overtime.', 'error');
+            showApiError(err, 'Failed to delete overtime.');
         }
     };
 
@@ -271,12 +271,12 @@ const OvertimeManager = ({ controllerName }) => {
             const res = await api.post('overtime/deletebyselection', {
                 overtimeIdArray: [...selected],
             });
-            showToast(res.data?.message || 'Selected overtime records deleted.', 'success');
+            showApiSuccess(res, 'Selected overtime records deleted.');
             applyListResponse(res);
             setSelected(new Set());
             setBulkDeleteOpen(false);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

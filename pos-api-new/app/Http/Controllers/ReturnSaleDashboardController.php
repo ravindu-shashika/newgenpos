@@ -173,7 +173,7 @@ class ReturnSaleDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load sale returns'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -302,7 +302,7 @@ class ReturnSaleDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to delete return'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

@@ -158,7 +158,7 @@ class SyncService {
 
       if (userId == null) {
         const msg =
-            'Cashier not logged in — log out and sign in again to sync sales';
+            'Sign in as cashier first to upload sales to the server';
         AppLogger.warning('Sync', msg);
         return SyncPendingResult(
           wasOnline: true,

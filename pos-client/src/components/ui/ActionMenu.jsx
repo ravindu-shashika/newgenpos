@@ -1,35 +1,50 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { faChevronDown, faEllipsisVertical } from '@fortawesome/free-solid-svg-icons';
+import SafeFontAwesomeIcon from '../SafeFontAwesomeIcon';
+import { cleanActionLabel, resolveActionIcon } from './actionMenuHelpers';
 
 /**
- * ActionMenu — a dropdown action button for table rows.
+ * ActionMenu — dropdown row actions with Font Awesome icons.
  *
- * The menu renders via a React portal at document.body with position:fixed
- * so it always escapes overflow:hidden/auto containers (like the table wrapper).
- *
- * <ActionMenu
- *   id={row.id}
- *   openId={openMenu}
- *   setOpenId={setOpenMenu}
- *   items={[
- *     { label: '✎ Edit',   onClick: () => openEdit(row) },
- *     { label: '🗑 Delete', onClick: () => handleDelete(row.id), danger: true },
- *   ]}
- * />
+ * Items support:
+ *   { label: 'Edit', onClick, danger? }
+ *   { action: 'edit', label: 'Edit', onClick }  // explicit icon
+ *   { icon: faCustom, label: 'Custom', onClick }
  */
-export function ActionMenu({ id, openId, setOpenId, items = [] }) {
-  const isOpen  = openId === id;
-  const btnRef  = useRef(null);
+function ActionMenuItemContent({ item }) {
+  const icon = resolveActionIcon(item);
+  const text = cleanActionLabel(item.label) || item.label;
+
+  return (
+    <>
+      <span
+        className={`ui-action-item-icon${item.danger ? ' danger' : ''}`}
+        aria-hidden="true"
+      >
+        {icon ? (
+          <SafeFontAwesomeIcon icon={icon} fixedWidth />
+        ) : (
+          <span className="ui-action-item-dot" />
+        )}
+      </span>
+      <span className="ui-action-item-label">{text}</span>
+    </>
+  );
+}
+
+export function ActionMenu({ id, openId, setOpenId, items = [], triggerLabel = 'Actions' }) {
+  const isOpen = openId === id;
+  const btnRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, right: 0 });
 
-  // Recalculate position every time this specific menu opens OR on scroll/resize
   useEffect(() => {
     const updatePos = () => {
       if (isOpen && btnRef.current) {
         const rect = btnRef.current.getBoundingClientRect();
         setPos({
-          top:  rect.bottom + 4,
+          top: rect.bottom + 4,
           right: window.innerWidth - rect.right,
         });
       }
@@ -47,35 +62,60 @@ export function ActionMenu({ id, openId, setOpenId, items = [] }) {
     };
   }, [isOpen]);
 
+  const menuItemStyle = (danger) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    background: 'none',
+    border: 'none',
+    borderBottom: '1px solid var(--ui-surface2)',
+    color: danger ? 'var(--ui-debit)' : 'var(--ui-ink)',
+    cursor: 'pointer',
+    fontFamily: 'var(--ui-font)',
+    fontSize: '0.78rem',
+    fontWeight: danger ? 500 : 400,
+    padding: '9px 14px',
+    textAlign: 'left',
+    textDecoration: 'none',
+    transition: 'background 0.12s',
+  });
+
   return (
     <div className="ui-action-wrap">
       <button
         ref={btnRef}
         type="button"
         className="ui-action-btn"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
         onClick={(e) => {
           e.stopPropagation();
           setOpenId(isOpen ? null : id);
         }}
       >
-        Action ▾
+        <SafeFontAwesomeIcon icon={faEllipsisVertical} className="ui-action-btn-icon" />
+        <span>{triggerLabel}</span>
+        <SafeFontAwesomeIcon icon={faChevronDown} className="ui-action-btn-caret" />
       </button>
 
       {isOpen && createPortal(
         <div
+          className="ui-action-menu-portal"
+          role="menu"
           style={{
-            position:  'fixed',
-            top:       pos.top,
-            right:     pos.right,
-            background:  'var(--ui-surface)',
-            border:      '1px solid var(--ui-border)',
-            borderRadius:'var(--ui-radius)',
-            boxShadow:   '0 8px 24px rgba(0,0,0,0.14)',
-            minWidth:    160,
-            zIndex:      9999,
-            overflow:    'hidden',
-            fontFamily:  'var(--ui-mono)',
-            fontSize:    '0.78rem',
+            position: 'fixed',
+            top: pos.top,
+            right: pos.right,
+            background: 'var(--ui-surface)',
+            border: '1px solid var(--ui-border)',
+            borderRadius: 'var(--ui-radius)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+            minWidth: 176,
+            zIndex: 9999,
+            overflow: 'hidden',
+            fontFamily: 'var(--ui-font)',
+            fontSize: '0.78rem',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -89,31 +129,37 @@ export function ActionMenu({ id, openId, setOpenId, items = [] }) {
               <Link
                 key={i}
                 to={item.to}
-                style={itemStyle(item.danger)}
+                className="ui-action-menu-item"
+                style={menuItemStyle(item.danger)}
+                role="menuitem"
                 onClick={() => setOpenId(null)}
               >
-                {item.label}
+                <ActionMenuItemContent item={item} />
               </Link>
             ) : item.href ? (
               <a
                 key={i}
                 href={item.href}
-                style={itemStyle(item.danger)}
+                className="ui-action-menu-item"
+                style={menuItemStyle(item.danger)}
+                role="menuitem"
                 onClick={() => setOpenId(null)}
               >
-                {item.label}
+                <ActionMenuItemContent item={item} />
               </a>
             ) : (
               <button
                 key={i}
                 type="button"
-                style={itemStyle(item.danger)}
+                className="ui-action-menu-item"
+                style={menuItemStyle(item.danger)}
+                role="menuitem"
                 onClick={() => {
                   setOpenId(null);
                   item.onClick?.();
                 }}
               >
-                {item.label}
+                <ActionMenuItemContent item={item} />
               </button>
             )
           )}
@@ -123,22 +169,3 @@ export function ActionMenu({ id, openId, setOpenId, items = [] }) {
     </div>
   );
 }
-
-const itemStyle = (danger) => ({
-  display:        'flex',
-  alignItems:     'center',
-  gap:            8,
-  width:          '100%',
-  background:     'none',
-  border:         'none',
-  borderBottom:   '1px solid var(--ui-surface2)',
-  color:          danger ? 'var(--ui-debit)' : 'var(--ui-ink)',
-  cursor:         'pointer',
-  fontFamily:     'var(--ui-mono)',
-  fontSize:       '0.78rem',
-  fontWeight:     danger ? 500 : 400,
-  padding:        '9px 14px',
-  textAlign:      'left',
-  textDecoration: 'none',
-  transition:     'background 0.1s',
-});

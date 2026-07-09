@@ -43,6 +43,7 @@ SELECT
   p.price,
   p.wholesale_price,
   p.max_price,
+  p.cost,
   p.tax_id,
   p.tax_method,
   p.image,

@@ -83,7 +83,7 @@ const AttendanceManager = ({ controllerName }) => {
     const [saving, setSaving] = useState(false);
     const importFileRef = useRef(null);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchForm = (patch) => setForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -100,7 +100,7 @@ const AttendanceManager = ({ controllerName }) => {
             setWarehouses(res.data?.warehouses || []);
             setDefaults(res.data?.defaults || { checkin: '', checkout: '' });
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load attendance.', 'error');
+            showApiError(err, 'Failed to load attendance.');
         } finally {
             setLoading(false);
         }
@@ -219,12 +219,12 @@ const AttendanceManager = ({ controllerName }) => {
                 checkout: form.checkout,
                 note: form.note || '',
             });
-            showToast(res.data?.message || 'Attendance created.', 'success');
+            showApiSuccess(res, 'Attendance created.');
             setAllRows(res.data?.attendances || []);
             setAddOpen(false);
             setForm(INITIAL_FORM);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to save attendance.', 'error');
+            showApiError(err, 'Failed to save attendance.');
         } finally {
             setSaving(false);
         }
@@ -246,13 +246,13 @@ const AttendanceManager = ({ controllerName }) => {
             const res = await api.post('attendance/importDeviceCsv', fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            showToast(res.data?.message || 'Attendance imported.', 'success');
+            showApiSuccess(res, 'Attendance imported.');
             setAllRows(res.data?.attendances || []);
             setImportOpen(false);
             setImportFormat('');
             if (importFileRef.current) importFileRef.current.value = '';
         } catch (err) {
-            showToast(err.response?.data?.message || 'Import failed.', 'error');
+            showApiError(err, 'Import failed.');
         } finally {
             setSaving(false);
         }
@@ -264,7 +264,7 @@ const AttendanceManager = ({ controllerName }) => {
             const res = await api.delete(
                 `attendance/${encodeURIComponent(deleteTarget.date)}/${deleteTarget.employee_id}`
             );
-            showToast(res.data?.message || 'Attendance deleted.', 'success');
+            showApiSuccess(res, 'Attendance deleted.');
             setAllRows(res.data?.attendances || []);
             setSelected((prev) => {
                 const next = new Set(prev);
@@ -273,7 +273,7 @@ const AttendanceManager = ({ controllerName }) => {
             });
             setDeleteTarget(null);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to delete attendance.', 'error');
+            showApiError(err, 'Failed to delete attendance.');
         }
     };
 
@@ -285,12 +285,12 @@ const AttendanceManager = ({ controllerName }) => {
 
         try {
             const res = await api.post('attendance/deletebyselection', { attendanceSelectedArray });
-            showToast(res.data?.message || 'Selected attendance deleted.', 'success');
+            showApiSuccess(res, 'Selected attendance deleted.');
             setAllRows(res.data?.attendances || []);
             setSelected(new Set());
             setBulkDeleteOpen(false);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

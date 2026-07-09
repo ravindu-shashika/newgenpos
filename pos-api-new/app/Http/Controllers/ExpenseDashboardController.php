@@ -134,7 +134,7 @@ class ExpenseDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load expenses'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

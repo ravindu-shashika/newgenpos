@@ -342,11 +342,9 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
       );
       return;
     }
-    if (_mixHasCardRow &&
-        (_cardNumberCtrl.text.trim().isEmpty ||
-            _cardHolderCtrl.text.trim().isEmpty)) {
+    if (_mixHasCardRow && _cardNumberCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Card number and holder name are required')),
+        const SnackBar(content: Text('Card number is required')),
       );
       return;
     }
@@ -362,7 +360,9 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
         saleNote: _saleNoteCtrl.text.trim(),
         staffNote: _staffNoteCtrl.text.trim(),
         cardNumber: _mixHasCardRow ? _cardNumberCtrl.text.trim() : '',
-        cardHolderName: _mixHasCardRow ? _cardHolderCtrl.text.trim() : '',
+        cardHolderName: _mixHasCardRow
+            ? resolveCardHolderName(_cardHolderCtrl.text)
+            : '',
         cardType: _mixHasCardRow ? _cardType : '',
         chequeNo: _mixHasChequeRow ? _chequeNoCtrl.text.trim() : '',
         printInvoice: widget.printOnComplete,
@@ -382,7 +382,9 @@ class _FinalizeSaleDialogState extends ConsumerState<_FinalizeSaleDialog> {
         saleNote: _saleNoteCtrl.text.trim(),
         staffNote: _staffNoteCtrl.text.trim(),
         cardNumber: _cardNumberCtrl.text.trim(),
-        cardHolderName: _cardHolderCtrl.text.trim(),
+        cardHolderName: widget.isCard
+            ? resolveCardHolderName(_cardHolderCtrl.text)
+            : '',
         cardType: widget.isCard ? _cardType : '',
         printInvoice: widget.printOnComplete,
         sendWhatsapp: _sendWhatsapp,

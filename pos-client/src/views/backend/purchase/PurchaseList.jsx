@@ -12,6 +12,7 @@ import {
     Pagination,
     SelectionBar,
     FormField,
+    PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import authStore from '../../../stores/authStore';
@@ -203,27 +204,31 @@ export default function PurchaseList({ controllerName }) {
         },
     ];
 
+    if (!perms.canView) {
+        return <PermissionDenied title="Purchase List" action="view purchases" />;
+    }
+
     return (
         <PageLayout eyebrow="Purchase" title="Purchase List">
-            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+            <div className="ui-btn-group mb-3">
                 {perms.canAdd && (
-                    <Link to="/purchases/create" className="ui-btn primary">
-                        <i className="fa fa-plus" /> Add Purchase
+                    <Link to="/purchases/create" className="ui-btn primary sm">
+                        <i className="fa fa-plus ui-btn-icon" /> Add Purchase
                     </Link>
                 )}
                 {perms.canImport && (
-                    <Link to="/purchases/purchase_by_csv" className="ui-btn">
-                        <i className="fa fa-copy" /> Import Purchase
+                    <Link to="/purchases/purchase_by_csv" className="ui-btn ghost sm">
+                        <i className="fa fa-upload ui-btn-icon" /> Import Purchase
                     </Link>
                 )}
                 {canViewDeletedPurchases() && (
-                    <Link to="/purchases/deleted_data" className="ui-btn ghost">
-                        <i className="fa fa-trash" /> Deleted Purchases
+                    <Link to="/purchases/deleted_data" className="ui-btn ghost sm">
+                        <i className="fa fa-trash ui-btn-icon" /> Deleted Purchases
                     </Link>
                 )}
                 {perms.canDelete && selected.size > 0 && (
-                    <button type="button" className="ui-btn danger" onClick={() => setBulkDeleteOpen(true)}>
-                        <i className="fa fa-trash" /> Delete selected ({selected.size})
+                    <button type="button" className="ui-btn danger sm" onClick={() => setBulkDeleteOpen(true)}>
+                        <i className="fa fa-trash ui-btn-icon" /> Delete selected ({selected.size})
                     </button>
                 )}
             </div>

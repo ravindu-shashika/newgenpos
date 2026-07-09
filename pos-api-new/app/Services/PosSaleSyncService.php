@@ -387,6 +387,7 @@ class PosSaleSyncService
         $imeiNumber = [];
         $productBatchId = [];
         $variantId = [];
+        $netUnitCost = [];
 
         foreach ($lines as $line) {
             if (!is_array($line)) {
@@ -397,6 +398,7 @@ class PosSaleSyncService
             $qty[] = $line['qty'] ?? 1;
             $saleUnit[] = $line['sale_unit'] ?? 'pc';
             $netUnitPrice[] = $line['net_unit_price'] ?? $line['price'] ?? 0;
+            $netUnitCost[] = $line['net_unit_cost'] ?? $line['unit_cost'] ?? 0;
             $discount[] = $line['discount'] ?? 0;
             $taxRate[] = $line['tax_rate'] ?? 0;
             $tax[] = $line['tax'] ?? 0;
@@ -411,6 +413,7 @@ class PosSaleSyncService
         $data['qty'] = $qty;
         $data['sale_unit'] = $saleUnit;
         $data['net_unit_price'] = $netUnitPrice;
+        $data['net_unit_cost'] = $netUnitCost;
         $data['discount'] = $discount;
         $data['tax_rate'] = $taxRate;
         $data['tax'] = $tax;
@@ -425,6 +428,7 @@ class PosSaleSyncService
                 'code' => $line['code'] ?? '',
                 'qty' => $line['qty'] ?? 1,
                 'net_unit_price' => $line['net_unit_price'] ?? $line['price'] ?? 0,
+                'net_unit_cost' => $line['net_unit_cost'] ?? $line['unit_cost'] ?? 0,
                 'discount' => $line['discount'] ?? 0,
                 'tax_rate' => $line['tax_rate'] ?? 0,
                 'tax' => $line['tax'] ?? 0,

@@ -28,6 +28,7 @@ class PosSidebar extends StatelessWidget {
     required this.onProfile,
     required this.onLogout,
     this.onReturn,
+    this.onIssueReturnBill,
     this.onPendingSync,
     this.pendingSyncCount = 0,
     this.onHoldBills,
@@ -51,6 +52,7 @@ class PosSidebar extends StatelessWidget {
   final VoidCallback onProfile;
   final VoidCallback onLogout;
   final VoidCallback? onReturn;
+  final VoidCallback? onIssueReturnBill;
   final VoidCallback? onPendingSync;
   final int pendingSyncCount;
   final VoidCallback? onHoldBills;
@@ -149,6 +151,13 @@ class PosSidebar extends StatelessWidget {
                         icon: Icons.undo_rounded,
                         tooltip: 'Sale return',
                         onTap: _enabled ? onReturn : null,
+                        enabled: _enabled,
+                      ),
+                    if (onIssueReturnBill != null)
+                      _NavIcon(
+                        icon: Icons.assignment_return_outlined,
+                        tooltip: 'Issue return bill',
+                        onTap: _enabled ? onIssueReturnBill : null,
                         enabled: _enabled,
                       ),
                     if (onPrintLastReceipt != null)

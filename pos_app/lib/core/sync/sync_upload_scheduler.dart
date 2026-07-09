@@ -13,23 +13,12 @@ class SyncUploadScheduler {
   final Ref _ref;
   Timer? _timer;
   bool _running = false;
-  bool? _lastOnline;
 
   void start() {
     _restartTimer();
     _ref.listen<int>(
       posUiSettingsProvider.select((s) => s.autoSyncUploadMinutes),
       (_, __) => _restartTimer(),
-    );
-    _ref.listen<AsyncValue<bool>>(
-      isOnlineProvider,
-      (previous, next) {
-        final online = next.valueOrNull ?? false;
-        if (online && _lastOnline != true) {
-          unawaited(_tick());
-        }
-        _lastOnline = online;
-      },
     );
   }
 

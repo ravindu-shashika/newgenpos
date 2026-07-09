@@ -96,7 +96,7 @@ const PayrollManager = ({ controllerName }) => {
     const [editForm, setEditForm] = useState(INITIAL_EDIT);
     const [saving, setSaving] = useState(false);
 
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
     const patchEdit = (patch) => setEditForm((f) => ({ ...f, ...patch }));
 
     useEffect(() => {
@@ -117,7 +117,7 @@ const PayrollManager = ({ controllerName }) => {
             const res = await api.get('payroll');
             applyListResponse(res);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to load payroll.', 'error');
+            showApiError(err, 'Failed to load payroll.');
         } finally {
             setLoading(false);
         }
@@ -233,10 +233,11 @@ const PayrollManager = ({ controllerName }) => {
                 month: generateForm.month,
                 employee_ids: generateForm.employee_ids,
             });
+            showApiSuccess(res, 'Payroll generated.');
             setGenerateOpen(false);
             navigate('/payroll/generate', { state: res.data });
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to generate payroll.', 'error');
+            showApiError(err, 'Failed to generate payroll.');
         } finally {
             setSaving(false);
         }
@@ -286,11 +287,11 @@ const PayrollManager = ({ controllerName }) => {
                 paying_method: editForm.paying_method,
                 note: editForm.note,
             });
-            showToast(res.data?.message || 'Payroll updated.', 'success');
+            showApiSuccess(res, 'Payroll updated.');
             applyListResponse(res);
             setEditOpen(false);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to update payroll.', 'error');
+            showApiError(err, 'Failed to update payroll.');
         } finally {
             setSaving(false);
         }
@@ -300,7 +301,7 @@ const PayrollManager = ({ controllerName }) => {
         if (!deleteId) return;
         try {
             const res = await api.delete(`payroll/${deleteId}`);
-            showToast(res.data?.message || 'Payroll deleted.', 'success');
+            showApiSuccess(res, 'Payroll deleted.');
             applyListResponse(res);
             setSelected((prev) => {
                 const next = new Set(prev);
@@ -309,19 +310,19 @@ const PayrollManager = ({ controllerName }) => {
             });
             setDeleteId(null);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Failed to delete payroll.', 'error');
+            showApiError(err, 'Failed to delete payroll.');
         }
     };
 
     const handleBulkDelete = async () => {
         try {
             const res = await api.post('payroll/deletebyselection', { payrollIdArray: [...selected] });
-            showToast(res.data?.message || 'Selected payroll records deleted.', 'success');
+            showApiSuccess(res, 'Selected payroll records deleted.');
             applyListResponse(res);
             setSelected(new Set());
             setBulkDeleteOpen(false);
         } catch (err) {
-            showToast(err.response?.data?.message || 'Bulk delete failed.', 'error');
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 

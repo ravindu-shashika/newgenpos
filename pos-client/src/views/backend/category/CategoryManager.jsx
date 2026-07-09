@@ -18,6 +18,7 @@ import {
     ActionMenu,
     Pagination,
     SelectionBar,
+    PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions, { useGeneralSetting } from '../../../stores/usePermissions';
@@ -68,10 +69,10 @@ const CategoryManager = ({ controllerName }) => {
     const importFileRef = useRef(null);
 
     // ── Toast ──────────────────────────────────────────────────────────────────
-    const { toast, showToast } = useToast();
+    const { toast, showToast, showApiSuccess, showApiError } = useToast();
 
     // -- Permissions (resolved against the controllerName passed from the router) --
-    const { canAdd, canEdit, canDelete, canImport } = usePermissions(controllerName);
+    const { canView, canAdd, canEdit, canDelete, canImport } = usePermissions(controllerName);
 
     // -- General settings (from generalSettingStore via hook) --------------------
     const setting = useGeneralSetting();
@@ -126,7 +127,7 @@ const CategoryManager = ({ controllerName }) => {
             const data = res.data?.data ?? res.data ?? [];
             setCategories(Array.isArray(data) ? data : []);
         } catch {
-            showToast('Failed to load categories.', 'error');
+            showApiError(err, 'Failed to load categories.');
         } finally {
             setLoading(false);
         }
@@ -180,16 +181,16 @@ const CategoryManager = ({ controllerName }) => {
         const errs = validate(form);
         if (Object.keys(errs).length) { setFormErrors(errs); return; }
         try {
-            await api.post('category', buildFormData(form), {
+            const res = await api.post('category', buildFormData(form), {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setAddOpen(false);
             resetForm();
             fetchCategories();
             fetchCategoriesList();
-            showToast('Category added successfully.');
-        } catch {
-            showToast('Failed to add category.', 'error');
+            showApiSuccess(res, 'Category added successfully.');
+        } catch (err) {
+            showApiError(err, 'Failed to add category.');
         }
     };
 
@@ -210,43 +211,42 @@ const CategoryManager = ({ controllerName }) => {
         const errs = validate(form);
         if (Object.keys(errs).length) { setFormErrors(errs); return; }
         try {
-            // Laravel requires POST + _method: 'PUT' for multipart/form-data
-            await api.post(`category/${form.category_id}`, buildFormData(form, 'PUT'), {
+            const res = await api.post(`category/${form.category_id}`, buildFormData(form, 'PUT'), {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setEditOpen(false);
             resetForm();
             fetchCategories();
-            showToast('Category updated successfully.');
-        } catch {
-            showToast('Failed to update category.', 'error');
+            showApiSuccess(res, 'Category updated successfully.');
+        } catch (err) {
+            showApiError(err, 'Failed to update category.');
         }
     };
 
     const handleDelete = async () => {
         try {
-            await api.delete(`category/${deleteId}`);
+            const res = await api.delete(`category/${deleteId}`);
             setDeleteId(null);
             fetchCategories();
             fetchCategoriesList();
-            showToast('Category deleted.');
-        } catch {
-            showToast('Failed to delete category.', 'error');
+            showApiSuccess(res, 'Category deleted.');
+        } catch (err) {
+            showApiError(err, 'Failed to delete category.');
         }
     };
 
     const handleBulkDelete = async () => {
         try {
-            await api.post('category/deletebyselection', {
+            const res = await api.post('category/deletebyselection', {
                 categoryIdArray: [...selected],
             });
             setBulkDeleteOpen(false);
             setSelected(new Set());
             fetchCategories();
             fetchCategoriesList();
-            showToast(`${selected.size} categor${selected.size > 1 ? 'ies' : 'y'} deleted.`);
-        } catch {
-            showToast('Bulk delete failed.', 'error');
+            showApiSuccess(res, `${selected.size} categor${selected.size > 1 ? 'ies' : 'y'} deleted.`);
+        } catch (err) {
+            showApiError(err, 'Bulk delete failed.');
         }
     };
 
@@ -257,15 +257,15 @@ const CategoryManager = ({ controllerName }) => {
         const fd = new FormData();
         fd.append('file', file);
         try {
-            await api.post('category/import', fd, {
+            const res = await api.post('category/import', fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             setImportOpen(false);
             fetchCategories();
             fetchCategoriesList();
-            showToast('Categories imported successfully.');
-        } catch {
-            showToast('Import failed.', 'error');
+            showApiSuccess(res, 'Categories imported successfully.');
+        } catch (err) {
+            showApiError(err, 'Import failed.');
         }
     };
 
@@ -388,6 +388,10 @@ const CategoryManager = ({ controllerName }) => {
     );
 
     // ── Render ─────────────────────────────────────────────────────────────────
+    if (!canView) {
+        return <PermissionDenied title="Categories" action="view categories" />;
+    }
+
     return (
         <PageLayout
             eyebrow="Products"

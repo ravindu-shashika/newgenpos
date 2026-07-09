@@ -1,4 +1,5 @@
 import JsBarcode from 'jsbarcode';
+import { BARCODE_PRICE_DISPLAY } from './barcodeTemplateDefaults';
 
 const MM_PER_IN = 25.4;
 
@@ -68,16 +69,38 @@ export function formatSkuDisplay(subSku, altCode) {
     return `${first}-${alt}`;
 }
 
+function resolveBarcodePriceDisplay(printOptions) {
+    const mode = printOptions?.price_display;
+    if (mode === BARCODE_PRICE_DISPLAY.off || mode === BARCODE_PRICE_DISPLAY.price || mode === BARCODE_PRICE_DISPLAY.maxPrice) {
+        return mode;
+    }
+    if (printOptions?.max_price === true) return BARCODE_PRICE_DISPLAY.maxPrice;
+    if (printOptions?.price === false) return BARCODE_PRICE_DISPLAY.off;
+    return BARCODE_PRICE_DISPLAY.price;
+}
+
 function formatPriceHtml(label, printOptions) {
-    if (!printOptions.price) return '';
+    const display = resolveBarcodePriceDisplay(printOptions);
+    if (display === BARCODE_PRICE_DISPLAY.off) return '';
 
     const promo = label.product_promo_price;
-    const hasPromo = printOptions.promo_price
+    const hasPromo = display === BARCODE_PRICE_DISPLAY.price
+        && printOptions.promo_price
         && promo != null
         && promo !== ''
         && promo !== 'null'
         && Number(promo) > 0;
-    const price = hasPromo ? promo : label.product_price;
+
+    let price;
+    if (display === BARCODE_PRICE_DISPLAY.maxPrice) {
+        const maxPrice = label.product_max_price;
+        if (maxPrice == null || maxPrice === '' || Number(maxPrice) <= 0) {
+            return '';
+        }
+        price = maxPrice;
+    } else {
+        price = hasPromo ? promo : label.product_price;
+    }
     const currency = String(label.currency ?? '').trim();
     const position = label.currency_position === 'suffix' ? 'suffix' : 'prefix';
     const priceNum = Number(price);
@@ -256,6 +279,7 @@ export function expandProductsToLabels(products, printOptions) {
             product_actual_name: product.name,
             product_name: product.name,
             product_price: price,
+            product_max_price: product.max_price,
             default_price: product.default_price ?? product.price,
             product_promo_price: product.promo_price ?? '',
             currency: product.currency ?? '',
@@ -285,7 +309,7 @@ export function createLabelPrintWindow() {
     printWindow.document.open();
     printWindow.document.write(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Print Barcodes</title></head>
-<body style="font-family:sans-serif;padding:24px;">Preparing labels…</body></html>`);
+<body style="margin:0;font-family:sans-serif;padding:24px;">Preparing labels…</body></html>`);
     printWindow.document.close();
     return printWindow;
 }

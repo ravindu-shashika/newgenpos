@@ -179,7 +179,7 @@ class PosReturnService
                 'grand_total' => (float) ($payload['grand_total'] ?? 0),
                 'settled_amount' => 0,
                 'return_note' => $payload['return_note'] ?? '',
-                'staff_note' => $payload['staff_note'] ?? '',
+                'staff_note' => $this->resolveStaffNote($payload),
             ];
 
             $returnRecord = Returns::create($returnData);
@@ -318,7 +318,7 @@ class PosReturnService
                 'grand_total' => (float) ($payload['grand_total'] ?? 0),
                 'settled_amount' => 0,
                 'return_note' => $payload['return_note'] ?? 'POS return without bill',
-                'staff_note' => $payload['staff_note'] ?? '',
+                'staff_note' => $this->resolveStaffNote($payload),
             ];
 
             $returnRecord = Returns::create($returnData);
@@ -448,5 +448,18 @@ class PosReturnService
             }
             $product->save();
         }
+    }
+
+    private function resolveStaffNote(array $payload): string
+    {
+        $staff = trim((string) ($payload['staff_note'] ?? ''));
+        $issueMode = trim((string) ($payload['issue_mode'] ?? ''));
+        if ($issueMode === '') {
+            return $staff;
+        }
+
+        $tag = 'issue_mode:'.$issueMode;
+
+        return $staff === '' ? $tag : $staff.' | '.$tag;
     }
 }

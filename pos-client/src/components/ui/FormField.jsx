@@ -62,36 +62,53 @@ export function TextInput({
   type = "text",
   onKeyDown,
   inputRef,
+  readOnly,
+  disabled,
+  className,
 }) {
   return (
     <input
       ref={inputRef}
       type={type}
-      className="ui-input"
+      className={className ? `ui-input ${className}` : 'ui-input'}
       name={name}
-      value={value}
+      value={value ?? ''}
       onChange={onChange}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
       required={required}
       autoComplete={autoComplete}
+      readOnly={readOnly}
+      disabled={disabled}
     />
   );
 }
 
-export function NumberInput({ value, onChange, name, step = 'any', min, placeholder, required, disabled }) {
+export function NumberInput({
+  value,
+  onChange,
+  name,
+  step = 'any',
+  min,
+  placeholder,
+  required,
+  disabled,
+  readOnly,
+  className,
+}) {
   return (
     <input
       type="number"
-      className="ui-input"
+      className={className ? `ui-input ${className}` : 'ui-input'}
       name={name}
-      value={value}
+      value={value ?? ''}
       onChange={onChange}
       step={step}
       min={min}
       placeholder={placeholder}
       required={required}
       disabled={disabled}
+      readOnly={readOnly}
     />
   );
 }

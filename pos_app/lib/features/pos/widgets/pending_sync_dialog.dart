@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/pos_app_styles.dart';
+import '../../../core/theme/pos_theme.dart';
 import 'pos_professional_dialog.dart';
 import 'pos_toast.dart';
 import 'show_pos_dialog.dart';
@@ -65,6 +66,13 @@ class PosPendingSyncActions {
         result.errorMessage ?? 'No connection to server',
         type: PosToastType.error,
       );
+      return;
+    }
+
+    final msg = result.errorMessage;
+    if (msg != null &&
+        msg.toLowerCase().contains('sign in as cashier')) {
+      PosToast.show(context, msg, type: PosToastType.warning);
       return;
     }
 
@@ -149,6 +157,10 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(sessionRevisionProvider);
+    final session = ref.watch(sessionServiceProvider);
+    final cashierSignedIn = session.isLoggedIn;
+
     final pendingAsync = ref.watch(pendingSyncCountProvider);
     final salesAsync = ref.watch(pendingSalesForUiProvider);
     final pending = pendingAsync.valueOrNull ?? 0;
@@ -156,7 +168,9 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
     final failedOrQueued =
         sales.where((s) => s.syncStatus == 'failed' || s.syncStatus == 'queued');
     final s = context.posStyles;
+    final warning = PosColors.amber;
     final syncing = _syncing || ref.watch(salesSyncInProgressProvider);
+    final canSync = cashierSignedIn && pending > 0 && !syncing;
 
     return PosProfessionalDialogShell(
       title: 'Pending sync',
@@ -173,7 +187,7 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
           ),
           const Spacer(),
           FilledButton.icon(
-            onPressed: syncing || pending == 0 ? null : _syncNow,
+            onPressed: canSync ? _syncNow : null,
             icon: syncing
                 ? SizedBox(
                     width: 18,
@@ -191,6 +205,40 @@ class _PendingSyncDialogState extends ConsumerState<_PendingSyncDialog> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!cashierSignedIn) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: warning.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.person_off_outlined, color: warning, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Cashier sign-in required',
+                          style: s.titleMedium.copyWith(fontSize: 15),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Sign in as cashier first, then sync pending sales to the server.',
+                          style: s.bodyMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
             decoration: BoxDecoration(

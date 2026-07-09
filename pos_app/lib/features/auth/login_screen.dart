@@ -169,6 +169,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         warehouseId: parties.warehouseId ?? warehouseId,
         billerId: parties.billerId,
       );
+      await session.clearServerOfflineReauthPending();
       if (parties.customerId != null) {
         await session.setCustomerId(parties.customerId!);
       } else {
@@ -177,6 +178,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (parties.billerId == null) {
         await session.clearBillerId();
       }
+
+      bumpSessionState(ref);
 
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

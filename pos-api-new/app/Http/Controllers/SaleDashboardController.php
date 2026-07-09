@@ -149,7 +149,7 @@ class SaleDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load sales'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -167,7 +167,7 @@ class SaleDashboardController extends Controller
 
             return $this->spaJson($request, [
                 'message' => __('db.Failed to load sale form'),
-                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

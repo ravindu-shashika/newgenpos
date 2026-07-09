@@ -34,9 +34,8 @@ class _ReceiptMetrics {
   double get itemNameSize => is58 ? 7.5 : 8.5;
   double get itemDetailSize => is58 ? 6.5 : 7.5;
 
-  /// Totals block (Total, Discount, Paid Amount, Grand Total).
-  double get totalSize => is58 ? 7.5 : 8.5;
-  double get totalLargeSize => is58 ? 9.0 : 10.0;
+  /// Totals block — same size as INVOICE ITEMS section title.
+  double get totalSize => bodySize;
 
   static PdfPageFormat pageFormatFor(LocalPrintSettings settings) {
     if (settings.paperSize == 'a4') {
@@ -354,13 +353,38 @@ class ReceiptPrintService {
 
           // ── Totals ──
           final sub = receipt.computedSubtotal;
+          final itemDiscount = receipt.computedItemDiscount;
+          final orderDiscount = receipt.computedOrderDiscount;
+          final totalDiscount = receipt.computedTotalDiscount;
+          final showDiscount = opts.option(PrintOptionKeys.showDiscount);
+
+          if (showDiscount && itemDiscount > 0) {
+            children.add(
+              _totalRow(
+                'Item(s) Discount:',
+                itemDiscount,
+                m,
+                bold: true,
+              ),
+            );
+          }
           children.add(_totalRow('Total:', sub, m, bold: true));
 
-          if (opts.option(PrintOptionKeys.showDiscount)) {
+          if (showDiscount && orderDiscount > 0) {
+            children.add(
+              _totalRow(
+                'Special Discount:',
+                orderDiscount,
+                m,
+                bold: true,
+              ),
+            );
+          }
+          if (showDiscount && totalDiscount > 0) {
             children.add(
               _totalRow(
                 'Total Discount:',
-                receipt.totalDiscount,
+                totalDiscount,
                 m,
                 bold: true,
               ),
@@ -372,7 +396,6 @@ class ReceiptPrintService {
               receipt.grandTotal,
               m,
               bold: true,
-              large: true,
             ),
           );
 
@@ -390,7 +413,6 @@ class ReceiptPrintService {
                   receipt.balance,
                   m,
                   bold: true,
-                  large: true,
                 ),
               );
             }
@@ -728,9 +750,8 @@ class ReceiptPrintService {
     double amount,
     _ReceiptMetrics m, {
     bool bold = false,
-    bool large = false,
   }) {
-    final size = large ? m.totalLargeSize : m.totalSize;
+    final size = m.totalSize;
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 1),
       child: pw.Row(
