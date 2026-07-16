@@ -2,8 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
     PageLayout,
+    FormPanel,
     FormField,
     FormRow,
+    FormShell,
+    FormActions,
+    FormHint,
+    FormSubheading,
+    InlineField,
+    Button,
     TextInput,
     NumberInput,
     SelectInput,
@@ -14,8 +21,30 @@ import {
     useToast,
     Modal,
 } from '../../../components/ui';
-import { api, generateUniqueCode, assertCodeAvailable } from '../../../services';
+import { api, generateUniqueCode, assertCodeAvailable, productImageUrl } from '../../../services';
 import { masterValueList, mergeVariantSelectionsFromCombinations, normalizeProductVariantRow, normalizeProductVariantRows } from '../../../utils/productVariantHelpers';
+
+function parseOptionalPrice(value) {
+    if (value === '' || value == null) return null;
+    const n = parseFloat(value);
+    return Number.isNaN(n) ? null : n;
+}
+
+function priceExceedsMax(price, maxPrice) {
+    const parsedPrice = parseOptionalPrice(price);
+    const parsedMax = parseOptionalPrice(maxPrice);
+    if (parsedPrice == null || parsedMax == null) return false;
+    return parsedPrice > parsedMax;
+}
+
+/** Normalize checkbox values to 0 | 1 for consistent UI + submit. */
+function normalizeCheckbox(value) {
+    return value === true || value === 1 || value === '1' ? 1 : 0;
+}
+
+function isChecked(value) {
+    return normalizeCheckbox(value) === 1;
+}
 
 // --- Sub-components (Modals) ---
 const BrandModal = ({ isOpen, onClose, onRefresh, modules }) => {
@@ -54,7 +83,7 @@ const BrandModal = ({ isOpen, onClose, onRefresh, modules }) => {
                 
                     {(modules.includes('ecommerce') || modules.includes('restaurant')) && (
                     <div style={{ marginTop: 12 }}>
-                        <div className="ui-form-card-title">SEO details</div>
+                        <FormSubheading>SEO details</FormSubheading>
                         <FormField label="Meta Title">
                             <TextInput value={form.page_title} onChange={(e) => setForm({ ...form, page_title: e.target.value })} />
                         </FormField>
@@ -194,24 +223,6 @@ const TaxModal = ({ isOpen, onClose, onRefresh }) => {
     );
 };
 
-function FormPanel({ title, children }) {
-    return (
-        <div className="ui-form-card">
-            {title && <div className="ui-form-card-title">{title}</div>}
-            <div className="ui-form-card-body">{children}</div>
-        </div>
-    );
-}
-
-function InlineField({ children, action }) {
-    return (
-        <div className="ui-inline-field">
-            <div className="ui-inline-field-main">{children}</div>
-            {action && <div className="ui-inline-field-action">{action}</div>}
-        </div>
-    );
-}
-
 function SearchDropdown({ items, onSelect, renderItem }) {
     if (!items?.length) return null;
     return (
@@ -305,15 +316,16 @@ export default function ProductCreate() {
         warranty_type: 'months',
         guarantee: '',
         guarantee_type: 'months',
-        featured: false,
-        is_embeded: false,
-        is_initial_stock: false,
-        is_variant: false,
-        is_diffPrice: false,
-        is_batch: false,
-        is_imei: false,
-        is_sync_disable: false,
-        promotion: false,
+        featured: 0,
+        is_embeded: 0,
+        is_initial_stock: 0,
+        is_variant: 0,
+        is_diffPrice: 0,
+        is_batch: 0,
+        batch_number_mode: '',
+        is_imei: 0,
+        is_sync_disable: 0,
+        promotion: 0,
         promotion_price: '',
         starting_date: '',
         last_date: '',
@@ -322,11 +334,11 @@ export default function ProductCreate() {
         meta_title: '',
         meta_description: '',
         tags: '',
-        is_online: true,
-        in_stock: true,
-        is_addon: false,
+        is_online: 1,
+        in_stock: 1,
+        is_addon: 0,
         menu_type: [],
-        is_recipe: false,
+        is_recipe: 0,
         kitchen_id: '',
         qty: 0,
     };
@@ -338,6 +350,7 @@ export default function ProductCreate() {
     const [warehouseStock, setWarehouseStock] = useState({}); // current product_warehouse qty
     const [variantWarehouseStock, setVariantWarehouseStock] = useState([]);
     const [diffPrices, setDiffPrices] = useState({}); // {warehouse_id: price}
+    const [diffMaxPrices, setDiffMaxPrices] = useState({}); // {warehouse_id: max_price}
     const [variants, setVariants] = useState([]);
     const [variantCombinations, setVariantCombinations] = useState([]);
     const [addVariantMasterId, setAddVariantMasterId] = useState('');
@@ -351,6 +364,7 @@ export default function ProductCreate() {
     const [selectedRelated, setSelectedRelated] = useState([]);
     const [extraResults, setExtraResults] = useState([]);
     const [selectedExtras, setSelectedExtras] = useState([]);
+    const [batchNumberModeLocked, setBatchNumberModeLocked] = useState(false);
     const [comboSearch, setComboSearch] = useState('');
     const [comboSuggestions, setComboSuggestions] = useState([]);
 
@@ -370,6 +384,7 @@ export default function ProductCreate() {
         setWarehouseStock({});
         setVariantWarehouseStock([]);
         setDiffPrices({});
+        setDiffMaxPrices({});
         setVariants([]);
         setVariantCombinations([]);
         setAddVariantMasterId('');
@@ -383,13 +398,14 @@ export default function ProductCreate() {
         setExtraResults([]);
         setComboSearch('');
         setComboSuggestions([]);
+        setBatchNumberModeLocked(false);
     };
 
     const applyEditPayload = (data) => {
         const p = data.product || {};
-        const bool = (v) => v == 1 || v === true;
 
         resetDynamicState();
+        setBatchNumberModeLocked(Boolean(data.batch_number_mode_locked));
 
         setOptions({
             brands: data.brands || [],
@@ -414,6 +430,10 @@ export default function ProductCreate() {
         const initialStockMap = data.initial_stock || {};
         const warehouseStockMap = data.warehouse_stock || {};
         const hasInitialStock = !!data.has_initial_stock || Object.values(initialStockMap).some((qty) => Number(qty) > 0);
+        const isBatch = isChecked(p.is_batch);
+        const isVariant = isChecked(p.is_variant) && !isBatch;
+        const isImei = isChecked(p.is_imei);
+        const isInitialStock = !isBatch && !isVariant && !isImei && hasInitialStock;
 
         const decimals = data.decimal ?? 2;
 
@@ -444,15 +464,18 @@ export default function ProductCreate() {
             warranty_type: p.warranty_type || 'months',
             guarantee: p.guarantee ?? '',
             guarantee_type: p.guarantee_type || 'months',
-            featured: bool(p.featured),
-            is_embeded: bool(p.is_embeded),
-            is_initial_stock: hasInitialStock,
-            is_variant: bool(p.is_variant),
-            is_diffPrice: bool(p.is_diffPrice),
-            is_batch: bool(p.is_batch),
-            is_imei: bool(p.is_imei),
-            is_sync_disable: bool(p.is_sync_disable),
-            promotion: bool(p.promotion),
+            featured: normalizeCheckbox(p.featured),
+            is_embeded: normalizeCheckbox(p.is_embeded),
+            is_initial_stock: isInitialStock ? 1 : 0,
+            is_variant: isVariant ? 1 : 0,
+            is_diffPrice: normalizeCheckbox(p.is_diffPrice),
+            is_batch: isBatch ? 1 : 0,
+            batch_number_mode: isBatch
+                ? (p.batch_number_mode === 'manual' ? 'manual' : 'auto')
+                : '',
+            is_imei: isImei ? 1 : 0,
+            is_sync_disable: normalizeCheckbox(p.is_sync_disable),
+            promotion: normalizeCheckbox(p.promotion),
             promotion_price: formatDecimal(p.promotion_price, decimals),
             starting_date: p.starting_date ? String(p.starting_date).slice(0, 10) : '',
             last_date: p.last_date ? String(p.last_date).slice(0, 10) : '',
@@ -460,17 +483,17 @@ export default function ProductCreate() {
             meta_title: p.meta_title ?? '',
             meta_description: p.meta_description ?? '',
             tags: p.tags ?? '',
-            is_online: bool(p.is_online),
-            in_stock: bool(p.in_stock),
-            is_addon: bool(p.is_addon),
+            is_online: normalizeCheckbox(p.is_online),
+            in_stock: normalizeCheckbox(p.in_stock),
+            is_addon: normalizeCheckbox(p.is_addon),
             menu_type: p.menu_type ? String(p.menu_type).split(',').filter(Boolean) : [],
-            is_recipe: bool(p.is_recipe),
+            is_recipe: normalizeCheckbox(p.is_recipe),
             kitchen_id: p.kitchen_id ?? '',
             qty: p.qty ?? 0,
             ...customValues,
         });
 
-        setInitialStock(hasInitialStock ? initialStockMap : {});
+        setInitialStock(isInitialStock ? initialStockMap : {});
         setWarehouseStock(warehouseStockMap);
         setVariantWarehouseStock(Array.isArray(data.variant_warehouse_stock) ? data.variant_warehouse_stock : []);
 
@@ -478,7 +501,12 @@ export default function ProductCreate() {
             const masters = data.variant_masters || [];
             const combos = data.variant_combinations || [];
             const normalized = normalizeProductVariantRows(data.variants, masters);
-            setVariants(mergeVariantSelectionsFromCombinations(normalized, combos));
+            const merged = mergeVariantSelectionsFromCombinations(normalized, combos);
+            // Hide unused / empty variant types (no selected attributes).
+            setVariants(merged.filter((row) =>
+                (row.selectedValues || []).length > 0
+                && (row.availableValues || []).length > 0
+            ));
         }
         if (data.variant_combinations?.length) {
             setVariantCombinations(data.variant_combinations);
@@ -492,6 +520,13 @@ export default function ProductCreate() {
                 formattedDiffPrices[warehouseId] = formatDecimal(value, decimals);
             });
             setDiffPrices(formattedDiffPrices);
+        }
+        if (data.diff_max_prices) {
+            const formattedDiffMaxPrices = {};
+            Object.entries(data.diff_max_prices).forEach(([warehouseId, value]) => {
+                formattedDiffMaxPrices[warehouseId] = formatDecimal(value, decimals);
+            });
+            setDiffMaxPrices(formattedDiffMaxPrices);
         }
         if (data.related_products_selected?.length) {
             setSelectedRelated(data.related_products_selected);
@@ -598,14 +633,74 @@ export default function ProductCreate() {
     );
 
     // --- Handlers ---
+    const applyProductOptionSideEffects = (name, checked) => {
+        if (checked) {
+            if (name === 'is_batch' || name === 'is_imei' || name === 'is_variant') {
+                setInitialStock({});
+            }
+            if (name === 'is_batch') {
+                setVariants([]);
+                setVariantCombinations([]);
+                setAddVariantMasterId('');
+            }
+            return;
+        }
+        if (name === 'is_initial_stock') {
+            setInitialStock({});
+        }
+        if (name === 'is_variant') {
+            setVariants([]);
+            setVariantCombinations([]);
+            setAddVariantMasterId('');
+        }
+    };
+
+    const handleProductOptionChange = (e) => {
+        const { name, checked } = e.target;
+        const value = normalizeCheckbox(checked);
+
+        setFormData((prev) => {
+            const next = { ...prev, [name]: value };
+            if (value === 1) {
+                if (name === 'is_batch') {
+                    next.is_initial_stock = 0;
+                    next.is_variant = 0;
+                    next.batch_number_mode = next.batch_number_mode === 'manual' ? 'manual' : 'auto';
+                } else if (name === 'is_variant') {
+                    next.is_initial_stock = 0;
+                    next.is_batch = 0;
+                    next.batch_number_mode = '';
+                } else if (name === 'is_imei') {
+                    next.is_initial_stock = 0;
+                }
+            } else if (name === 'is_batch') {
+                next.batch_number_mode = '';
+            }
+            return next;
+        });
+
+        applyProductOptionSideEffects(name, checked);
+    };
+
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        if (type === 'checkbox') {
+            if (['is_batch', 'is_imei', 'is_variant', 'is_initial_stock', 'is_diffPrice'].includes(name)) {
+                handleProductOptionChange(e);
+                return;
+            }
+            setFormData((prev) => ({
+                ...prev,
+                [name]: normalizeCheckbox(checked),
+            }));
+            return;
+        }
         if (['cost', 'profit_margin', 'profit_margin_type'].includes(name)) {
             setRecalcPriceFromMargin(true);
         }
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? (checked ? 1 : 0) : value
+            [name]: value
         }));
     };
 
@@ -652,13 +747,25 @@ export default function ProductCreate() {
         } else {
             price = cost + margin;
         }
+
+        const maxPrice = parseOptionalPrice(formData.max_price);
+        if (maxPrice != null && price > maxPrice) {
+            showToast('Calculated price cannot be higher than max price.', 'error');
+            setRecalcPriceFromMargin(false);
+            return;
+        }
+
         setFormData(prev => ({ ...prev, price: price.toFixed(options.decimal ?? 2) }));
         setRecalcPriceFromMargin(false);
-    }, [formData.cost, formData.profit_margin, formData.profit_margin_type, formData.type, recalcPriceFromMargin, isCombo, isDigital, isService, options.decimal]);
+    }, [formData.cost, formData.profit_margin, formData.profit_margin_type, formData.max_price, formData.type, recalcPriceFromMargin, isCombo, isDigital, isService, options.decimal, showToast]);
 
     // Handle price change -> margin (does not recalculate price back)
     const handlePriceChange = (e) => {
         const raw = e.target.value;
+        if (raw !== '' && priceExceedsMax(raw, formData.max_price)) {
+            showToast('Product price cannot be higher than max price.', 'error');
+            return;
+        }
         const newPrice = parseFloat(raw) || 0;
         const cost = parseFloat(formData.cost) || 0;
         const decimals = options.decimal ?? 2;
@@ -673,6 +780,33 @@ export default function ProductCreate() {
             price: raw === '' ? '' : raw,
             profit_margin: margin.toFixed(decimals),
         }));
+    };
+
+    const handleMaxPriceChange = (e) => {
+        const raw = e.target.value;
+        if (raw !== '' && priceExceedsMax(formData.price, raw)) {
+            showToast('Max price cannot be lower than product price.', 'error');
+            return;
+        }
+        setFormData((prev) => ({ ...prev, max_price: raw }));
+    };
+
+    const handleDiffPriceChange = (warehouseId, value) => {
+        const maxValue = diffMaxPrices[warehouseId] ?? formData.max_price;
+        if (value !== '' && priceExceedsMax(value, maxValue)) {
+            showToast('Warehouse price cannot be higher than max price.', 'error');
+            return;
+        }
+        setDiffPrices((prev) => ({ ...prev, [warehouseId]: value }));
+    };
+
+    const handleDiffMaxPriceChange = (warehouseId, value) => {
+        const priceValue = diffPrices[warehouseId] ?? formData.price;
+        if (value !== '' && priceExceedsMax(priceValue, value)) {
+            showToast('Warehouse max price cannot be lower than warehouse price.', 'error');
+            return;
+        }
+        setDiffMaxPrices((prev) => ({ ...prev, [warehouseId]: value }));
     };
 
     // Unit change logic
@@ -810,7 +944,7 @@ export default function ProductCreate() {
             showToast('Please attach a file for digital products.', 'error');
             return false;
         }
-        if (formData.is_variant) {
+        if (isChecked(formData.is_variant)) {
             const hasSelected = variants.some((v) => (v.selectedValues || []).length > 0);
             if (!hasSelected) {
                 showToast('Select at least one attribute for your variant types.', 'error');
@@ -826,8 +960,18 @@ export default function ProductCreate() {
         const maxPrice = parseFloat(formData.max_price);
         const salePrice = parseFloat(formData.price);
         if (formData.max_price !== '' && !Number.isNaN(maxPrice) && !Number.isNaN(salePrice) && maxPrice < salePrice) {
-            showToast('Max price cannot be lower than product price.', 'error');
+            showToast('Product price cannot be higher than max price.', 'error');
             return false;
+        }
+        if (isChecked(formData.is_diffPrice)) {
+            for (const warehouse of options.warehouses || []) {
+                const warehousePrice = diffPrices[warehouse.id] ?? formData.price;
+                const warehouseMax = diffMaxPrices[warehouse.id] ?? formData.max_price;
+                if (priceExceedsMax(warehousePrice, warehouseMax)) {
+                    showToast(`Warehouse price for ${warehouse.name} cannot be higher than max price.`, 'error');
+                    return false;
+                }
+            }
         }
         if (hasRestaurant && !formData.is_addon && (!formData.menu_type?.length)) {
             showToast('Please select at least one menu type.', 'error');
@@ -843,13 +987,18 @@ export default function ProductCreate() {
                 (sum, p) => sum + (parseFloat(p.qty) || 0) * (parseFloat(p.unit_cost) || 0),
                 0
             );
+            const nextPrice = totalPrice.toFixed(2);
+            if (priceExceedsMax(nextPrice, formData.max_price)) {
+                showToast('Combo price cannot be higher than max price.', 'error');
+                return;
+            }
             setFormData(prev => ({
                 ...prev,
-                price: totalPrice.toFixed(2),
+                price: nextPrice,
                 cost: totalCost.toFixed(2),
             }));
         }
-    }, [comboProducts, formData.type]);
+    }, [comboProducts, formData.type, formData.max_price, showToast]);
 
     const variantMasters = options.variant_masters || [];
     const availableVariantMasters = variantMasters.filter(
@@ -977,8 +1126,15 @@ export default function ProductCreate() {
 
         // Standard fields (match Blade: only send checkboxes when checked)
         Object.entries(formData).forEach(([key, val]) => {
+            if (key === 'batch_number_mode') {
+                // Only batch products send a mode.
+                if (isChecked(formData.is_batch)) {
+                    data.append('batch_number_mode', val === 'manual' ? 'manual' : 'auto');
+                }
+                return;
+            }
             if (CHECKBOX_FIELDS.has(key)) {
-                if (val) data.append(key, '1');
+                if (isChecked(val)) data.append(key, '1');
                 return;
             }
             if (key === 'menu_type' && Array.isArray(val)) {
@@ -1002,7 +1158,7 @@ export default function ProductCreate() {
             });
         }
 
-        if (formData.is_variant) {
+        if (isChecked(formData.is_variant)) {
             variants.forEach((v) => {
                 if (v.name?.trim()) data.append('variant_option[]', v.name.trim());
                 if (v.selectedValues?.length) data.append('variant_value[]', v.selectedValues.join(','));
@@ -1047,14 +1203,15 @@ export default function ProductCreate() {
 
         data.append('qty', formData.qty ?? '0');
 
-        if (formData.is_diffPrice) {
+        if (isChecked(formData.is_diffPrice)) {
             options.warehouses.forEach((w) => {
                 data.append('warehouse_id[]', w.id);
                 data.append('diff_price[]', diffPrices[w.id] ?? '');
+                data.append('diff_max_price[]', diffMaxPrices[w.id] ?? '');
             });
         }
 
-        if (formData.is_initial_stock && !isEditMode) {
+        if (isChecked(formData.is_initial_stock) && !isEditMode) {
             options.warehouses.forEach((w) => {
                 data.append('stock_warehouse_id[]', w.id);
                 data.append('stock[]', initialStock[w.id] ?? '');
@@ -1105,8 +1262,8 @@ export default function ProductCreate() {
         >
             <Toast toast={toast} />
 
-            <form id="product-create-form" className="ui-form-shell" onSubmit={handleSubmit}>
-                <p className="ui-form-hint">Fields marked with * are required.</p>
+            <FormShell id="product-create-form" onSubmit={handleSubmit}>
+                <FormHint>Fields marked with * are required.</FormHint>
 
                 <FormPanel title="Basic information">
                     <FormRow cols={3}>
@@ -1225,13 +1382,20 @@ export default function ProductCreate() {
 
                     <FormRow cols={isDigital || isService ? 2 : 3}>
                         <FormField label="Product Price" required>
-                            <NumberInput name="price" value={formData.price} onChange={handlePriceChange} required />
+                            <NumberInput
+                                name="price"
+                                value={formData.price}
+                                onChange={handlePriceChange}
+                                max={formData.max_price !== '' ? formData.max_price : undefined}
+                                required
+                            />
                         </FormField>
                         <FormField label="Max price">
                             <NumberInput
                                 name="max_price"
                                 value={formData.max_price}
-                                onChange={handleChange}
+                                onChange={handleMaxPriceChange}
+                                min={formData.price !== '' ? formData.price : undefined}
                                 placeholder="Optional ceiling price"
                             />
                         </FormField>
@@ -1247,7 +1411,7 @@ export default function ProductCreate() {
 
                     {isCombo && (
                         <div style={{ marginTop: 20 }}>
-                            <div className="ui-form-card-title">Combo products</div>
+                            <FormSubheading>Combo products</FormSubheading>
                             <div className="ui-search-wrap mb-3">
                                 <TextInput
                                     placeholder="Type product code and select…"
@@ -1563,46 +1727,74 @@ export default function ProductCreate() {
                 <FormPanel title="Product options">
                     <FormRow cols={4}>
                             {isStandard && (
-                                <CheckboxInput label="Featured" name="featured" checked={!!formData.featured} onChange={handleChange} />
+                                <CheckboxInput label="Featured" name="featured" checked={isChecked(formData.featured)} onChange={handleChange} />
                             )}
-                            <CheckboxInput label="Embedded Barcode" name="is_embeded" checked={!!formData.is_embeded} onChange={handleChange} />
+                            <CheckboxInput label="Embedded Barcode" name="is_embeded" checked={isChecked(formData.is_embeded)} onChange={handleChange} />
                             {isStandard && (
                                 <>
-                                    <CheckboxInput label="Has Batch/Expiry" name="is_batch" checked={!!formData.is_batch} onChange={handleChange} />
-                                    <CheckboxInput label="IMEI/Serial Number" name="is_imei" checked={!!formData.is_imei} onChange={handleChange} />
-                                    {!formData.is_variant && !formData.is_batch && !formData.is_imei && (
+                                    {!isChecked(formData.is_variant) && (
+                                        <CheckboxInput label="Has Batch/Expiry" name="is_batch" checked={isChecked(formData.is_batch)} onChange={handleChange} />
+                                    )}
+                                    <CheckboxInput label="IMEI/Serial Number" name="is_imei" checked={isChecked(formData.is_imei)} onChange={handleChange} />
+                                    {!isChecked(formData.is_variant) && !isChecked(formData.is_batch) && !isChecked(formData.is_imei) && (
                                         <CheckboxInput
                                             label="Initial Stock"
                                             name="is_initial_stock"
-                                            checked={!!formData.is_initial_stock}
+                                            checked={isChecked(formData.is_initial_stock)}
                                             onChange={handleChange}
                                             disabled={isEditMode}
                                         />
                                     )}
-                                    {!formData.is_batch && (
-                                        <CheckboxInput label="Has Variant" name="is_variant" checked={!!formData.is_variant} onChange={handleChange} />
+                                    {!isChecked(formData.is_batch) && (
+                                        <CheckboxInput label="Has Variant" name="is_variant" checked={isChecked(formData.is_variant)} onChange={handleChange} />
                                     )}
-                                    <CheckboxInput label="Different Price for Warehouses" name="is_diffPrice" checked={!!formData.is_diffPrice} onChange={handleChange} />
+                                    <CheckboxInput label="Different Price for Warehouses" name="is_diffPrice" checked={isChecked(formData.is_diffPrice)} onChange={handleChange} />
                                 </>
                             )}
-                            <CheckboxInput label="Promotional Price" name="promotion" checked={!!formData.promotion} onChange={handleChange} />
+                            <CheckboxInput label="Promotional Price" name="promotion" checked={isChecked(formData.promotion)} onChange={handleChange} />
                             {options.has_woocommerce && (
-                                <CheckboxInput label="Disable Woocommerce Sync" name="is_sync_disable" checked={!!formData.is_sync_disable} onChange={handleChange} />
+                                <CheckboxInput label="Disable Woocommerce Sync" name="is_sync_disable" checked={isChecked(formData.is_sync_disable)} onChange={handleChange} />
                             )}
                             {hasEcom && (
-                                <CheckboxInput label="Sell Online" name="is_online" checked={!!formData.is_online} onChange={handleChange} />
+                                <CheckboxInput label="Sell Online" name="is_online" checked={isChecked(formData.is_online)} onChange={handleChange} />
                             )}
                             {modules.includes('ecommerce') && (
-                                <CheckboxInput label="In Stock" name="in_stock" checked={!!formData.in_stock} onChange={handleChange} />
+                                <CheckboxInput label="In Stock" name="in_stock" checked={isChecked(formData.in_stock)} onChange={handleChange} />
                             )}
                             {hasRestaurant && (
-                                <CheckboxInput label="This is topping" name="is_addon" checked={!!formData.is_addon} onChange={handleChange} />
+                                <CheckboxInput label="This is topping" name="is_addon" checked={isChecked(formData.is_addon)} onChange={handleChange} />
                             )}
                         </FormRow>
 
-                    {formData.promotion && (
+                    {isStandard && isChecked(formData.is_batch) && (
                         <div style={{ marginTop: 16 }}>
-                            <div className="ui-form-card-title">Promotion details</div>
+                            <FormRow cols={3}>
+                                <FormField
+                                    label="Batch number mode"
+                                    hint={
+                                        batchNumberModeLocked
+                                            ? 'Locked because this product already has purchase or adjustment history.'
+                                            : 'Auto generates on purchase and stock adjustment. Manual lets you type the batch number.'
+                                    }
+                                >
+                                    <SelectInput
+                                        name="batch_number_mode"
+                                        value={formData.batch_number_mode === 'manual' ? 'manual' : 'auto'}
+                                        onChange={handleChange}
+                                        required
+                                        disabled={batchNumberModeLocked}
+                                    >
+                                        <option value="auto">Auto</option>
+                                        <option value="manual">Manual</option>
+                                    </SelectInput>
+                                </FormField>
+                            </FormRow>
+                        </div>
+                    )}
+
+                    {isChecked(formData.promotion) && (
+                        <div style={{ marginTop: 16 }}>
+                            <FormSubheading>Promotion details</FormSubheading>
                             <FormRow cols={3}>
                                 <FormField label="Promotional price">
                                     <NumberInput name="promotion_price" value={formData.promotion_price} onChange={handleChange} />
@@ -1618,7 +1810,7 @@ export default function ProductCreate() {
                     )}
                 </FormPanel>
 
-                {isEditMode && isStandard && !formData.is_variant && !formData.is_batch && !formData.is_imei && (
+                {isEditMode && isStandard && !isChecked(formData.is_variant) && !isChecked(formData.is_batch) && !isChecked(formData.is_imei) && (
                     <FormPanel title="Current warehouse stock">
                         <div className="ui-table-wrap">
                             <table className="ui-table">
@@ -1636,7 +1828,7 @@ export default function ProductCreate() {
                     </FormPanel>
                 )}
 
-                {isStandard && formData.is_initial_stock && (
+                {isStandard && isChecked(formData.is_initial_stock) && !isChecked(formData.is_variant) && !isChecked(formData.is_batch) && !isChecked(formData.is_imei) && (
                     <FormPanel title={`Initial stock${isEditMode ? ' (read-only)' : ''}`}>
                         <div className="ui-table-wrap">
                             <table className="ui-table">
@@ -1661,17 +1853,30 @@ export default function ProductCreate() {
                     </FormPanel>
                 )}
 
-                {isStandard && formData.is_diffPrice && (
+                {isStandard && isChecked(formData.is_diffPrice) && (
                     <FormPanel title="Warehouse prices">
                         <div className="ui-table-wrap">
                             <table className="ui-table">
-                                <thead><tr><th>Warehouse</th><th>Price</th></tr></thead>
+                                <thead><tr><th>Warehouse</th><th>Price</th><th>Max Price</th></tr></thead>
                                 <tbody>
                                     {options.warehouses.map(w => (
                                         <tr key={w.id}>
                                             <td>{w.name}</td>
                                             <td>
-                                                <NumberInput value={diffPrices[w.id] || ''} onChange={(e) => setDiffPrices({ ...diffPrices, [w.id]: e.target.value })} step="any" />
+                                                <NumberInput
+                                                    value={diffPrices[w.id] || ''}
+                                                    onChange={(e) => handleDiffPriceChange(w.id, e.target.value)}
+                                                    max={diffMaxPrices[w.id] || formData.max_price || undefined}
+                                                    step="any"
+                                                />
+                                            </td>
+                                            <td>
+                                                <NumberInput
+                                                    value={diffMaxPrices[w.id] || ''}
+                                                    onChange={(e) => handleDiffMaxPriceChange(w.id, e.target.value)}
+                                                    min={diffPrices[w.id] || formData.price || undefined}
+                                                    step="any"
+                                                />
                                             </td>
                                         </tr>
                                     ))}
@@ -1681,7 +1886,7 @@ export default function ProductCreate() {
                     </FormPanel>
                 )}
 
-                {isStandard && formData.is_variant && (
+                {isStandard && isChecked(formData.is_variant) && (
                     <FormPanel title="Variants">
                         <p className="text-muted mb-3" style={{ fontSize: '0.88rem' }}>
                             Pick variant types (Size, Color, etc.) and tick the attributes to use on this product.
@@ -1689,7 +1894,9 @@ export default function ProductCreate() {
                             <Link to="/variant-masters">Manage variant types</Link>
                         </p>
 
-                        {variants.length > 0 && variants.map((v, i) => (
+                        {variants.length > 0 && variants.map((v, i) => {
+                            if (!(v.availableValues || []).length) return null;
+                            return (
                             <div key={`${v.master_id || v.name}-${i}`} className="ui-variant-master-block mb-4">
                                 <div className="d-flex justify-content-between align-items-center mb-2">
                                     <strong>{v.name}</strong>
@@ -1719,12 +1926,10 @@ export default function ProductCreate() {
                                             </label>
                                         );
                                     })}
-                                    {(v.availableValues || []).length === 0 && (
-                                        <span className="text-muted">No attributes defined for this type.</span>
-                                    )}
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
 
                         {availableVariantMasters.length > 0 ? (
                             <div className="d-flex flex-wrap gap-2 align-items-center mb-4">
@@ -1779,9 +1984,10 @@ export default function ProductCreate() {
                             </table>
                         </div>
 
-                        {isEditMode && variantWarehouseStock.length > 0 && (
+                        {/* Hidden for now — re-enable when warehouse variant stock UI is ready */}
+                        {false && isEditMode && variantWarehouseStock.length > 0 && (
                             <div className="ui-table-wrap mt-3">
-                                <div className="ui-form-card-title mb-2">Variant stock by warehouse</div>
+                                <FormSubheading className="mb-2">Variant stock by warehouse</FormSubheading>
                                 <table className="ui-table">
                                     <thead>
                                         <tr>
@@ -1825,9 +2031,9 @@ export default function ProductCreate() {
                                     {previousImages.map((img, idx) => (
                                         <div key={`prev-${img}`} className="ui-image-preview">
                                             <img
-                                                src={`${import.meta.env.VITE_APP_DEFAULT_PATH || import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/images/product/small/${img}`}
+                                                src={productImageUrl(img, 'small')}
                                                 alt={img}
-                                                onError={(e) => { e.target.src = `${import.meta.env.VITE_APP_DEFAULT_PATH || 'http://127.0.0.1:8000'}/images/product/${img}`; }}
+                                                onError={(e) => { e.target.src = productImageUrl(img); }}
                                             />
                                             <button type="button" className="ui-btn danger sm" onClick={() => setPreviousImages(prev => prev.filter((_, i) => i !== idx))}>×</button>
                                         </div>
@@ -1844,18 +2050,30 @@ export default function ProductCreate() {
                     </FormRow>
                 </FormPanel>
 
-                <div className="ui-form-footer">
-                    <button type="button" className="ui-btn ghost" onClick={() => navigate('/products')}>Cancel</button>
-                    <button type="submit" className="ui-btn primary" onClick={() => { submitModeRef.current = 'add'; }}>
+                <FormActions>
+                    <Button variant="ghost" type="button" onClick={() => navigate('/products')}>Cancel</Button>
+                    <Button
+                        variant="primary"
+                        type="submit"
+                        onClick={() => { submitModeRef.current = 'add'; }}
+                    >
                         {isEditMode ? 'Update product' : 'Add product'}
-                    </button>
+                    </Button>
                     {!isEditMode && (
-                        <button type="button" className="ui-btn secondary" onClick={(e) => { e.preventDefault(); submitModeRef.current = 'another'; document.getElementById('product-create-form')?.requestSubmit(); }}>
+                        <Button
+                            variant="secondary"
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                submitModeRef.current = 'another';
+                                document.getElementById('product-create-form')?.requestSubmit();
+                            }}
+                        >
                             Save & add another
-                        </button>
+                        </Button>
                     )}
-                </div>
-            </form>
+                </FormActions>
+            </FormShell>
 
             {/* Modals */}
             <BrandModal

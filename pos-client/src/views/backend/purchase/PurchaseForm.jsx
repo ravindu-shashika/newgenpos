@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+    faCheck,
+    faPenToSquare,
+    faPlus,
+    faPlusCircle,
+    faSave,
+    faSpinner,
+    faTimes,
+    faTrash,
+} from '@fortawesome/free-solid-svg-icons';
+import {
     PageLayout,
     FormRow,
     FormSection,
@@ -13,6 +23,7 @@ import {
     useToast,
     Modal,
     PermissionDenied,
+    BtnIcon,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions from '../../../stores/usePermissions';
@@ -58,6 +69,26 @@ function calcMarginFromPrice(cost, price, marginType) {
     if (c <= 0) return 0;
     if (marginType === 'flat') return p - c;
     return ((p - c) / c) * 100;
+}
+
+function parseOptionalPrice(value) {
+    if (value === '' || value == null) return null;
+    const n = parseFloat(value);
+    return Number.isNaN(n) ? null : n;
+}
+
+function priceExceedsMax(price, maxPrice) {
+    const parsedPrice = parseOptionalPrice(price);
+    const parsedMax = parseOptionalPrice(maxPrice);
+    if (parsedPrice == null || parsedMax == null) return false;
+    return parsedPrice > parsedMax;
+}
+
+function maxPriceBelowSalePrice(salePrice, maxPrice) {
+    const parsedPrice = parseOptionalPrice(salePrice);
+    const parsedMax = parseOptionalPrice(maxPrice);
+    if (parsedPrice == null || parsedMax == null) return false;
+    return parsedMax < parsedPrice;
 }
 
 /** Resolve unit discount amount (flat money) from type + value + cost. */
@@ -156,6 +187,7 @@ export default function PurchaseForm({ controllerName }) {
     }
 
     const [loading, setLoading] = useState(true);
+    const [loadBlockedMessage, setLoadBlockedMessage] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [meta, setMeta] = useState(null);
     const productSearchRef = useRef(null);
@@ -249,6 +281,7 @@ export default function PurchaseForm({ controllerName }) {
                 net_unit_margin: l.net_unit_margin ?? 0,
                 net_unit_margin_type: l.net_unit_margin_type || 'percentage',
                 net_unit_price: l.net_unit_price ?? 0,
+                net_unit_max_price: l.net_unit_max_price ?? '',
                 discount: l.discount || 0,
                 discount_type: discountType,
                 unit_discount: unitDiscount,
@@ -260,6 +293,7 @@ export default function PurchaseForm({ controllerName }) {
                 tax: l.tax || 0,
                 subtotal: l.subtotal,
                 is_batch: isBatch,
+                batch_number_mode: isBatch && l.batch_number_mode === 'manual' ? 'manual' : 'auto',
                 product_batch_id: isBatch ? (l.product_batch_id || null) : null,
                 batch_no: isBatch ? (l.batch_no || '') : '',
                 expired_date: isBatch ? formatDateForInput(l.expired_date) : '',
@@ -269,11 +303,59 @@ export default function PurchaseForm({ controllerName }) {
             };
         });
 
+    const fetchBatchOptions = useCallback(async (productId, warehouseId = header.warehouse_id) => {
+        try {
+            const params = new URLSearchParams({ product_id: String(productId) });
+            if (warehouseId) {
+                params.set('warehouse_id', String(warehouseId));
+            }
+            const res = await api.get(`purchases/product-batches?${params}`);
+            const data = res.data?.data ?? res.data;
+            const batches = Array.isArray(data?.batches) ? data.batches : [];
+            const nextBatchNo = data?.next_batch_no != null ? String(data.next_batch_no) : '';
+            const batchNumberMode = data?.batch_number_mode === 'manual' ? 'manual' : 'auto';
+            return { batches, nextBatchNo, batchNumberMode };
+        } catch {
+            return { batches: [], nextBatchNo: '', batchNumberMode: 'auto' };
+        }
+    }, [header.warehouse_id]);
+
+    const hydrateBatchOptions = useCallback(async (rows, warehouseId = header.warehouse_id) => {
+        const productIds = [...new Set(rows.filter((r) => r.is_batch).map((r) => r.product_id))];
+        if (!productIds.length) return rows;
+        const optionsByProduct = {};
+        await Promise.all(
+            productIds.map(async (productId) => {
+                optionsByProduct[productId] = await fetchBatchOptions(productId, warehouseId);
+            })
+        );
+        return rows.map((row) => {
+            if (!row.is_batch) return row;
+            const opts = optionsByProduct[row.product_id] || { batches: [], nextBatchNo: '', batchNumberMode: 'auto' };
+            return {
+                ...row,
+                batch_options: opts.batches,
+                next_batch_no: opts.nextBatchNo,
+                batch_number_mode: opts.batchNumberMode || row.batch_number_mode || 'auto',
+            };
+        });
+    }, [fetchBatchOptions, header.warehouse_id]);
+
     const loadForm = useCallback(async () => {
         setLoading(true);
+        setLoadBlockedMessage(null);
         try {
             if (isEdit) {
                 const res = await api.get(`purchases/${id}/edit`);
+                if (res.error) {
+                    const msg = res.error.message || 'Failed to load purchase.';
+                    if (res.error.status === 422) {
+                        setLoadBlockedMessage(msg);
+                    } else {
+                        showToast(msg, 'error');
+                    }
+                    return;
+                }
                 const { purchase, lines: existing, meta: m } = res.data;
                 setMeta(m);
                 setHeader({
@@ -294,7 +376,7 @@ export default function PurchaseForm({ controllerName }) {
                 });
                 const editRows = mapEditLines(existing);
                 setLines(editRows);
-                hydrateBatchOptions(editRows).then(setLines);
+                hydrateBatchOptions(editRows, String(purchase.warehouse_id || '')).then(setLines);
             } else if (duplicateFrom) {
                 const res = await api.get(`purchases/duplicate/${duplicateFrom}`);
                 const { purchase, lines: existing, meta: m } = res.data;
@@ -320,7 +402,7 @@ export default function PurchaseForm({ controllerName }) {
                 }));
                 const dupRows = mapEditLines(existing);
                 setLines(dupRows);
-                hydrateBatchOptions(dupRows).then(setLines);
+                hydrateBatchOptions(dupRows, String(purchase.warehouse_id || '')).then(setLines);
             } else {
                 const res = await api.get('purchases/create');
                 const m = res.data;
@@ -341,11 +423,26 @@ export default function PurchaseForm({ controllerName }) {
         } finally {
             setLoading(false);
         }
-    }, [id, isEdit, duplicateFrom]);
+    }, [id, isEdit, duplicateFrom, hydrateBatchOptions, showToast]);
 
     useEffect(() => {
         loadForm();
     }, [loadForm]);
+
+    useEffect(() => {
+        if (!header.warehouse_id) return undefined;
+        let cancelled = false;
+        setLines((prev) => {
+            if (!prev.some((l) => l.is_batch)) return prev;
+            hydrateBatchOptions(prev, header.warehouse_id).then((next) => {
+                if (!cancelled) setLines(next);
+            });
+            return prev;
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [header.warehouse_id, hydrateBatchOptions]);
 
     useEffect(() => {
         const term = productSearch.trim();
@@ -418,11 +515,13 @@ export default function PurchaseForm({ controllerName }) {
         let margin = parseFloat(defaults.profit_margin) || 0;
         let marginType = defaults.profit_margin_type || 'percentage';
         let price = parseFloat(defaults.price) || 0;
+        let maxPrice = defaults.max_price ?? '';
         let purchaseUnit = defaults.purchase_unit || '';
         let purchaseUnitId = defaults.purchase_unit_id || null;
         let units = defaults.units || [];
         let isImei = Boolean(defaults.is_imei);
         let isBatch = Boolean(defaults.is_batch);
+        let batchNumberMode = defaults.batch_number_mode === 'manual' ? 'manual' : 'auto';
         let batchNo = defaults.batch_no || '';
         let productBatchId = defaults.product_batch_id || null;
         let expiredDate = defaults.expired_date || '';
@@ -441,11 +540,13 @@ export default function PurchaseForm({ controllerName }) {
                 margin = parseFloat(d.profit_margin) || margin;
                 marginType = d.profit_margin_type || marginType;
                 price = parseFloat(d.product_price ?? d.price) || price;
+                maxPrice = d.product_max_price ?? d.max_price ?? maxPrice;
                 units = parseLimsUnits(d);
                 isImei = Boolean(d.is_imei ?? d[13]);
                 isBatch = Boolean(d.is_batch ?? d[10]);
-                batchNo = d.batch_no ?? batchNo;
-                productBatchId = d.product_batch_id ?? productBatchId;
+                batchNumberMode = isBatch && d.batch_number_mode === 'manual' ? 'manual' : 'auto';
+                batchNo = batchNumberMode === 'manual' ? '' : (d.batch_no ?? batchNo);
+                productBatchId = batchNumberMode === 'manual' ? null : (d.product_batch_id ?? productBatchId);
                 expiredDate = formatDateForInput(d.expired_date ?? expiredDate);
                 if (d.purchase_unit) {
                     purchaseUnit = d.purchase_unit;
@@ -470,61 +571,44 @@ export default function PurchaseForm({ controllerName }) {
             margin,
             marginType,
             price,
+            maxPrice,
             purchaseUnit,
             purchaseUnitId,
             units,
             isImei,
             isBatch,
+            batchNumberMode,
             batchNo,
             productBatchId,
             expiredDate,
         };
     };
 
-    const fetchBatchOptions = useCallback(async (productId) => {
-        try {
-            const params = new URLSearchParams({ product_id: String(productId) });
-            const res = await api.get(`purchases/product-batches?${params}`);
-            const data = res.data?.data ?? res.data;
-            const batches = Array.isArray(data?.batches) ? data.batches : [];
-            const nextBatchNo = data?.next_batch_no != null ? String(data.next_batch_no) : '';
-            return { batches, nextBatchNo };
-        } catch {
-            return { batches: [], nextBatchNo: '' };
-        }
-    }, []);
-
-    const hydrateBatchOptions = useCallback(async (rows) => {
-        const productIds = [...new Set(rows.filter((r) => r.is_batch).map((r) => r.product_id))];
-        if (!productIds.length) return rows;
-        const optionsByProduct = {};
-        await Promise.all(
-            productIds.map(async (productId) => {
-                optionsByProduct[productId] = await fetchBatchOptions(productId);
-            })
-        );
-        return rows.map((row) => {
-            if (!row.is_batch) return row;
-            const opts = optionsByProduct[row.product_id] || { batches: [], nextBatchNo: '' };
-            return {
-                ...row,
-                batch_options: opts.batches,
-                next_batch_no: opts.nextBatchNo,
-            };
-        });
-    }, [fetchBatchOptions]);
-
     const resolveBatchForLine = useCallback(
         async (line, { forceAuto = false } = {}) => {
             if (!line.is_batch) return line;
+            if (line.batch_number_mode === 'manual' && !forceAuto) {
+                return line;
+            }
             try {
                 const params = new URLSearchParams({
                     product_id: String(line.product_id),
                     net_unit_cost: String(line.net_unit_cost ?? 0),
                     net_unit_price: String(line.net_unit_price ?? 0),
+                    net_unit_max_price: String(line.net_unit_max_price ?? ''),
                 });
+                if (header.warehouse_id) {
+                    params.set('warehouse_id', String(header.warehouse_id));
+                }
                 const res = await api.get(`purchases/suggest-batch?${params}`);
                 const data = res.data?.data ?? res.data;
+                if (data?.batch_number_mode === 'manual') {
+                    return {
+                        ...line,
+                        batch_number_mode: 'manual',
+                        next_batch_no: data.next_batch_no != null ? String(data.next_batch_no) : line.next_batch_no,
+                    };
+                }
                 const batchNo = data.batch_no || '';
                 // Keep a manually chosen existing batch unless cost/price force a new auto batch
                 if (
@@ -557,7 +641,7 @@ export default function PurchaseForm({ controllerName }) {
                 return line;
             }
         },
-        []
+        [header.warehouse_id]
     );
 
     const applyBatchSelection = useCallback(
@@ -581,6 +665,9 @@ export default function PurchaseForm({ controllerName }) {
                     product_id: String(line.product_id),
                     batch_no: batchNo,
                 });
+                if (header.warehouse_id) {
+                    params.set('warehouse_id', String(header.warehouse_id));
+                }
                 const res = await api.get(`purchases/lookup-batch?${params}`);
                 const data = res.data?.data ?? res.data;
                 if (data?.found === false || data?.is_new_batch) {
@@ -601,6 +688,7 @@ export default function PurchaseForm({ controllerName }) {
 
                 const cost = parseFloat(data.net_unit_cost);
                 const price = parseFloat(data.net_unit_price);
+                const maxPrice = parseFloat(data.net_unit_max_price);
                 const margin = parseFloat(data.net_unit_margin);
                 let next = {
                     ...line,
@@ -611,6 +699,7 @@ export default function PurchaseForm({ controllerName }) {
                     expired_date: formatDateForInput(data.expired_date) || line.expired_date || '',
                     net_unit_cost: Number.isFinite(cost) ? cost : line.net_unit_cost,
                     net_unit_price: Number.isFinite(price) ? price : line.net_unit_price,
+                    net_unit_max_price: Number.isFinite(maxPrice) ? maxPrice : (data.net_unit_max_price ?? line.net_unit_max_price ?? ''),
                     net_unit_margin: Number.isFinite(margin) ? margin : line.net_unit_margin,
                     net_unit_margin_type: data.net_unit_margin_type || line.net_unit_margin_type,
                     base_unit_cost: Number.isFinite(cost) ? cost : line.base_unit_cost,
@@ -625,7 +714,7 @@ export default function PurchaseForm({ controllerName }) {
                 showToast(err?.message || 'Failed to load batch.', 'error');
             }
         },
-        [lines, resolveBatchForLine, showToast]
+        [lines, resolveBatchForLine, showToast, header.warehouse_id]
     );
 
     const appendLine = async (product, details) => {
@@ -650,27 +739,37 @@ export default function PurchaseForm({ controllerName }) {
             net_unit_margin: details.margin,
             net_unit_margin_type: details.marginType,
             net_unit_price: details.price,
+            net_unit_max_price: details.maxPrice ?? '',
             discount: 0,
             tax_rate: details.taxRate,
             tax_name: details.taxName,
             tax_method: details.taxMethod,
             is_imei: details.isImei,
             is_batch: Boolean(details.isBatch),
+            batch_number_mode: details.batchNumberMode === 'manual' ? 'manual' : 'auto',
             product_batch_id: details.isBatch ? (details.productBatchId || null) : null,
             batch_no: details.isBatch ? (details.batchNo || '') : '',
             expired_date: details.isBatch ? formatDateForInput(details.expiredDate) : '',
             catalog_cost: details.cost,
             catalog_price: details.price,
+            catalog_max_price: details.maxPrice ?? '',
             tax: 0,
             subtotal: details.cost,
         };
         const { subtotal, tax } = calcLine(line);
         let nextLine = { ...line, tax, subtotal, batch_locked: false, batch_options: [] };
         if (details.isBatch) {
-            const { batches, nextBatchNo } = await fetchBatchOptions(product.id);
+            const { batches, nextBatchNo, batchNumberMode } = await fetchBatchOptions(product.id);
             nextLine.batch_options = batches;
             nextLine.next_batch_no = nextBatchNo;
-            nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
+            nextLine.batch_number_mode = batchNumberMode || nextLine.batch_number_mode || 'auto';
+            if (nextLine.batch_number_mode === 'auto') {
+                nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
+            } else {
+                nextLine.batch_no = '';
+                nextLine.product_batch_id = null;
+                nextLine.is_new_batch = true;
+            }
         }
         setLines((prev) => [...prev, nextLine]);
         focusProductSearch();
@@ -777,6 +876,7 @@ export default function PurchaseForm({ controllerName }) {
             profit_margin: variant.profit_margin,
             profit_margin_type: variant.profit_margin_type,
             price: variant.price,
+            max_price: variant.max_price,
             purchase_unit_id: parent.purchase_unit_id,
             is_batch: parent.is_batch,
         };
@@ -809,6 +909,7 @@ export default function PurchaseForm({ controllerName }) {
             profit_margin: product.profit_margin,
             profit_margin_type: product.profit_margin_type,
             price: product.price,
+            max_price: product.max_price,
             purchase_unit_id: product.purchase_unit_id,
             is_batch: product.is_batch,
         });
@@ -844,6 +945,16 @@ export default function PurchaseForm({ controllerName }) {
                 return { ...next, subtotal, tax };
             })
         );
+    };
+
+    const validateLineMaxPrice = (lineIdKey, maxPriceValue, salePrice) => {
+        if (!maxPriceBelowSalePrice(salePrice, maxPriceValue)) return true;
+        showToast('Max price must be equal to or greater than sale price.', 'error');
+        const parsedPrice = parseOptionalPrice(salePrice);
+        if (parsedPrice != null) {
+            updateLine(lineIdKey, 'net_unit_max_price', parsedPrice.toFixed(2));
+        }
+        return false;
     };
 
     const handleStatusChange = (status) => {
@@ -898,6 +1009,17 @@ export default function PurchaseForm({ controllerName }) {
                     draft.profit_margin,
                     draft.profit_margin_type
                 ).toFixed(2);
+                if (priceExceedsMax(draft.product_price, draft.product_max_price)) {
+                    const cappedMax = parseOptionalPrice(draft.product_max_price);
+                    if (cappedMax != null) {
+                        draft.product_price = cappedMax.toFixed(2);
+                        draft.profit_margin = calcMarginFromPrice(
+                            displayCost,
+                            draft.product_price,
+                            draft.profit_margin_type
+                        ).toFixed(2);
+                    }
+                }
             } else if (patch.product_price != null && patch.profit_margin == null) {
                 draft.profit_margin = calcMarginFromPrice(
                     displayCost,
@@ -910,6 +1032,17 @@ export default function PurchaseForm({ controllerName }) {
                     draft.profit_margin,
                     draft.profit_margin_type
                 ).toFixed(2);
+                if (priceExceedsMax(draft.product_price, draft.product_max_price)) {
+                    const cappedMax = parseOptionalPrice(draft.product_max_price);
+                    if (cappedMax != null) {
+                        draft.product_price = cappedMax.toFixed(2);
+                        draft.profit_margin = calcMarginFromPrice(
+                            displayCost,
+                            draft.product_price,
+                            draft.profit_margin_type
+                        ).toFixed(2);
+                    }
+                }
             } else if (
                 patch.profit_margin_type != null
                 && displayCost > 0
@@ -920,6 +1053,17 @@ export default function PurchaseForm({ controllerName }) {
                     draft.profit_margin,
                     draft.profit_margin_type
                 ).toFixed(2);
+                if (priceExceedsMax(draft.product_price, draft.product_max_price)) {
+                    const cappedMax = parseOptionalPrice(draft.product_max_price);
+                    if (cappedMax != null) {
+                        draft.product_price = cappedMax.toFixed(2);
+                        draft.profit_margin = calcMarginFromPrice(
+                            displayCost,
+                            draft.product_price,
+                            draft.profit_margin_type
+                        ).toFixed(2);
+                    }
+                }
             }
 
             return { ...prev, draft };
@@ -957,6 +1101,7 @@ export default function PurchaseForm({ controllerName }) {
                     profit_margin: line.net_unit_margin,
                     profit_margin_type: line.net_unit_margin_type,
                     price: line.net_unit_price,
+                    max_price: line.net_unit_max_price,
                     purchase_unit_id: line.purchase_unit_id,
                 });
                 units = details.units || [];
@@ -1001,6 +1146,7 @@ export default function PurchaseForm({ controllerName }) {
                 profit_margin_type: line.net_unit_margin_type || 'percentage',
                 profit_margin: line.net_unit_margin,
                 product_price: line.net_unit_price,
+                product_max_price: line.net_unit_max_price ?? '',
                 tax_rate: line.tax_rate,
                 unit_index: unitIndex >= 0 ? unitIndex : 0,
             },
@@ -1026,6 +1172,10 @@ export default function PurchaseForm({ controllerName }) {
         }
         if (discountType === 'percentage' && unitDiscount > 100) {
             showToast('Discount percent cannot exceed 100.', 'error');
+            return;
+        }
+        if (priceExceedsMax(draft.product_price, draft.product_max_price)) {
+            showToast('Max price must be equal to or greater than sale price.', 'error');
             return;
         }
 
@@ -1058,6 +1208,7 @@ export default function PurchaseForm({ controllerName }) {
             net_unit_margin: parseFloat(draft.profit_margin) || 0,
             net_unit_margin_type: draft.profit_margin_type || 'percentage',
             net_unit_price: parseFloat(draft.product_price) || 0,
+            net_unit_max_price: draft.product_max_price ?? '',
             discount,
             tax_rate: taxRate,
             tax_name: taxMeta?.name || (taxRate === 0 ? 'No Tax' : currentLine.tax_name),
@@ -1067,13 +1218,18 @@ export default function PurchaseForm({ controllerName }) {
         nextLine = { ...nextLine, subtotal, tax };
 
         if (nextLine.is_batch) {
-            // Cost/price edited → auto-assign batch (increment or reuse matching cost+price)
-            nextLine = { ...nextLine, batch_locked: false };
-            nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
+            if (nextLine.batch_number_mode !== 'manual') {
+                // Cost/price edited → auto-assign batch (increment or reuse matching cost+price)
+                nextLine = { ...nextLine, batch_locked: false };
+                nextLine = await resolveBatchForLine(nextLine, { forceAuto: true });
+            }
             if (!nextLine.batch_options?.length) {
-                const { batches, nextBatchNo } = await fetchBatchOptions(nextLine.product_id);
+                const { batches, nextBatchNo, batchNumberMode } = await fetchBatchOptions(nextLine.product_id);
                 nextLine.batch_options = batches;
                 nextLine.next_batch_no = nextBatchNo;
+                if (batchNumberMode) {
+                    nextLine.batch_number_mode = batchNumberMode;
+                }
             }
         }
 
@@ -1087,12 +1243,27 @@ export default function PurchaseForm({ controllerName }) {
             showToast('Warehouse is required.', 'error');
             return;
         }
+        if (!header.supplier_id) {
+            showToast('Supplier is required. Please select a supplier to save this purchase.', 'error');
+            return;
+        }
         if (!header.currency_id) {
             showToast('Currency is required.', 'error');
             return;
         }
         if (lines.length === 0) {
             showToast('Add at least one product.', 'error');
+            return;
+        }
+
+        const invalidPriceLine = totals.updated.find((l) =>
+            maxPriceBelowSalePrice(l.net_unit_price, l.net_unit_max_price)
+        );
+        if (invalidPriceLine) {
+            showToast(
+                `Max price must be equal to or greater than sale price for ${invalidPriceLine.name || invalidPriceLine.code}.`,
+                'error'
+            );
             return;
         }
 
@@ -1128,6 +1299,7 @@ export default function PurchaseForm({ controllerName }) {
             net_unit_margin: l.net_unit_margin,
             net_unit_margin_type: l.net_unit_margin_type,
             net_unit_price: l.net_unit_price,
+            net_unit_max_price: l.net_unit_max_price ?? '',
             discount: l.discount,
             discount_type: l.discount_type || 'flat',
             tax_rate: l.tax_rate,
@@ -1226,6 +1398,20 @@ export default function PurchaseForm({ controllerName }) {
         );
     }
 
+    if (loadBlockedMessage) {
+        return (
+            <PageLayout eyebrow="Purchase" title="Edit Purchase">
+                <Toast toast={toast} />
+                <div className="ui-empty" style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+                    <p style={{ marginBottom: '1rem', fontSize: '1.05rem' }}>{loadBlockedMessage}</p>
+                    <button type="button" className="ui-btn primary" onClick={() => navigate('/purchases')}>
+                        Back to purchases
+                    </button>
+                </div>
+            </PageLayout>
+        );
+    }
+
     const supplierOptions = [
         { value: '', label: 'Select supplier…' },
         ...(meta?.suppliers || []).map((s) => ({
@@ -1274,8 +1460,9 @@ export default function PurchaseForm({ controllerName }) {
                                 options={[{ value: '', label: 'Select…' }, ...warehouseOptions]}
                             />
                         </FormField>
-                        <FormField label="Supplier">
+                        <FormField label="Supplier" required>
                             <SelectInput
+                                required
                                 value={header.supplier_id}
                                 onChange={(e) => handleSupplierChange(e.target.value)}
                                 options={supplierOptions}
@@ -1366,6 +1553,7 @@ export default function PurchaseForm({ controllerName }) {
                                     <th>Margin</th>
                                     <th>Margin type</th>
                                     <th>Price</th>
+                                    <th>Max price</th>
                                     <th>Discount</th>
                                     <th>Disc. type</th>
                                     <th>Tax</th>
@@ -1377,7 +1565,7 @@ export default function PurchaseForm({ controllerName }) {
                                 {lines.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={(header.status === 2 ? 13 : 12) + (hasBatchLines ? 2 : 0)}
+                                            colSpan={(header.status === 2 ? 14 : 13) + (hasBatchLines ? 2 : 0)}
                                             className="ui-empty"
                                         >
                                             No products — search above to add
@@ -1403,11 +1591,11 @@ export default function PurchaseForm({ controllerName }) {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        className="ui-btn ghost sm"
+                                                        className="ui-btn ghost sm icon-only"
                                                         title="Edit line"
                                                         onClick={() => openLineEditor(l)}
                                                     >
-                                                        <i className="fa fa-pencil ui-btn-icon" />
+                                                        <BtnIcon icon={faPenToSquare} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -1434,38 +1622,81 @@ export default function PurchaseForm({ controllerName }) {
                                             {hasBatchLines && (
                                                 <td>
                                                     {l.is_batch ? (
-                                                        <div className="ui-inline-field" style={{ minWidth: 150 }}>
-                                                            <div className="ui-inline-field-main">
-                                                                <TextInput
-                                                                    className="sm"
-                                                                    value={l.batch_no || ''}
-                                                                    placeholder="Auto"
-                                                                    readOnly
-                                                                />
+                                                        l.batch_number_mode === 'manual' ? (
+                                                            <div className="ui-inline-field" style={{ minWidth: 150 }}>
+                                                                <div className="ui-inline-field-main">
+                                                                    <TextInput
+                                                                        className="sm"
+                                                                        value={l.batch_no || ''}
+                                                                        placeholder="Enter batch no"
+                                                                        required
+                                                                        onChange={(e) => updateLine(l._id, 'batch_no', e.target.value)}
+                                                                    />
+                                                                </div>
+                                                                {(l.batch_options || []).length > 0 && (
+                                                                    <div className="ui-inline-field-action">
+                                                                        <select
+                                                                            className="ui-select-field"
+                                                                            value={
+                                                                                l.batch_locked && l.product_batch_id
+                                                                                    ? String(l.batch_no)
+                                                                                    : ''
+                                                                            }
+                                                                            title="Select an existing batch"
+                                                                            onChange={(e) => {
+                                                                                const v = e.target.value;
+                                                                                if (v) applyBatchSelection(l._id, v);
+                                                                            }}
+                                                                        >
+                                                                            <option value="">Existing…</option>
+                                                                            {(l.batch_options || []).map((b) => (
+                                                                                <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
+                                                                                    {b.batch_no}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                            <div className="ui-inline-field-action">
-                                                                <select
-                                                                    className="ui-select-field"
-                                                                    value={
-                                                                        l.batch_locked && l.product_batch_id
-                                                                            ? String(l.batch_no)
-                                                                            : '__auto__'
-                                                                    }
-                                                                    title="Auto-increment, or select an existing batch to load its cost and price"
-                                                                    onChange={(e) => applyBatchSelection(l._id, e.target.value)}
-                                                                >
-                                                                    <option value="__auto__">Auto</option>
-                                                                    {(l.batch_options || []).map((b) => (
-                                                                        <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
-                                                                            {b.batch_no}
-                                                                            {b.net_unit_cost != null
-                                                                                ? ` (${Number(b.net_unit_cost).toFixed(2)})`
-                                                                                : ''}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
+                                                        ) : (
+                                                            <div className="ui-inline-field" style={{ minWidth: 150 }}>
+                                                                <div className="ui-inline-field-main">
+                                                                    <TextInput
+                                                                        className="sm"
+                                                                        value={l.batch_no || ''}
+                                                                        placeholder="Auto"
+                                                                        readOnly
+                                                                    />
+                                                                </div>
+                                                                <div className="ui-inline-field-action">
+                                                                    <select
+                                                                        className="ui-select-field"
+                                                                        value={
+                                                                            l.batch_locked && l.product_batch_id
+                                                                                ? String(l.batch_no)
+                                                                                : '__auto__'
+                                                                        }
+                                                                        title="Auto-increment, or select an existing batch to load its cost and price"
+                                                                        onChange={(e) => applyBatchSelection(l._id, e.target.value)}
+                                                                    >
+                                                                        <option value="__auto__">Auto</option>
+                                                                        {(l.batch_options || []).map((b) => (
+                                                                            <option key={b.product_batch_id || b.batch_no} value={b.batch_no}>
+                                                                                {b.batch_no}
+                                                                                {b.net_unit_price != null
+                                                                                    ? ` (${Number(b.net_unit_price).toFixed(2)}`
+                                                                                    : ''}
+                                                                                {b.net_unit_max_price != null && b.net_unit_max_price !== ''
+                                                                                    ? ` / ${Number(b.net_unit_max_price).toFixed(2)})`
+                                                                                    : b.net_unit_price != null
+                                                                                        ? ')'
+                                                                                        : ''}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
                                                             </div>
-                                                        </div>
+                                                        )
                                                     ) : (
                                                         <span className="cell-muted">—</span>
                                                     )}
@@ -1491,13 +1722,25 @@ export default function PurchaseForm({ controllerName }) {
                                             <td className="cell-num">{Number(l.net_unit_margin).toFixed(2)}</td>
                                             <td>{marginTypeLabel(l.net_unit_margin_type)}</td>
                                             <td className="cell-num">{Number(l.net_unit_price).toFixed(2)}</td>
+                                            <td>
+                                                <NumberInput
+                                                    className="sm"
+                                                    min={l.net_unit_price ?? 0}
+                                                    step="0.01"
+                                                    value={l.net_unit_max_price ?? ''}
+                                                    placeholder="—"
+                                                    title="Must be equal to or greater than sale price"
+                                                    onChange={(e) => updateLine(l._id, 'net_unit_max_price', e.target.value)}
+                                                    onBlur={(e) => validateLineMaxPrice(l._id, e.target.value, l.net_unit_price)}
+                                                />
+                                            </td>
                                             <td className="cell-num">{Number(l.discount).toFixed(2)}</td>
                                             <td>{discountTypeLabel(l.discount_type)}</td>
                                             <td className="cell-num">{Number(tax).toFixed(2)}</td>
                                             <td className="cell-num">{Number(subtotal).toFixed(2)}</td>
                                             <td>
                                                 <button type="button" className="ui-btn danger sm" onClick={() => removeLine(l._id)}>
-                                                    <i className="fa fa-trash ui-btn-icon" /> Delete
+                                                    <BtnIcon icon={faTrash} /> Delete
                                                 </button>
                                             </td>
                                         </tr>
@@ -1508,7 +1751,7 @@ export default function PurchaseForm({ controllerName }) {
                             <tfoot>
                                 <tr>
                                     <td
-                                        colSpan={(header.status === 2 ? 12 : 11) + (hasBatchLines ? 2 : 0) - 2}
+                                        colSpan={(header.status === 2 ? 13 : 12) + (hasBatchLines ? 2 : 0) - 2}
                                         style={{ textAlign: 'right' }}
                                     >
                                         Grand total
@@ -1620,11 +1863,11 @@ export default function PurchaseForm({ controllerName }) {
 
                 <div className="ui-btn-group">
                     <button type="submit" className="ui-btn primary sm" disabled={submitting}>
-                        <i className={`fa ${submitting ? 'fa-spinner fa-spin' : isEdit ? 'fa-save' : 'fa-check'} ui-btn-icon`} />
+                        <BtnIcon icon={submitting ? faSpinner : isEdit ? faSave : faCheck} spin={submitting} />
                         {submitting ? 'Saving…' : isEdit ? 'Update' : 'Submit'}
                     </button>
                     <button type="button" className="ui-btn ghost sm" onClick={() => navigate('/purchases')}>
-                        <i className="fa fa-times ui-btn-icon" /> Cancel
+                        <BtnIcon icon={faTimes} /> Cancel
                     </button>
                 </div>
             </form>
@@ -1636,7 +1879,7 @@ export default function PurchaseForm({ controllerName }) {
                 footer={(
                     <>
                         <button type="button" className="ui-btn ghost sm" onClick={closeLineEditor}>
-                            <i className="fa fa-times ui-btn-icon" /> Cancel
+                            <BtnIcon icon={faTimes} /> Cancel
                         </button>
                         <button
                             type="button"
@@ -1644,7 +1887,7 @@ export default function PurchaseForm({ controllerName }) {
                             disabled={lineEditModal.loading || !lineEditModal.draft}
                             onClick={saveLineEditor}
                         >
-                            <i className="fa fa-check ui-btn-icon" /> Update
+                            <BtnIcon icon={faCheck} /> Update
                         </button>
                     </>
                 )}
@@ -1702,8 +1945,35 @@ export default function PurchaseForm({ controllerName }) {
                             <NumberInput
                                 step="0.01"
                                 min="0"
+                                max={lineEditModal.draft.product_max_price !== '' ? lineEditModal.draft.product_max_price : undefined}
                                 value={lineEditModal.draft.product_price}
                                 onChange={(e) => patchLineEditDraft({ product_price: e.target.value })}
+                            />
+                        </FormField>
+                        <FormField label="Max price">
+                            <NumberInput
+                                step="0.01"
+                                min={lineEditModal.draft.product_price ?? 0}
+                                value={lineEditModal.draft.product_max_price}
+                                title="Must be equal to or greater than sale price"
+                                onChange={(e) => patchLineEditDraft({ product_max_price: e.target.value })}
+                                onBlur={(e) => {
+                                    if (
+                                        maxPriceBelowSalePrice(
+                                            lineEditModal.draft.product_price,
+                                            e.target.value
+                                        )
+                                    ) {
+                                        showToast(
+                                            'Max price must be equal to or greater than sale price.',
+                                            'error'
+                                        );
+                                        const parsedPrice = parseOptionalPrice(lineEditModal.draft.product_price);
+                                        if (parsedPrice != null) {
+                                            patchLineEditDraft({ product_max_price: parsedPrice.toFixed(2) });
+                                        }
+                                    }
+                                }}
                             />
                         </FormField>
                         <FormField label="Tax rate">
@@ -1807,7 +2077,7 @@ export default function PurchaseForm({ controllerName }) {
                                                             className={`ui-btn sm ${inGrid ? 'ghost' : 'primary'}`}
                                                             onClick={() => addVariantFromPicker(v)}
                                                         >
-                                                            <i className={`fa ${inGrid ? 'fa-plus' : 'fa-plus-circle'} ui-btn-icon`} />
+                                                            <BtnIcon icon={inGrid ? faPlus : faPlusCircle} />
                                                             {inGrid ? '+ Qty' : 'Add'}
                                                         </button>
                                                     </td>
@@ -1820,7 +2090,7 @@ export default function PurchaseForm({ controllerName }) {
                         </div>
                         <div className="ui-form-footer">
                             <button type="button" className="ui-btn primary sm" onClick={closeVariantPicker}>
-                                <i className="fa fa-check ui-btn-icon" /> Done
+                                <BtnIcon icon={faCheck} /> Done
                             </button>
                         </div>
                     </>

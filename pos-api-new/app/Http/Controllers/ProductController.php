@@ -29,6 +29,7 @@ use Illuminate\Http\Request;
 use App\Models\GeneralSetting;
 use App\Models\ProductVariant;
 use App\Models\ProductPurchase;
+use App\Models\ProductAdjustment;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Models\Product_Supplier;
@@ -485,6 +486,165 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * SPA product list export — same filters/search as product-data, plain field values for Excel.
+     */
+    public function exportProductData(Request $request)
+    {
+        $allowedFields = [
+            'name' => 'Name',
+            'code' => 'Code',
+            'alt_code' => 'Alt Code',
+            'brand' => 'Brand',
+            'category' => 'Category',
+            'qty' => 'Quantity',
+            'unit' => 'Unit',
+            'price' => 'Price',
+            'cost' => 'Cost',
+            'max_price' => 'Max Price',
+            'wholesale_price' => 'Wholesale Price',
+            'type' => 'Type',
+            'alert_quantity' => 'Alert Qty',
+        ];
+
+        $requested = $request->input('fields', array_keys($allowedFields));
+        if (!is_array($requested)) {
+            $requested = preg_split('/\s*,\s*/', (string) $requested) ?: [];
+        }
+        $fields = array_values(array_filter(
+            array_map('strval', $requested),
+            fn ($f) => isset($allowedFields[$f])
+        ));
+        if ($fields === []) {
+            $fields = ['name', 'code', 'brand', 'category', 'qty', 'price'];
+        }
+
+        $filtered_data = [
+            'warehouse_id' => $request->input('warehouse_id', '0'),
+            'product_type' => $request->input('product_type', 'all'),
+            'brand_id'     => $request->input('brand_id', '0'),
+            'category_id'  => $request->input('category_id', '0'),
+            'unit_id'      => $request->input('unit_id', '0'),
+            'tax_id'       => $request->input('tax_id', '0'),
+            'is_imei'      => $request->input('imeiorvariant') == 'imei' ? '1' : '0',
+            'is_variant'   => $request->input('imeiorvariant') == 'variant' ? '1' : '0',
+            'is_batch'     => $request->input('imeiorvariant') == 'batch' ? '1' : '0',
+        ];
+        $warehouse_id = (int) $filtered_data['warehouse_id'];
+        $stockFilter = $request->input('stock_filter', 'all');
+
+        $baseQuery = Product::with(['category', 'brand', 'unit'])
+            ->where('products.is_active', true);
+
+        if ($stockFilter === 'with') {
+            $baseQuery->where('products.qty', '>', 0);
+        } elseif ($stockFilter === 'without') {
+            $baseQuery->where('products.qty', '<=', 0);
+        }
+
+        if ($filtered_data['product_type'] != 'all') {
+            $baseQuery->where('type', $filtered_data['product_type']);
+        }
+        if ($filtered_data['brand_id'] != '0') {
+            $baseQuery->where('brand_id', $filtered_data['brand_id']);
+        }
+        if ($filtered_data['category_id'] != '0') {
+            $baseQuery->where('category_id', $filtered_data['category_id']);
+        }
+        if ($filtered_data['unit_id'] != '0') {
+            $baseQuery->where('unit_id', $filtered_data['unit_id']);
+        }
+        if ($filtered_data['tax_id'] != '0') {
+            $baseQuery->where('tax_id', $filtered_data['tax_id']);
+        }
+        if ($filtered_data['is_imei'] != '0') {
+            $baseQuery->where('is_imei', $filtered_data['is_imei']);
+        }
+        if ($filtered_data['is_variant'] != '0') {
+            $baseQuery->where('is_variant', $filtered_data['is_variant']);
+        }
+        if ($filtered_data['is_batch'] != '0') {
+            $baseQuery->where('is_batch', $filtered_data['is_batch']);
+        }
+
+        $query = clone $baseQuery;
+        $search = $request->input('search.value', $request->input('search', ''));
+        if (!empty($search)) {
+            $productIds = Product::query()
+                ->where('name', 'LIKE', "%{$search}%")
+                ->orWhere('code', 'LIKE', "%{$search}%")
+                ->pluck('id');
+            $variantIds = ProductVariant::where('item_code', 'LIKE', "%{$search}%")
+                ->pluck('product_id');
+            $brandIds = Brand::where('title', 'LIKE', "%{$search}%")->pluck('id');
+            $categoryIds = Category::where('name', 'LIKE', "%{$search}%")->pluck('id');
+
+            $query->where(function ($q) use ($productIds, $variantIds, $brandIds, $categoryIds) {
+                if ($productIds->isNotEmpty()) {
+                    $q->whereIn('products.id', $productIds);
+                }
+                if ($variantIds->isNotEmpty()) {
+                    $q->orWhereIn('products.id', $variantIds);
+                }
+                if ($brandIds->isNotEmpty()) {
+                    $q->orWhereIn('products.brand_id', $brandIds);
+                }
+                if ($categoryIds->isNotEmpty()) {
+                    $q->orWhereIn('products.category_id', $categoryIds);
+                }
+            });
+        }
+
+        $products = $query->orderBy('products.name')->limit(20000)->get();
+        $rows = [];
+        foreach ($products as $product) {
+            if ($warehouse_id > 0 && $product->type == 'standard') {
+                $qty = Product_Warehouse::where([
+                    ['product_id', $product->id],
+                    ['warehouse_id', $warehouse_id],
+                ])->sum('qty');
+            } elseif ($product->type == 'standard') {
+                $qty = Product_Warehouse::where('product_id', $product->id)->sum('qty');
+            } else {
+                $qty = $product->qty;
+            }
+
+            $map = [
+                'name' => $product->name,
+                'code' => $product->code,
+                'alt_code' => $product->alt_code ?? '',
+                'brand' => $product->brand->title ?? 'N/A',
+                'category' => $product->category->name ?? 'N/A',
+                'qty' => (float) $qty,
+                'unit' => $product->unit->unit_name ?? 'N/A',
+                'price' => (float) $product->price,
+                'cost' => (float) $product->cost,
+                'max_price' => $product->max_price !== null ? (float) $product->max_price : '',
+                'wholesale_price' => $product->wholesale_price !== null ? (float) $product->wholesale_price : '',
+                'type' => $product->type,
+                'alert_quantity' => $product->alert_quantity ?? '',
+            ];
+
+            $row = [];
+            foreach ($fields as $field) {
+                $row[$field] = $map[$field] ?? '';
+            }
+            $rows[] = $row;
+        }
+
+        $headers = [];
+        foreach ($fields as $field) {
+            $headers[$field] = $allowedFields[$field];
+        }
+
+        return $this->spaJson($request, [
+            'fields' => $fields,
+            'headers' => $headers,
+            'data' => $rows,
+            'count' => count($rows),
+        ]);
+    }
+
     public function create()
     {
         $role = Role::firstOrCreate(['id' => Auth::user()->role_id]);
@@ -592,44 +752,39 @@ class ProductController extends Controller
             }
         }
 
-        $variantOptions = $product->variant_option ? json_decode($product->variant_option, true) : [];
-        $variantValues = $product->variant_value ? json_decode($product->variant_value, true) : [];
-        $mastersByName = collect(VariantMasterController::listForProductForm())->keyBy('name');
+        $mastersByName = collect(VariantMasterController::listForProductForm())->keyBy(
+            fn ($m) => strtolower(trim((string) ($m['name'] ?? '')))
+        );
+        // Remapped by value → correct master (e.g. 28 under Numeric Size, not Size).
         $productSelections = app(VariantMasterImportService::class)->productVariantSelections((int) $product->id);
         $variants = [];
-        if (is_array($variantOptions) && count($variantOptions) > 0) {
-            foreach ($variantOptions as $idx => $option) {
-                $valueStr = $variantValues[$idx] ?? '';
-                $selected = array_values(array_filter(array_map('trim', explode(',', (string) $valueStr))));
-                if (!empty($productSelections[$option])) {
-                    $selected = array_values(array_unique(array_merge($selected, $productSelections[$option])));
-                }
-                $master = $mastersByName->get($option);
-                $available = $master
-                    ? array_map(fn ($v) => $v['value'], $master['values'] ?? [])
-                    : $selected;
-                $available = array_values(array_unique(array_merge($available, $selected)));
-                $variants[] = [
-                    'master_id' => $master['id'] ?? null,
-                    'name' => $option,
-                    'selectedValues' => $selected,
-                    'availableValues' => $available,
-                ];
+        foreach ($productSelections as $option => $selected) {
+            $master = $mastersByName->get(strtolower(trim((string) $option)));
+            if (!$master) {
+                $master = collect(VariantMasterController::listForProductForm())
+                    ->first(fn ($m) => strcasecmp((string) ($m['name'] ?? ''), (string) $option) === 0);
             }
-        } elseif (!empty($productSelections)) {
-            foreach ($productSelections as $option => $selected) {
-                $master = $mastersByName->get($option);
-                $available = $master
-                    ? array_map(fn ($v) => $v['value'], $master['values'] ?? [])
-                    : $selected;
-                $available = array_values(array_unique(array_merge($available, $selected)));
-                $variants[] = [
-                    'master_id' => $master['id'] ?? null,
-                    'name' => $option,
-                    'selectedValues' => $selected,
-                    'availableValues' => $available,
-                ];
+            $available = $master
+                ? array_map(fn ($v) => $v['value'], $master['values'] ?? [])
+                : [];
+            $availableLookup = array_fill_keys(array_map('strtolower', $available), true);
+            $selectedFiltered = array_values(array_filter(
+                array_map('trim', $selected),
+                fn ($v) => $v !== '' && (
+                    empty($availableLookup) || isset($availableLookup[strtolower($v)])
+                )
+            ));
+            // Skip empty categories (no attributes selected for this master).
+            if ($selectedFiltered === []) {
+                continue;
             }
+            // Keep master chip list clean — do not merge selected into available.
+            $variants[] = [
+                'master_id' => $master['id'] ?? null,
+                'name' => $master['name'] ?? $option,
+                'selectedValues' => $selectedFiltered,
+                'availableValues' => $available ?: $selectedFiltered,
+            ];
         }
 
         $variantCombinations = [];
@@ -683,11 +838,15 @@ class ProductController extends Controller
         }
 
         $diffPrices = [];
+        $diffMaxPrices = [];
         foreach ($initial['warehouses'] ?? [] as $warehouse) {
             $warehouseId = is_array($warehouse) ? $warehouse['id'] : $warehouse->id;
             $pw = Product_Warehouse::FindProductWithoutVariant($product->id, $warehouseId)->first();
             if ($pw && $pw->price !== null && $pw->price !== '') {
                 $diffPrices[$warehouseId] = (float) $pw->price;
+            }
+            if ($pw && $pw->max_price !== null && $pw->max_price !== '') {
+                $diffMaxPrices[$warehouseId] = (float) $pw->max_price;
             }
         }
 
@@ -727,6 +886,7 @@ class ProductController extends Controller
             'variant_combinations' => $variantCombinations,
             'combo_products' => $comboProducts,
             'diff_prices' => $diffPrices,
+            'diff_max_prices' => $diffMaxPrices,
             'warehouse_stock' => $warehouseStock,
             'variant_warehouse_stock' => $variantWarehouseStock,
             'related_products_selected' => $relatedProducts,
@@ -736,7 +896,29 @@ class ProductController extends Controller
             'existing_file' => $product->file,
             'initial_stock' => $initialStock,
             'has_initial_stock' => $hasInitialStock,
+            'batch_number_mode_locked' => (bool) $product->is_batch
+                && $this->productHasPurchaseOrAdjustment((int) $product->id),
         ]));
+    }
+
+    /** True when product appears on any purchase or stock adjustment line. */
+    protected function productHasPurchaseOrAdjustment(int $productId): bool
+    {
+        if ($productId <= 0) {
+            return false;
+        }
+
+        if (ProductPurchase::where('product_id', $productId)->exists()) {
+            return true;
+        }
+
+        if (\Schema::hasTable('product_adjustments')
+            && ProductAdjustment::where('product_id', $productId)->exists()
+        ) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -833,9 +1015,6 @@ class ProductController extends Controller
             'alt_code' => [
                 'nullable',
                 'max:191',
-                Rule::unique('products')->where(function ($query) {
-                    return $query->where('is_active', 1);
-                }),
             ],
             'max_price' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -848,6 +1027,9 @@ class ProductController extends Controller
         if (array_key_exists('max_price', $data) && $data['max_price'] === '') {
             $data['max_price'] = null;
         }
+
+        $this->validateProductPriceAgainstMax($data);
+        $this->validateDiffWarehousePricing($request);
 
         // handle warranty and guarantee
         if (!isset($data['warranty'])) {
@@ -931,6 +1113,14 @@ class ProductController extends Controller
             $data['is_batch'] = null;
         }
 
+        if (!empty($data['is_batch'])) {
+            $mode = strtolower(trim((string) ($data['batch_number_mode'] ?? 'auto')));
+            $data['batch_number_mode'] = in_array($mode, ['auto', 'manual'], true) ? $mode : 'auto';
+        } else {
+            // Only batch products keep a mode; clear for all others.
+            $data['batch_number_mode'] = null;
+        }
+
         if (!isset($data['is_imei'])) {
             $data['is_imei'] = null;
         }
@@ -1007,12 +1197,12 @@ class ProductController extends Controller
         }
         if(count($custom_field_data))
             DB::table('products')->where('id', $lims_product_data->id)->update($custom_field_data);
-        //dealing with initial stock and auto purchase
+        //dealing with initial stock and auto purchase (not for variant, batch, or IMEI)
         $initial_stock = 0;
-        if(isset($data['is_initial_stock']) && !isset($data['is_variant']) && !isset($data['is_batch'])) {
+        if (isset($data['is_initial_stock']) && !isset($data['is_variant']) && !isset($data['is_batch']) && !isset($data['is_imei'])) {
             foreach ($data['stock_warehouse_id'] ?? [] as $key => $warehouse_id) {
                 $stock = $data['stock'][$key] ?? 0;
-                if($stock > 0) {
+                if ($stock > 0) {
                     $this->autoPurchase($lims_product_data, $warehouse_id, $stock);
                     $initial_stock += $stock;
                 }
@@ -1025,11 +1215,9 @@ class ProductController extends Controller
         //dealing with product variant
         if(!isset($data['is_batch']))
             $data['is_batch'] = null;
-        $variant_ids = [];
         if(isset($data['is_variant'])) {
             foreach ($data['variant_name'] as $key => $variant_name) {
                 $lims_variant_data = Variant::firstOrCreate(['name' => $data['variant_name'][$key]]);
-                $variant_ids[] = $lims_variant_data->id;
                 $product_variant = ProductVariant::firstOrNew([
                     'product_id' => $lims_product_data->id,
                     'variant_id' => $lims_variant_data->id,
@@ -1041,55 +1229,10 @@ class ProductController extends Controller
                 $product_variant->position = $key + 1;
                 $product_variant->save();
             }
-
-            $warehouse_ids = Warehouse::where('is_active', true)->pluck('id');
-            foreach ($warehouse_ids as $warehouse_id) {
-                foreach ($variant_ids as $variant_id) {
-                    Product_Warehouse::firstOrCreate(
-                        [
-                            'product_id' => $lims_product_data->id,
-                            'variant_id' => $variant_id,
-                            'warehouse_id' => $warehouse_id,
-                        ],
-                        ['qty' => 0]
-                    );
-                }
-            }
         }
-        if(isset($data['is_diffPrice'])) {
-            foreach ($data['diff_price'] as $key => $diff_price) {
-                if($diff_price) {
-                    Product_Warehouse::firstOrCreate([
-                        "product_id" => $lims_product_data->id,
-                        "warehouse_id" => $data["warehouse_id"][$key],
-                        "qty" => 0,
-                        "price" => $diff_price
-                    ]);
-                }
-            }
-        }
-        elseif(!isset($data['is_initial_stock']) && !isset($data['is_batch']) && config('without_stock') == 'yes') {
-            $warehouse_ids = Warehouse::where('is_active', true)->pluck('id');
-            foreach ($warehouse_ids as $warehouse_id) {
-                if(count($variant_ids)) {
-                    foreach ($variant_ids as $variant_id) {
-                        Product_Warehouse::firstOrCreate([
-                            "product_id" => $lims_product_data->id,
-                            "variant_id" => $variant_id,
-                            "warehouse_id" => $warehouse_id,
-                            "qty" => 0,
-                        ]);
-                    }
-                }
-                else {
-                    Product_Warehouse::firstOrCreate([
-                        "product_id" => $lims_product_data->id,
-                        "warehouse_id" => $warehouse_id,
-                        "qty" => 0,
-                    ]);
-                }
-            }
-        }
+        $this->ensureProductWarehouseRows($lims_product_data);
+        $lims_product_data->refresh();
+        $this->applyProductWarehousePricing($lims_product_data, $data);
         $this->cacheForget('product_list');
         $this->cacheForget('product_list_with_variant');
         if ($request->ajax() || $this->wantsSpaResponse($request)) {
@@ -1136,21 +1279,64 @@ class ProductController extends Controller
             $cost = number_format($product_data->cost * $stock, 2, '.', '');
         }
 
-        $product_warehouse_data = Product_Warehouse::select('id', 'qty')
-                                ->where([
-                                    ['product_id', $product_data->id],
-                                    ['warehouse_id', $warehouse_id]
-                                ])->first();
-        if($product_warehouse_data) {
-            $product_warehouse_data->qty += $stock;
-            $product_warehouse_data->save();
-        }
-        else {
-            $lims_product_warehouse_data = new Product_Warehouse();
-            $lims_product_warehouse_data->product_id = $product_data->id;
-            $lims_product_warehouse_data->warehouse_id = $warehouse_id;
-            $lims_product_warehouse_data->qty = $stock;
-            $lims_product_warehouse_data->save();
+        $product_batch_id = null;
+        if ($product_data->is_batch) {
+            $batchNo = (string) (ProductBatch::where('product_id', $product_data->id)->count() + 1);
+            $product_batch = ProductBatch::create([
+                'product_id' => $product_data->id,
+                'batch_no' => $batchNo,
+                'expired_date' => date('Y-m-d', strtotime('+1 year')),
+                'qty' => $stock,
+            ]);
+            $product_batch_id = $product_batch->id;
+
+            $product_warehouse_data = Product_Warehouse::where([
+                ['product_id', $product_data->id],
+                ['warehouse_id', $warehouse_id],
+                ['product_batch_id', $product_batch_id],
+            ])->first();
+            if ($product_warehouse_data) {
+                $product_warehouse_data->qty += $stock;
+                $product_warehouse_data->save();
+            } else {
+                $lims_product_warehouse_data = new Product_Warehouse();
+                $lims_product_warehouse_data->product_id = $product_data->id;
+                $lims_product_warehouse_data->warehouse_id = $warehouse_id;
+                $lims_product_warehouse_data->product_batch_id = $product_batch_id;
+                $lims_product_warehouse_data->qty = $stock;
+                if ($product_data->price) {
+                    $lims_product_warehouse_data->price = $product_data->price;
+                }
+                if ($product_data->max_price) {
+                    $lims_product_warehouse_data->max_price = $product_data->max_price;
+                }
+                $lims_product_warehouse_data->save();
+            }
+        } else {
+            $product_warehouse_data = Product_Warehouse::select('id', 'qty')
+                ->where([
+                    ['product_id', $product_data->id],
+                    ['warehouse_id', $warehouse_id],
+                ])
+                ->whereNull('product_batch_id')
+                ->whereNull('variant_id')
+                ->first();
+            if ($product_warehouse_data) {
+                $product_warehouse_data->qty += $stock;
+                $product_warehouse_data->save();
+            } else {
+                $lims_product_warehouse_data = new Product_Warehouse();
+                $lims_product_warehouse_data->product_id = $product_data->id;
+                $lims_product_warehouse_data->warehouse_id = $warehouse_id;
+                $lims_product_warehouse_data->qty = $stock;
+                if ($product_data->price) {
+                    $lims_product_warehouse_data->price = $product_data->price;
+                }
+                if ($product_data->max_price) {
+                    $lims_product_warehouse_data->max_price = $product_data->max_price;
+                }
+                $lims_product_warehouse_data->save();
+            }
         }
         $data['order_tax'] = 0;
         $data['grand_total'] = $data['total_cost'];
@@ -1162,6 +1348,7 @@ class ProductController extends Controller
         ProductPurchase::create([
             'purchase_id' => $purchase_data->id,
             'product_id' => $product_data->id,
+            'product_batch_id' => $product_batch_id,
             'qty' => $stock,
             'recieved' => $stock,
             'purchase_unit_id' => $product_data->unit_id,
@@ -1208,6 +1395,241 @@ class ProductController extends Controller
         }
 
         return $initialStock;
+    }
+
+    /**
+     * Apply warehouse price/max_price after product rows exist.
+     */
+    private function nullableNumericPrice($value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function assertPriceNotAboveMax(?float $price, ?float $maxPrice, string $fieldLabel = 'Price'): void
+    {
+        if ($price === null || $maxPrice === null) {
+            return;
+        }
+
+        if ($price > $maxPrice) {
+            throw ValidationException::withMessages([
+                'price' => "{$fieldLabel} cannot be higher than max price.",
+            ]);
+        }
+    }
+
+    private function validateProductPriceAgainstMax(array $data): void
+    {
+        $this->assertPriceNotAboveMax(
+            $this->nullableNumericPrice($data['price'] ?? null),
+            $this->nullableNumericPrice($data['max_price'] ?? null),
+            'Product price'
+        );
+    }
+
+    private function validateDiffWarehousePricing(Request $request): void
+    {
+        if (!$this->isTruthy($request->input('is_diffPrice'))) {
+            return;
+        }
+
+        $warehouseIds = $request->input('warehouse_id', []);
+        $diffPrices = $request->input('diff_price', []);
+        $diffMaxPrices = $request->input('diff_max_price', []);
+        $productPrice = $this->nullableNumericPrice($request->input('price'));
+        $productMax = $this->nullableNumericPrice($request->input('max_price'));
+
+        foreach ($warehouseIds as $key => $warehouseId) {
+            $price = array_key_exists($key, $diffPrices) && $diffPrices[$key] !== ''
+                ? $this->nullableNumericPrice($diffPrices[$key])
+                : $productPrice;
+            $maxPrice = array_key_exists($key, $diffMaxPrices) && $diffMaxPrices[$key] !== ''
+                ? $this->nullableNumericPrice($diffMaxPrices[$key])
+                : $productMax;
+
+            $warehouse = Warehouse::find($warehouseId);
+            $label = $warehouse?->name
+                ? "Warehouse price ({$warehouse->name})"
+                : 'Warehouse price';
+
+            $this->assertPriceNotAboveMax($price, $maxPrice, $label);
+        }
+    }
+
+    private function applyProductWarehousePricing(Product $product, array $data = []): void
+    {
+        // Always mirror product price/max_price to warehouse rows first.
+        $this->syncStandardWarehousePricing($product);
+
+        $diffPrices = $data['diff_price'] ?? [];
+        $diffMaxPrices = $data['diff_max_price'] ?? [];
+        $warehouseIds = $data['warehouse_id'] ?? [];
+
+        $usePerWarehousePrices = $this->isTruthy($product->is_diffPrice)
+            && !empty($warehouseIds)
+            && $this->hasNonEmptyPriceValues($diffPrices, $diffMaxPrices);
+
+        if ($usePerWarehousePrices) {
+            $this->syncWarehouseDiffPricing(
+                $product->id,
+                $warehouseIds,
+                $diffPrices,
+                $diffMaxPrices,
+                $product
+            );
+        }
+    }
+
+    private function isTruthy($value): bool
+    {
+        return $value === true || $value === 1 || $value === '1';
+    }
+
+    private function hasNonEmptyPriceValues(array $prices, array $maxPrices): bool
+    {
+        foreach ($prices as $value) {
+            if ($value !== '' && $value !== null) {
+                return true;
+            }
+        }
+
+        foreach ($maxPrices as $value) {
+            if ($value !== '' && $value !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Copy product price/max_price to every warehouse stock row (non-batch / non-IMEI).
+     */
+    private function syncStandardWarehousePricing(Product $product): void
+    {
+        if ($product->type !== 'standard' || $product->is_batch || $product->is_imei) {
+            return;
+        }
+
+        $this->baseProductWarehouseQuery($product->id)->update([
+            'price' => $product->price,
+            'max_price' => $product->max_price,
+        ]);
+    }
+
+    /**
+     * Base warehouse rows that mirror catalog price (exclude batch / IMEI lines).
+     */
+    private function baseProductWarehouseQuery(int $productId)
+    {
+        return Product_Warehouse::where('product_id', $productId)
+            ->where(function ($query) {
+                $query->whereNull('product_batch_id')
+                    ->orWhere('product_batch_id', 0);
+            })
+            ->where(function ($query) {
+                $query->whereNull('imei_number')
+                    ->orWhere('imei_number', '')
+                    ->orWhere('imei_number', 'null');
+            });
+    }
+
+    /**
+     * Save per-warehouse price and max_price on product_warehouse rows.
+     */
+    private function syncWarehouseDiffPricing(
+        int $productId,
+        array $warehouseIds,
+        array $diffPrices,
+        array $diffMaxPrices,
+        ?Product $product = null
+    ): void {
+        $product ??= Product::find($productId);
+
+        foreach ($warehouseIds as $key => $warehouseId) {
+            $price = array_key_exists($key, $diffPrices) && $diffPrices[$key] !== ''
+                ? $diffPrices[$key]
+                : $product?->price;
+            $maxPrice = array_key_exists($key, $diffMaxPrices) && $diffMaxPrices[$key] !== ''
+                ? $diffMaxPrices[$key]
+                : $product?->max_price;
+
+            $pw = $this->baseProductWarehouseQuery($productId)
+                ->where('warehouse_id', (int) $warehouseId)
+                ->where(function ($query) {
+                    $query->whereNull('variant_id')
+                        ->orWhere('variant_id', 0);
+                })
+                ->first();
+            if ($pw) {
+                $pw->price = $price;
+                $pw->max_price = $maxPrice;
+                $pw->save();
+                continue;
+            }
+
+            Product_Warehouse::create([
+                'product_id' => $productId,
+                'warehouse_id' => (int) $warehouseId,
+                'qty' => 0,
+                'price' => $price,
+                'max_price' => $maxPrice,
+            ]);
+        }
+    }
+
+    /**
+     * Ensure every active warehouse has a base product_warehouse row (qty 0 when newly created).
+     * Skips batch/IMEI and non-standard types — those use different stock row shapes.
+     */
+    private function ensureProductWarehouseRows(Product $product): void
+    {
+        if ($product->type !== 'standard' || $product->is_batch || $product->is_imei) {
+            return;
+        }
+
+        $warehouseIds = Warehouse::where('is_active', true)->pluck('id');
+        if ($warehouseIds->isEmpty()) {
+            return;
+        }
+
+        if ($product->is_variant) {
+            $variantIds = ProductVariant::where('product_id', $product->id)
+                ->pluck('variant_id')
+                ->unique()
+                ->filter();
+
+            foreach ($warehouseIds as $warehouseId) {
+                foreach ($variantIds as $variantId) {
+                    Product_Warehouse::firstOrCreate(
+                        [
+                            'product_id' => $product->id,
+                            'variant_id' => $variantId,
+                            'warehouse_id' => $warehouseId,
+                        ],
+                        ['qty' => 0]
+                    );
+                }
+            }
+
+            return;
+        }
+
+        foreach ($warehouseIds as $warehouseId) {
+            Product_Warehouse::firstOrCreate(
+                [
+                    'product_id' => $product->id,
+                    'warehouse_id' => $warehouseId,
+                    'variant_id' => null,
+                    'product_batch_id' => null,
+                ],
+                ['qty' => 0]
+            );
+        }
     }
 
     /**
@@ -1933,6 +2355,10 @@ class ProductController extends Controller
             if (array_key_exists('max_price', $data) && $data['max_price'] === '') {
                 $data['max_price'] = null;
             }
+
+            $this->validateProductPriceAgainstMax($data);
+            $this->validateDiffWarehousePricing($request);
+
             $data['name'] = htmlspecialchars(trim($data['name'] ?? ''), ENT_QUOTES);
             $data['profit_margin_type'] = $request->input('profit_margin_type', 'percentage');
             $data['profit_margin'] = $request->input('profit_margin', 0);
@@ -2004,6 +2430,20 @@ class ProductController extends Controller
 
             if(!isset($data['is_batch']))
                 $data['is_batch'] = null;
+
+            if (!empty($data['is_batch'])) {
+                if ($this->productHasPurchaseOrAdjustment((int) $lims_product_data->id)) {
+                    // Locked after first purchase/adjustment — keep stored mode.
+                    $data['batch_number_mode'] = ($lims_product_data->batch_number_mode ?? 'auto') === 'manual'
+                        ? 'manual'
+                        : 'auto';
+                } else {
+                    $mode = strtolower(trim((string) ($data['batch_number_mode'] ?? 'auto')));
+                    $data['batch_number_mode'] = in_array($mode, ['auto', 'manual'], true) ? $mode : 'auto';
+                }
+            } else {
+                $data['batch_number_mode'] = null;
+            }
 
             if(!isset($data['is_imei']))
                 $data['is_imei'] = null;
@@ -2114,24 +2554,6 @@ class ProductController extends Controller
                         $lims_product_variant_data->position = $key + 1;
                         $lims_product_variant_data->save();
                     }
-
-                    $product_warehouses = Product_Warehouse::where([
-                        'product_id' => $lims_product_data->id,
-                        'variant_id' => $lims_variant_data->id
-                    ])->get();
-
-                    if ($product_warehouses->isEmpty()) {
-                        $warehouse_ids = Warehouse::pluck('id')->toArray();
-                        foreach ($warehouse_ids as $w_id) {
-                            Product_Warehouse::firstOrCreate([
-                                "product_id" => $lims_product_data->id,
-                                "variant_id" => $lims_variant_data->id,
-                                "warehouse_id" => $w_id,
-                                "qty" => 0,
-                            ]);
-                        }
-                    }
-
                 }
                 }
             }
@@ -2142,37 +2564,10 @@ class ProductController extends Controller
             }
             // Variants are upserted only — never deleted on product save (add missing, keep existing).
 
-            if(isset($data['is_diffPrice'])) {
-                foreach ($data['diff_price'] as $key => $diff_price) {
-                    if($diff_price) {
-                        $lims_product_warehouse_data = Product_Warehouse::FindProductWithoutVariant($lims_product_data->id, $data['warehouse_id'][$key])->first();
-                        if($lims_product_warehouse_data) {
-                            $lims_product_warehouse_data->price = $diff_price;
-                            $lims_product_warehouse_data->save();
-                        }
-                        else {
-                            Product_Warehouse::firstOrCreate([
-                                "product_id" => $lims_product_data->id,
-                                "warehouse_id" => $data["warehouse_id"][$key],
-                                "qty" => 0,
-                                "price" => $diff_price
-                            ]);
-                        }
-                    }
-                }
-            }
-            else {
+            if (!isset($data['is_diffPrice'])) {
                 $data['is_diffPrice'] = false;
-                if(isset($data['warehouse_id'])){
-                    foreach ($data['warehouse_id'] as $key => $warehouse_id) {
-                        $lims_product_warehouse_data = Product_Warehouse::FindProductWithoutVariant($lims_product_data->id, $warehouse_id)->first();
-                        if($lims_product_warehouse_data) {
-                            $lims_product_warehouse_data->price = null;
-                            $lims_product_warehouse_data->save();
-                        }
-                    }
-                }
             }
+
             // handle warranty and guarantee
             if (!isset($data['warranty'])) {
                 $data['warranty'] = null;
@@ -2197,6 +2592,10 @@ class ProductController extends Controller
             }
             if(count($custom_field_data))
                 DB::table('products')->where('id', $lims_product_data->id)->update($custom_field_data);
+            $lims_product_data->refresh();
+            $this->ensureProductWarehouseRows($lims_product_data);
+            $lims_product_data->refresh();
+            $this->applyProductWarehousePricing($lims_product_data, $data);
             $this->cacheForget('product_list');
             $this->cacheForget('product_list_with_variant');
 
@@ -2544,11 +2943,15 @@ class ProductController extends Controller
                 )
                 ->join('warehouses', 'product_warehouse.warehouse_id', '=', 'warehouses.id')
                 ->where('product_warehouse.product_id', $lims_product_data->id)
-                ->where('product_warehouse.price','!=',null)
+                ->where(function ($query) {
+                    $query->whereNotNull('product_warehouse.price')
+                        ->orWhereNotNull('product_warehouse.max_price');
+                })
                 ->latest()
                 ->get();
                 foreach($warehouse_product as $warehouse){
-                    if($lims_product_data->price != $warehouse->price){
+                    if($lims_product_data->price != $warehouse->price
+                        || $lims_product_data->max_price != $warehouse->max_price){
                         $diff_price = true;
                     }
                 }
@@ -2880,19 +3283,8 @@ class ProductController extends Controller
                         }
                     }
 
-                    if ($isNew) {
-                        $warehouseData = [];
-
-                        foreach ($warehouses as $wid) {
-                            $warehouseData[] = [
-                                'product_id' => $product->id,
-                                'warehouse_id' => $wid,
-                                'qty' => 0,
-                            ];
-                        }
-
-                        Product_Warehouse::insert($warehouseData);
-                    }
+                    $product->refresh();
+                    $this->ensureProductWarehouseRows($product);
     
                 } catch (\Exception $rowError) {
                     $errors[] = "Row {$counter}: " . $rowError->getMessage();

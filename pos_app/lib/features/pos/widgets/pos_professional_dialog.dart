@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/database/app_database.dart';
 import '../../../core/theme/pos_theme.dart';
 import '../models/dashboard_models.dart';
 import '../pos_currency.dart';
+import 'sale_bill_detail_dialog.dart';
 import 'show_pos_dialog.dart';
 
 /// Wide modal shell for checkout flows (payment, discount, returns).
@@ -536,16 +538,17 @@ Future<void> showPosInfoDialog({
 Future<void> showRecentTransactionsDialog({
   required BuildContext context,
   required List<DashboardTransaction> transactions,
+  AppDatabase? db,
 }) {
   return showPosDialog<void>(
     context: context,
     builder: (ctx) => PosProfessionalDialog(
       title: 'Recent Transactions',
-      subtitle: 'Today at this terminal',
+      subtitle: 'Today at this terminal · tap a bill for items',
       icon: Icons.receipt_long_outlined,
       body: transactions.isEmpty
           ? const _RecentTransactionsEmpty()
-          : _RecentTransactionsList(transactions: transactions),
+          : _RecentTransactionsList(transactions: transactions, db: db),
       primaryLabel: 'Close',
       onPrimary: () => Navigator.pop(ctx),
     ),
@@ -602,9 +605,13 @@ class _RecentTransactionsEmpty extends StatelessWidget {
 }
 
 class _RecentTransactionsList extends StatelessWidget {
-  const _RecentTransactionsList({required this.transactions});
+  const _RecentTransactionsList({
+    required this.transactions,
+    this.db,
+  });
 
   final List<DashboardTransaction> transactions;
+  final AppDatabase? db;
 
   @override
   Widget build(BuildContext context) {
@@ -616,7 +623,18 @@ class _RecentTransactionsList extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
         final t = transactions[i];
-        return Container(
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: db == null
+                ? null
+                : () => showSaleBillDetailDialog(
+                      context: context,
+                      db: db!,
+                      localSaleId: t.localSaleId,
+                    ),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
@@ -692,12 +710,21 @@ class _RecentTransactionsList extends StatelessWidget {
                   ],
                 ),
               ),
-              SizedBox(width: 8),
+              if (db != null) ...[
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                SizedBox(width: 4),
+              ],
               Text(
                 formatPosMoney(t.total),
                 style: context.posStyles.productPrice.copyWith(fontSize: 15),
               ),
             ],
+          ),
+        ),
           ),
         );
       },

@@ -1,22 +1,31 @@
-import React, { useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useRef,
+} from 'react';
+import { Toast as PrimeToast } from 'primereact/toast';
 import { apiSuccessMessage, apiErrorMessage } from '../../services/apiMessages';
 
-/**
- * Toast — a self-dismissing notification.
- * useToast() — hook to manage toast state.
- *
- * Usage:
- *   const { toast, showToast, showApiSuccess, showApiError } = useToast();
- *   showToast('Saved!');
- *   showApiSuccess(res, 'Saved!');
- *   showApiError(err, 'Save failed.');
- *   <Toast toast={toast} />
- */
-export function useToast(duration = 3000) {
-  const [toast, setToast] = useState(null);
+const ToastContext = createContext(null);
+
+function severityForType(type) {
+  if (type === 'error') return 'error';
+  if (type === 'warning') return 'warn';
+  if (type === 'info') return 'info';
+  return 'success';
+}
+
+function useToastState(duration = 4000) {
+  const toastRef = useRef(null);
+
   const showToast = useCallback((msg, type = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), duration);
+    if (!msg) return;
+    toastRef.current?.show({
+      severity: severityForType(type),
+      summary: String(msg),
+      life: duration,
+    });
   }, [duration]);
 
   const showApiSuccess = useCallback(
@@ -33,12 +42,27 @@ export function useToast(duration = 3000) {
     [showToast],
   );
 
-  return { toast, showToast, showApiSuccess, showApiError };
+  return { toastRef, showToast, showApiSuccess, showApiError };
 }
 
-export function Toast({ toast }) {
-  if (!toast) return null;
+export function ToastProvider({ children, duration = 4000 }) {
+  const value = useToastState(duration);
+
   return (
-    <div className={`ui-toast ${toast.type || 'success'}`}>{toast.msg}</div>
+    <ToastContext.Provider value={value}>
+      <PrimeToast ref={value.toastRef} position="bottom-right" />
+      {children}
+    </ToastContext.Provider>
   );
+}
+
+export function useToast(duration = 4000) {
+  const global = useContext(ToastContext);
+  const local = useToastState(duration);
+  return global ?? local;
+}
+
+/** Legacy page-level toast mount — Prime toast is global via ToastProvider. */
+export function Toast() {
+  return null;
 }

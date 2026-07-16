@@ -306,7 +306,7 @@ CREATE TABLE product_batches (
 );
 CREATE TABLE product_stock (
   id INTEGER PRIMARY KEY, product_id INTEGER NOT NULL, warehouse_id INTEGER NOT NULL,
-  variant_id INTEGER, qty REAL DEFAULT 0, price REAL, product_batch_id INTEGER,
+  variant_id INTEGER, qty REAL DEFAULT 0, price REAL, max_price REAL, product_batch_id INTEGER,
   imei_number TEXT, updated_at TEXT
 );
 SQL);

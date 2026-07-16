@@ -52,6 +52,19 @@ body.pos-standalone-mode .app-root {
   left: 20px;
 }
 
+.Toastify__toast {
+  min-height: auto;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  border-radius: 6px;
+}
+
+.Toastify__toast-body {
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
 .Toastify__toast--success {
   background-color: rgb(0, 122, 0);
 }

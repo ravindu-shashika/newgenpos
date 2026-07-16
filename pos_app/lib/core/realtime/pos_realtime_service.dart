@@ -1,5 +1,8 @@
 import 'dart:async';
 
+// REVERB_DISABLED: remove ignore_for_file below when Reverb connect block is uncommented.
+// ignore_for_file: unused_import, unused_field, unused_element
+
 import 'package:dart_pusher_channels/dart_pusher_channels.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,6 +57,11 @@ class PosRealtimeService {
     required String posToken,
     required int warehouseId,
   }) async {
+    // REVERB_DISABLED: uncomment block below when Reverb is enabled.
+    _setState(PosRealtimeConnectionState.disabled);
+    return;
+
+    /*
     _config = config;
     _token = posToken;
     _warehouseId = warehouseId;
@@ -113,6 +121,7 @@ class PosRealtimeService {
     });
 
     unawaited(_client!.connect());
+    */
   }
 
   String _normalizePrivateChannel(String channel) {
@@ -228,6 +237,13 @@ final posRealtimeServiceProvider = Provider<PosRealtimeService>((ref) {
 });
 
 Future<void> connectPosRealtimeIfConfigured(WidgetRef ref) async {
+  // REVERB_DISABLED: uncomment block below when Reverb is enabled.
+  ref.read(posRealtimeConnectionStateProvider.notifier).state =
+      PosRealtimeConnectionState.disabled;
+  ref.read(posRealtimeFailureProvider.notifier).state = null;
+  return;
+
+  /*
   await ref.read(localReverbSettingsProvider.notifier).ensureLoaded();
   final local = ref.read(localReverbSettingsProvider);
   if (!local.enableLiveStockSync) {
@@ -277,6 +293,7 @@ Future<void> connectPosRealtimeIfConfigured(WidgetRef ref) async {
     ref.read(posRealtimeFailureProvider.notifier).state =
         'Live stock sync could not start. Auto-retry is off. Use Connect in Reverb status or Settings when ready.';
   }
+  */
 }
 
 Future<void> disconnectPosRealtime(WidgetRef ref) async {

@@ -26,7 +26,11 @@ export default function StockCountQtyAdjustment() {
             try {
                 const res = await api.get(`stock-count/${id}/adjustment-form`);
                 setMeta(res.data || {});
-                setLines((res.data?.lines || []).map((l, i) => ({ ...l, _id: i + 1 })));
+                setLines((res.data?.lines || []).map((l, i) => ({
+                    ...l,
+                    _id: i + 1,
+                    action: String(l.action ?? '').trim() === '+' ? '+' : '-',
+                })));
             } catch (err) {
                 showToast(err?.message || 'Failed to load adjustment data.', 'error');
                 navigate('/stock-count');
@@ -133,11 +137,11 @@ export default function StockCountQtyAdjustment() {
                                         <td style={{ width: 140 }}>
                                             <select
                                                 className="form-select form-select-sm"
-                                                value={l.action}
+                                                value={String(l.action ?? '').trim() === '+' ? '+' : '-'}
                                                 onChange={(e) => updateLine(l._id, 'action', e.target.value)}
                                             >
-                                                <option value="+">Addition</option>
                                                 <option value="-">Subtraction</option>
+                                                <option value="+">Addition</option>
                                             </select>
                                         </td>
                                         <td>

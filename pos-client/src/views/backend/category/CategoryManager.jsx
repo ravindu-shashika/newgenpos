@@ -16,8 +16,9 @@ import {
     Toast,
     useToast,
     ActionMenu,
-    Pagination,
     SelectionBar,
+    SearchInput,
+    ListToolbar,
     PermissionDenied,
 } from '../../../components/ui';
 import { api } from '../../../services';
@@ -427,14 +428,13 @@ const CategoryManager = ({ controllerName }) => {
             }
         >
             {/* Toolbar */}
-            <div className="ui-toolbar">
-                <input
-                    className="ui-search"
+            <ListToolbar>
+                <SearchInput
                     placeholder="Search by name…"
                     value={search}
                     onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />
-            </div>
+            </ListToolbar>
 
             {/* Selection bar */}
             <SelectionBar
@@ -442,7 +442,7 @@ const CategoryManager = ({ controllerName }) => {
                 onClear={() => setSelected(new Set())}
             />
 
-            {/* Table */}
+            {/* Table + pagination */}
             <DataTable
                 columns={columns}
                 rows={paginatedCategories}
@@ -455,17 +455,15 @@ const CategoryManager = ({ controllerName }) => {
                 selected={selected}
                 onToggleRow={toggleRow}
                 onToggleAll={toggleAll}
-            />
-
-            {/* Pagination */}
-            <Pagination
-                page={page}
-                totalPages={totalPages}
-                pageSize={pageSize}
-                totalRows={filteredAndSorted.length}
-                onChange={setPage}
-                pageSizes={PAGE_SIZES}
-                onPageSize={(s) => { setPageSize(s); setPage(1); }}
+                pagination={{
+                    page,
+                    totalPages,
+                    pageSize,
+                    totalRows: filteredAndSorted.length,
+                    onChange: setPage,
+                    pageSizes: PAGE_SIZES,
+                    onPageSize: (s) => { setPageSize(s); setPage(1); },
+                }}
             />
 
             {/* ── Add Modal ── */}

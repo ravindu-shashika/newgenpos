@@ -4,12 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Payment;
 use App\Models\Sale;
+use App\Models\Product_Sale;
+use App\Models\Product;
+use App\Models\ProductBatch;
+use App\Models\ProductVariant;
+use App\Models\Unit;
+use App\Models\Tax;
 use App\Models\Warehouse;
 use App\Models\Biller;
 use App\Models\Customer;
 use App\Models\Currency;
 use App\Models\Account;
-use App\Models\Tax;
 use App\Models\PosSetting;
 use App\Enums\CustomerTypeEnum;
 use App\Traits\SpaResponse;
@@ -172,9 +177,68 @@ class SaleDashboardController extends Controller
         }
     }
 
+    public function editForm(Request $request, $id)
+    {
+        if (!$this->userCanAccessSales('sales-edit')) {
+            return response()->json(['message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+
+        try {
+            $saleQuery = Sale::query()->where('id', $id);
+            $this->applyStaffAccessFilter($saleQuery);
+            $sale = $saleQuery->first();
+            if (!$sale) {
+                return $this->spaJson($request, ['message' => __('db.Sale not found')], 404);
+            }
+
+            $lines = Product_Sale::where('sale_id', $id)->get()
+                ->map(fn ($ps) => $this->formatSaleLine($ps))
+                ->filter()
+                ->values()
+                ->all();
+
+            $createdAt = $sale->created_at
+                ? $sale->created_at->format('Y-m-d')
+                : date('Y-m-d');
+
+            return $this->spaJson($request, [
+                'sale' => [
+                    'id' => $sale->id,
+                    'reference_no' => $sale->reference_no,
+                    'created_at' => $createdAt,
+                    'customer_id' => $sale->customer_id,
+                    'warehouse_id' => $sale->warehouse_id,
+                    'biller_id' => $sale->biller_id,
+                    'currency_id' => $sale->currency_id,
+                    'exchange_rate' => (float) ($sale->exchange_rate ?: 1),
+                    'sale_status' => (int) $sale->sale_status,
+                    'payment_status' => (int) $sale->payment_status,
+                    'order_tax_rate' => (float) ($sale->order_tax_rate ?? 0),
+                    'order_tax' => (float) ($sale->order_tax ?? 0),
+                    'order_discount' => (float) ($sale->order_discount ?? 0),
+                    'shipping_cost' => (float) ($sale->shipping_cost ?? 0),
+                    'grand_total' => (float) ($sale->grand_total ?? 0),
+                    'paid_amount' => (float) ($sale->paid_amount ?? 0),
+                    'sale_note' => $sale->sale_note ?? '',
+                    'staff_note' => $sale->staff_note ?? '',
+                    'document' => $sale->document,
+                ],
+                'lines' => $lines,
+                'meta' => $this->saleFormMeta(),
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->spaJson($request, [
+                'message' => __('db.Failed to load sale'),
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function productSearch(Request $request)
     {
-        if (!$this->userCanAccessSales('sales-add')) {
+        if (!$this->userCanAccessSales('sales-add') && !$this->userCanAccessSales('sales-edit')) {
             return response()->json(['message' => __('db.Sorry! You are not allowed to access this module')], 403);
         }
 
@@ -183,7 +247,7 @@ class SaleDashboardController extends Controller
 
     public function warehouseProducts(Request $request)
     {
-        if (!$this->userCanAccessSales('sales-add')) {
+        if (!$this->userCanAccessSales('sales-add') && !$this->userCanAccessSales('sales-edit')) {
             return response()->json(['message' => __('db.Sorry! You are not allowed to access this module')], 403);
         }
 
@@ -192,11 +256,106 @@ class SaleDashboardController extends Controller
 
     public function customerGroup(Request $request, $customerId)
     {
-        if (!$this->userCanAccessSales('sales-add')) {
+        if (!$this->userCanAccessSales('sales-add') && !$this->userCanAccessSales('sales-edit')) {
             return response()->json(['message' => __('db.Sorry! You are not allowed to access this module')], 403);
         }
 
         return app(QuotationDashboardController::class)->customerGroup($request, $customerId);
+    }
+
+    private function formatSaleLine(Product_Sale $ps): ?array
+    {
+        $product = Product::find($ps->product_id);
+        if (!$product) {
+            return null;
+        }
+
+        $decimals = (int) (config('decimal') ?? 2);
+        $code = $product->code;
+        $variantId = null;
+        $productVariantId = null;
+
+        if ($ps->variant_id) {
+            $variant = ProductVariant::select('id', 'item_code', 'variant_id')
+                ->FindExactProduct($product->id, $ps->variant_id)
+                ->first();
+            if ($variant) {
+                $code = $variant->item_code;
+                $variantId = $ps->variant_id;
+                $productVariantId = $variant->id;
+            }
+        }
+
+        $qty = max((float) $ps->qty, 1);
+        if ((int) $product->tax_method === 1) {
+            $productPrice = (float) $ps->net_unit_price + ((float) $ps->discount / $qty);
+        } else {
+            $productPrice = ((float) $ps->total / $qty) + ((float) $ps->discount / $qty);
+        }
+
+        $unitNames = [];
+        $unitOperators = [];
+        $unitOpValues = [];
+        $saleUnit = 'n/a';
+
+        if ($product->type === 'standard') {
+            $units = Unit::where('base_unit', $product->unit_id)->orWhere('id', $product->unit_id)->get();
+            foreach ($units as $unit) {
+                if ($ps->sale_unit_id == $unit->id) {
+                    array_unshift($unitNames, $unit->unit_name);
+                    array_unshift($unitOperators, $unit->operator);
+                    array_unshift($unitOpValues, (float) $unit->operation_value);
+                } else {
+                    $unitNames[] = $unit->unit_name;
+                    $unitOperators[] = $unit->operator;
+                    $unitOpValues[] = (float) $unit->operation_value;
+                }
+            }
+            if (!empty($unitOperators)) {
+                if ($unitOperators[0] === '*') {
+                    $productPrice = $productPrice / max($unitOpValues[0], 1);
+                } elseif ($unitOperators[0] === '/') {
+                    $productPrice = $productPrice * $unitOpValues[0];
+                }
+            }
+            $saleUnit = $unitNames[0] ?? 'n/a';
+        }
+
+        $tax = Tax::where('rate', $ps->tax_rate)->first();
+        $batchNo = '';
+        if ($ps->product_batch_id) {
+            $batchNo = ProductBatch::find($ps->product_batch_id)?->batch_no ?? '';
+        }
+
+        return [
+            'product_id' => $product->id,
+            'variant_id' => $variantId,
+            'product_variant_id' => $productVariantId,
+            'code' => $code,
+            'name' => $product->name,
+            'qty' => (float) $ps->qty,
+            'product_batch_id' => $ps->product_batch_id,
+            'batch_no' => $batchNo,
+            'net_unit_price' => round((float) $ps->net_unit_price, $decimals),
+            'discount' => round((float) $ps->discount, $decimals),
+            'tax' => round((float) $ps->tax, $decimals),
+            'tax_rate' => (float) $ps->tax_rate,
+            'tax_name' => $tax?->name ?? 'No Tax',
+            'subtotal' => round((float) $ps->total, $decimals),
+            'product_price' => round($productPrice, $decimals),
+            'row_product_price' => round($productPrice, $decimals),
+            'tax_method' => (int) $product->tax_method,
+            'sale_unit' => $saleUnit,
+            'sale_unit_id' => $ps->sale_unit_id,
+            'unit_names' => $unitNames,
+            'unit_operators' => $unitOperators,
+            'unit_operation_values' => $unitOpValues,
+            'is_batch' => (bool) $product->is_batch,
+            'is_imei' => (bool) ($product->is_imei ?? false),
+            'imei_number' => $ps->imei_number ?? '',
+            'type' => $product->type,
+            'net_unit_cost' => (float) ($ps->net_unit_cost ?? 0),
+        ];
     }
 
     protected function formatPosSettingResponse(?PosSetting $posSetting): ?array

@@ -1,35 +1,27 @@
 import React from 'react';
-import { UI_CSS } from './tokens';
+import { cn } from '../../lib/cn';
 
-/**
- * PageLayout — wraps every admin page with the shared CSS and layout.
- *
- * <PageLayout
- *   eyebrow="Products"
- *   title="Categories"
- *   actions={<><button className="ui-btn primary">+ Add</button></>}
- * >
- *   {page content}
- * </PageLayout>
- */
-export function PageLayout({ eyebrow, title, actions, children, onClick }) {
+/** PageLayout — wraps every admin page with Prime-friendly spacing. */
+export function PageLayout({ eyebrow, title, actions, children, onClick, className }) {
   const showHeader = Boolean(eyebrow || title || actions);
 
   return (
-    <>
-      <style>{UI_CSS}</style>
-      <div className="ui-wrap" onClick={onClick}>
-        {showHeader && (
-          <div className="ui-header">
-            <div>
-              {eyebrow && <div className="ui-eyebrow">{eyebrow}</div>}
-              {title && <h1 className="ui-title">{title}</h1>}
-            </div>
-            {actions && <div className="ui-header-actions">{actions}</div>}
+    <div
+      className={cn('ui-page-layout', className)}
+      onClick={onClick}
+    >
+      {showHeader && (
+        <div className="ui-page-header">
+          <div>
+            {eyebrow && <div className="ui-page-eyebrow">{eyebrow}</div>}
+            {title && <h1 className="ui-page-title">{title}</h1>}
           </div>
-        )}
-        {children}
-      </div>
-    </>
+          {actions && (
+            <div className="flex flex-wrap align-items-center gap-2">{actions}</div>
+          )}
+        </div>
+      )}
+      {children}
+    </div>
   );
 }

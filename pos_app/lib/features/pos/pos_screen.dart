@@ -61,6 +61,7 @@ import 'widgets/return_credit_dialog.dart';
 import 'widgets/return_session_panel.dart';
 import 'widgets/issue_return_bill_dialog.dart';
 import 'widgets/pos_professional_dialog.dart';
+import 'widgets/sale_bill_detail_dialog.dart';
 import 'widgets/pos_toast.dart';
 import 'widgets/show_pos_dialog.dart';
 import 'widgets/pos_touch_keyboard_controller.dart';
@@ -408,7 +409,10 @@ class _PosScreenState extends ConsumerState<PosScreen>
     if ((missingBefore.missingCustomer && customerId == null) ||
         (missingBefore.missingBiller && billerId == null)) {
       _showSnack(
-        'No default customer or biller in server POS settings',
+        pleaseSelectCheckoutPartiesMessage(
+          missingCustomer: missingBefore.missingCustomer && customerId == null,
+          missingBiller: missingBefore.missingBiller && billerId == null,
+        ),
         error: true,
       );
       return false;
@@ -494,6 +498,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
       if (!mounted ||
           result == null ||
           result == CheckoutPartyDialogResult.cancelled) {
+        _showSnack(
+          pleaseSelectCheckoutPartiesMessage(
+            missingCustomer: missing.missingCustomer,
+            missingBiller: missing.missingBiller,
+          ),
+          error: true,
+        );
         return false;
       }
 
@@ -905,6 +916,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
           productBatchId: picked.batchId,
           batchNo: picked.batchNo,
           warehouseQty: picked.qty,
+          price: picked.price ?? product.price,
+          maxPrice: picked.maxPrice ?? product.maxPrice,
         );
       } else {
         final only = options.first;
@@ -912,6 +925,8 @@ class _PosScreenState extends ConsumerState<PosScreen>
           productBatchId: only.batchId,
           batchNo: only.batchNo,
           warehouseQty: only.qty,
+          price: only.price ?? product.price,
+          maxPrice: only.maxPrice ?? product.maxPrice,
         );
       }
     }
@@ -1691,7 +1706,13 @@ class _PosScreenState extends ConsumerState<PosScreen>
     final customerId = _checkout.customerId;
     final billerId = _checkout.billerId;
     if (warehouseId == null || customerId == null || billerId == null) {
-      _showSnack('Customer, biller and warehouse required', error: true);
+      _showSnack(
+        pleaseSelectCheckoutPartiesMessage(
+          missingCustomer: customerId == null,
+          missingBiller: billerId == null,
+        ),
+        error: true,
+      );
       return;
     }
 
@@ -2448,7 +2469,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
       context: context,
       builder: (ctx) => PosProfessionalDialogShell(
         title: 'Recent transactions',
-        subtitle: 'Tap a draft to load it into the cart (cart must be empty)',
+        subtitle: 'Tap a draft to load · tap a sale to view items',
         icon: Icons.receipt_long_outlined,
         maxWidth: 560,
         maxBodyHeight: 420,
@@ -2482,7 +2503,11 @@ class _PosScreenState extends ConsumerState<PosScreen>
                         unawaited(_resumeHeldSale(sale));
                       },
                     ),
-                    _recentList(completed, empty: 'No sales yet'),
+                    _recentList(
+                      completed,
+                      empty: 'No sales yet',
+                      db: db,
+                    ),
                   ],
                 ),
               ),
@@ -2600,6 +2625,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
     List<LocalSale> items, {
     required String empty,
     void Function(LocalSale sale)? onDraftTap,
+    AppDatabase? db,
   }) {
     if (items.isEmpty) return Center(child: Text(empty));
     return ListView.builder(
@@ -2619,10 +2645,31 @@ class _PosScreenState extends ConsumerState<PosScreen>
           subtitle: Text(
             isDraft
                 ? 'Hold bill · tap to load'
-                : '${s.syncStatus} · sale',
+                : '${s.itemCount} item${s.itemCount == 1 ? '' : 's'} · tap for details',
           ),
-          trailing: Text(formatPosMoney(s.grandTotal)),
-          onTap: isDraft && onDraftTap != null ? () => onDraftTap(s) : null,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(formatPosMoney(s.grandTotal)),
+              if (!isDraft && db != null) ...[
+                SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ],
+          ),
+          onTap: isDraft && onDraftTap != null
+              ? () => onDraftTap(s)
+              : (!isDraft && db != null
+                  ? () => showSaleBillDetailDialog(
+                        context: context,
+                        db: db,
+                        localSaleId: s.id,
+                      )
+                  : null),
         );
       },
     );

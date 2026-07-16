@@ -18,15 +18,9 @@ import usePermissions from '../../../stores/usePermissions';
 
 const PAGE_SIZES = [10, 25, 50, -1];
 
-function multiSelectValues(e) {
-    return Array.from(e.target.selectedOptions).map((o) => o.value);
-}
-
 export default function StockCountList({ controllerName }) {
     const [rows, setRows] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [brands, setBrands] = useState([]);
     const [decimal, setDecimal] = useState(2);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
@@ -43,8 +37,7 @@ export default function StockCountList({ controllerName }) {
 
     const [createForm, setCreateForm] = useState({
         warehouse_id: '',
-        category_ids: [],
-        brand_ids: [],
+        count_scope: 'all',
     });
     const [finalizeForm, setFinalizeForm] = useState({ file: null, note: '' });
 
@@ -57,8 +50,6 @@ export default function StockCountList({ controllerName }) {
             const res = await api.get('stock-count');
             setRows(res.data?.data || []);
             setWarehouses(res.data?.warehouses || []);
-            setCategories(res.data?.categories || []);
-            setBrands(res.data?.brands || []);
             setDecimal(res.data?.decimal ?? 2);
         } catch (err) {
             showToast(err?.message || 'Failed to load stock counts.', 'error');
@@ -77,8 +68,7 @@ export default function StockCountList({ controllerName }) {
         return rows.filter((r) =>
             (r.reference_no || '').toLowerCase().includes(q) ||
             (r.warehouse_name || '').toLowerCase().includes(q) ||
-            (r.category_label || '').toLowerCase().includes(q) ||
-            (r.brand_label || '').toLowerCase().includes(q)
+            (r.count_scope_label || '').toLowerCase().includes(q)
         );
     }, [rows, search]);
 
@@ -100,12 +90,11 @@ export default function StockCountList({ controllerName }) {
         try {
             const fd = new FormData();
             fd.append('warehouse_id', createForm.warehouse_id);
-            createForm.category_ids.forEach((id) => fd.append('category_id[]', id));
-            createForm.brand_ids.forEach((id) => fd.append('brand_id[]', id));
+            fd.append('count_scope', createForm.count_scope || 'all');
             const res = await api.post('stock-count', fd);
             showToast(res.data?.message || 'Stock count created.', 'success');
             setCreateOpen(false);
-            setCreateForm({ warehouse_id: '', category_ids: [], brand_ids: [] });
+            setCreateForm({ warehouse_id: '', count_scope: 'all' });
             fetchList();
             if (res.data?.initial_file_url) {
                 window.open(res.data.initial_file_url, '_blank');
@@ -160,8 +149,11 @@ export default function StockCountList({ controllerName }) {
         { label: 'Date', key: 'date' },
         { label: 'Reference', key: 'reference_no' },
         { label: 'Warehouse', key: 'warehouse_name' },
-        { label: 'Category', key: 'category_label' },
-        { label: 'Brand', key: 'brand_label' },
+        {
+            label: 'Scope',
+            key: 'count_scope_label',
+            render: (row) => row.count_scope_label || 'All products',
+        },
         {
             label: 'Type',
             key: 'type_label',
@@ -253,7 +245,7 @@ export default function StockCountList({ controllerName }) {
                 <Modal title="Count Stock" onClose={() => setCreateOpen(false)}>
                     <form onSubmit={handleCreate}>
                         <p className="text-muted small">
-                            Fields marked * are required. Leave category and brand empty for a full warehouse count.
+                            Choose how products are collected into the count CSV.
                         </p>
                         <FormRow>
                             <FormField label="Warehouse" required>
@@ -267,39 +259,34 @@ export default function StockCountList({ controllerName }) {
                                     ]}
                                 />
                             </FormField>
-                            <FormField label="Category">
-                                <select
-                                    className="ui-select-field"
-                                    multiple
-                                    size={5}
-                                    value={createForm.category_ids}
-                                    onChange={(e) => setCreateForm({
-                                        ...createForm,
-                                        category_ids: multiSelectValues(e),
-                                    })}
-                                >
-                                    {categories.map((c) => (
-                                        <option key={c.id} value={String(c.id)}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </FormField>
-                            <FormField label="Brand">
-                                <select
-                                    className="ui-select-field"
-                                    multiple
-                                    size={5}
-                                    value={createForm.brand_ids}
-                                    onChange={(e) => setCreateForm({
-                                        ...createForm,
-                                        brand_ids: multiSelectValues(e),
-                                    })}
-                                >
-                                    {brands.map((b) => (
-                                        <option key={b.id} value={String(b.id)}>{b.title}</option>
-                                    ))}
-                                </select>
+                            <FormField label="Count method" required>
+                                <SelectInput
+                                    required
+                                    value={createForm.count_scope}
+                                    onChange={(e) => setCreateForm({ ...createForm, count_scope: e.target.value })}
+                                    options={[
+                                        { value: 'all', label: 'All products (variants + batches + simple)' },
+                                        { value: 'with_variants', label: 'Products with variants only' },
+                                        { value: 'without_variants', label: 'Products without variants' },
+                                        { value: 'batch', label: 'Batch-wise count only' },
+                                    ]}
+                                />
                             </FormField>
                         </FormRow>
+                        <div className="border rounded p-2 mb-2 small text-muted">
+                            {createForm.count_scope === 'with_variants' && (
+                                <span>CSV includes one row per variant (item code).</span>
+                            )}
+                            {createForm.count_scope === 'without_variants' && (
+                                <span>CSV includes simple products only (no variant / no batch lines).</span>
+                            )}
+                            {createForm.count_scope === 'batch' && (
+                                <span>CSV includes one row per batch (batch no + expiry).</span>
+                            )}
+                            {createForm.count_scope === 'all' && (
+                                <span>CSV includes every warehouse stock line: variants, batches, and simple products.</span>
+                            )}
+                        </div>
                         <div className="d-flex gap-2 mt-3">
                             <button type="submit" className="ui-btn primary" disabled={submitting}>
                                 {submitting ? 'Saving...' : 'Submit'}
@@ -349,8 +336,7 @@ export default function StockCountList({ controllerName }) {
                         <div><strong>Reference:</strong> {reportOpen.reference_no}</div>
                         <div><strong>Warehouse:</strong> {reportOpen.warehouse_name}</div>
                         <div><strong>Type:</strong> {reportOpen.type_label}</div>
-                        {reportOpen.category_label && <div><strong>Category:</strong> {reportOpen.category_label}</div>}
-                        {reportOpen.brand_label && <div><strong>Brand:</strong> {reportOpen.brand_label}</div>}
+                        <div><strong>Scope:</strong> {reportOpen.count_scope_label || 'All products'}</div>
                         <div className="mt-2 d-flex gap-2">
                             {reportOpen.initial_file_url && (
                                 <a href={reportOpen.initial_file_url} className="ui-btn btn-sm" download>Initial file</a>

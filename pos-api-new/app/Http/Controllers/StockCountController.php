@@ -6,11 +6,15 @@ use App\Models\Brand;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Product_Warehouse;
+use App\Models\ProductBatch;
+use App\Models\ProductVariant;
+use App\Models\Variant;
 use App\Models\Warehouse;
 use App\Models\StockCount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Traits\SpaResponse;
 use Spatie\Permission\Models\Role;
 
@@ -60,6 +64,13 @@ class StockCountController extends Controller
         }
 
         $fileBase = url('stock_count');
+        $scope = $row->count_scope ?? 'all';
+        $scopeLabels = [
+            'all' => 'All products',
+            'with_variants' => 'With variants',
+            'without_variants' => 'Without variants',
+            'batch' => 'Batch-wise',
+        ];
 
         return [
             'id' => $row->id,
@@ -73,6 +84,8 @@ class StockCountController extends Controller
             'brand_label' => implode(', ', $brandNames),
             'type' => $row->type,
             'type_label' => $row->type === 'full' ? 'Full' : 'Partial',
+            'count_scope' => $scope,
+            'count_scope_label' => $scopeLabels[$scope] ?? 'All products',
             'initial_file' => $row->initial_file,
             'initial_file_url' => $row->initial_file ? "{$fileBase}/{$row->initial_file}" : null,
             'final_file' => $row->final_file,
@@ -136,50 +149,27 @@ class StockCountController extends Controller
         }
 
         $data = $request->all();
-        if (isset($request->category_id) || isset($request->brand_id)) {
-            $data['type'] = 'partial';
-        } else {
-            $data['type'] = 'full';
+        $warehouseId = (int) ($data['warehouse_id'] ?? 0);
+        if (!$warehouseId) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => 'Warehouse is required.'], 422);
+            }
+
+            return redirect()->back()->with('not_permitted', 'Warehouse is required.');
         }
 
-        if (isset($data['brand_id']) && isset($data['category_id'])) {
-            $lims_product_list = DB::table('products')
-                ->join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id')
-                ->whereIn('products.category_id', (array) $data['category_id'])
-                ->whereIn('products.brand_id', (array) $data['brand_id'])
-                ->where([['products.is_active', true], ['product_warehouse.warehouse_id', $data['warehouse_id']]])
-                ->select('products.name', 'products.code', 'product_warehouse.imei_number', 'product_warehouse.qty')
-                ->get();
+        $countScope = $this->normalizeCountScope($data['count_scope'] ?? 'all');
+        $hasCategory = !empty($data['category_id']);
+        $hasBrand = !empty($data['brand_id']);
+        $data['type'] = ($hasCategory || $hasBrand) ? 'partial' : 'full';
+        $data['count_scope'] = $countScope;
 
-            $data['category_id'] = implode(',', (array) $data['category_id']);
-            $data['brand_id'] = implode(',', (array) $data['brand_id']);
-        } elseif (isset($data['category_id'])) {
-            $lims_product_list = DB::table('products')
-                ->join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id')
-                ->whereIn('products.category_id', (array) $data['category_id'])
-                ->where([['products.is_active', true], ['product_warehouse.warehouse_id', $data['warehouse_id']]])
-                ->select('products.name', 'products.code', 'product_warehouse.imei_number', 'product_warehouse.qty')
-                ->get();
+        $categoryIds = $hasCategory ? array_values(array_filter((array) $data['category_id'])) : [];
+        $brandIds = $hasBrand ? array_values(array_filter((array) $data['brand_id'])) : [];
 
-            $data['category_id'] = implode(',', (array) $data['category_id']);
-        } elseif (isset($data['brand_id'])) {
-            $lims_product_list = DB::table('products')
-                ->join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id')
-                ->whereIn('products.brand_id', (array) $data['brand_id'])
-                ->where([['products.is_active', true], ['product_warehouse.warehouse_id', $data['warehouse_id']]])
-                ->select('products.name', 'products.code', 'product_warehouse.imei_number', 'product_warehouse.qty')
-                ->get();
+        $rows = $this->buildStockCountRows($warehouseId, $countScope, $categoryIds, $brandIds);
 
-            $data['brand_id'] = implode(',', (array) $data['brand_id']);
-        } else {
-            $lims_product_list = DB::table('products')
-                ->join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id')
-                ->where([['products.is_active', true], ['product_warehouse.warehouse_id', $data['warehouse_id']]])
-                ->select('products.name', 'products.code', 'product_warehouse.imei_number', 'product_warehouse.qty')
-                ->get();
-        }
-
-        if (!count($lims_product_list)) {
+        if (!count($rows)) {
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, ['message' => __('db.No product found!')], 422);
             }
@@ -187,9 +177,14 @@ class StockCountController extends Controller
             return redirect()->back()->with('not_permitted', __('db.No product found!'));
         }
 
-        $csvData = ['Product Name, Product Code, IMEI or Serial Numbers, Counted'];
-        foreach ($lims_product_list as $product) {
-            $csvData[] = $product->name . ',' . $product->code . ',' . str_replace(',', '/', $product->imei_number ?? '');
+        $csvData = [['Product Name', 'Product Code', 'IMEI / Variant / Batch', 'Counted']];
+        foreach ($rows as $row) {
+            $csvData[] = [
+                $row['name'],
+                $row['code'],
+                $row['extra'],
+                '',
+            ];
         }
 
         if (!file_exists(public_path() . '/stock_count/')) {
@@ -200,7 +195,7 @@ class StockCountController extends Controller
         $file_path = public_path() . '/stock_count/' . $filename;
         $file = fopen($file_path, 'w+');
         foreach ($csvData as $cellData) {
-            fputcsv($file, explode(',', $cellData));
+            fputcsv($file, $cellData);
         }
         fclose($file);
 
@@ -208,18 +203,148 @@ class StockCountController extends Controller
         $data['reference_no'] = 'scr-' . date('Ymd') . '-' . date('his');
         $data['initial_file'] = $filename;
         $data['is_adjusted'] = false;
-        $record = StockCount::create($data);
+        $data['category_id'] = $categoryIds ? implode(',', $categoryIds) : null;
+        $data['brand_id'] = $brandIds ? implode(',', $brandIds) : null;
+        unset($data['category_ids'], $data['brand_ids']);
+
+        $createPayload = [
+            'reference_no' => $data['reference_no'],
+            'warehouse_id' => $warehouseId,
+            'brand_id' => $data['brand_id'],
+            'category_id' => $data['category_id'],
+            'user_id' => $data['user_id'],
+            'type' => $data['type'],
+            'initial_file' => $data['initial_file'],
+            'is_adjusted' => false,
+        ];
+        if (Schema::hasColumn('stock_counts', 'count_scope')) {
+            $createPayload['count_scope'] = $countScope;
+        }
+
+        $record = StockCount::create($createPayload);
 
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [
                 'message' => __('db.Stock Count created successfully! Please download the initial file to complete it'),
                 'id' => $record->id,
                 'reference_no' => $record->reference_no,
+                'count_scope' => $countScope,
                 'initial_file_url' => url('stock_count/' . $filename),
             ]);
         }
 
         return redirect()->back()->with('message', __('db.Stock Count created successfully! Please download the initial file to complete it'));
+    }
+
+    private function normalizeCountScope($scope): string
+    {
+        $allowed = ['all', 'with_variants', 'without_variants', 'batch'];
+        $scope = strtolower(trim((string) $scope));
+
+        return in_array($scope, $allowed, true) ? $scope : 'all';
+    }
+
+    /**
+     * Build CSV rows for a stock count by scope.
+     *
+     * @return array<int, array{name:string,code:string,extra:string,product_id:int,variant_id:?int,product_batch_id:?int,qty:float}>
+     */
+    private function buildStockCountRows(
+        int $warehouseId,
+        string $countScope,
+        array $categoryIds = [],
+        array $brandIds = []
+    ): array {
+        $query = DB::table('products')
+            ->join('product_warehouse', 'products.id', '=', 'product_warehouse.product_id')
+            ->where('products.is_active', true)
+            ->where('product_warehouse.warehouse_id', $warehouseId);
+
+        if ($categoryIds) {
+            $query->whereIn('products.category_id', $categoryIds);
+        }
+        if ($brandIds) {
+            $query->whereIn('products.brand_id', $brandIds);
+        }
+
+        if ($countScope === 'with_variants') {
+            $query->where('products.is_variant', true)
+                ->whereNotNull('product_warehouse.variant_id');
+        } elseif ($countScope === 'without_variants') {
+            $query->where(function ($q) {
+                $q->where('products.is_variant', false)->orWhereNull('products.is_variant');
+            })
+                ->whereNull('product_warehouse.variant_id')
+                ->where(function ($q) {
+                    $q->where('products.is_batch', false)
+                        ->orWhereNull('products.is_batch')
+                        ->orWhereNull('product_warehouse.product_batch_id');
+                });
+        } elseif ($countScope === 'batch') {
+            $query->where('products.is_batch', true)
+                ->whereNotNull('product_warehouse.product_batch_id');
+        }
+
+        $stockRows = $query
+            ->select(
+                'products.id as product_id',
+                'products.name',
+                'products.code',
+                'products.is_variant',
+                'products.is_batch',
+                'product_warehouse.variant_id',
+                'product_warehouse.product_batch_id',
+                'product_warehouse.imei_number',
+                'product_warehouse.qty'
+            )
+            ->orderBy('products.name')
+            ->get();
+
+        $rows = [];
+        foreach ($stockRows as $stock) {
+            $variantId = $stock->variant_id ? (int) $stock->variant_id : null;
+            $batchId = $stock->product_batch_id ? (int) $stock->product_batch_id : null;
+
+            // "all" expands every warehouse line; skip null-batch for other batch products when all?
+            // Keep every warehouse row as-is for "all".
+
+            $name = (string) $stock->name;
+            $code = (string) $stock->code;
+            $extra = str_replace(',', '/', (string) ($stock->imei_number ?? ''));
+
+            if ($variantId) {
+                $pv = ProductVariant::select('id', 'item_code', 'variant_id')
+                    ->FindExactProduct((int) $stock->product_id, $variantId)
+                    ->first();
+                $variantName = Variant::find($variantId)?->name ?? '';
+                if ($pv?->item_code) {
+                    $code = $pv->item_code;
+                }
+                if ($variantName) {
+                    $name = $name . ' (' . $variantName . ')';
+                    $extra = trim(($extra ? $extra . ' / ' : '') . 'Variant: ' . $variantName);
+                }
+            } elseif ($batchId) {
+                $batch = ProductBatch::find($batchId);
+                $batchNo = $batch?->batch_no ?? (string) $batchId;
+                $extra = 'Batch: ' . $batchNo;
+                if ($batch?->expired_date) {
+                    $extra .= ' / Exp: ' . date('Y-m-d', strtotime($batch->expired_date));
+                }
+            }
+
+            $rows[] = [
+                'name' => $name,
+                'code' => $code,
+                'extra' => $extra,
+                'product_id' => (int) $stock->product_id,
+                'variant_id' => $variantId,
+                'product_batch_id' => $batchId,
+                'qty' => (float) $stock->qty,
+            ];
+        }
+
+        return $rows;
     }
 
     public function finalize(Request $request)
@@ -323,21 +448,12 @@ class StockCountController extends Controller
                 continue;
             }
 
-            $product_data = Product::select('id', 'code', 'cost')
-                ->where('code', $current_line[1])
-                ->orWhere('code', 'LIKE', "%{$current_line[1]}%")
-                ->first();
-
-            if (!$product_data) {
+            $resolved = $this->resolveCsvStockLine($warehouse_id, $current_line);
+            if (!$resolved) {
                 continue;
             }
 
-            $product_warehouse = Product_Warehouse::where([
-                'warehouse_id' => $warehouse_id,
-                'product_id' => $product_data->id,
-            ])->first();
-
-            $expected_qty = (float) ($product_warehouse->qty ?? 0);
+            $expected_qty = (float) ($resolved['qty'] ?? 0);
             $counted_qty = 0;
 
             if (isset($current_line[3])) {
@@ -353,11 +469,16 @@ class StockCountController extends Controller
                 $hasDifference = true;
             }
 
-            $product[] = $current_line[0] . ' [' . $product_data->code . ']';
+            $label = $current_line[0] . ' [' . $resolved['display_code'] . ']';
+            if (!empty($resolved['extra_label'])) {
+                $label .= ' — ' . $resolved['extra_label'];
+            }
+
+            $product[] = $label;
             $expected[] = $expected_qty;
             $counted[] = $counted_qty;
             $difference[] = $diff;
-            $cost[] = $diff * (float) $product_data->cost;
+            $cost[] = $diff * (float) $resolved['cost'];
             $i++;
         }
 
@@ -378,6 +499,97 @@ class StockCountController extends Controller
         ];
     }
 
+    /**
+     * Resolve a CSV row (name, code, extra, counted) to warehouse stock.
+     *
+     * @return array{product_id:int,display_code:string,qty:float,cost:float,extra_label:string,variant_id:?int,product_batch_id:?int}|null
+     */
+    private function resolveCsvStockLine(int $warehouseId, array $line): ?array
+    {
+        $code = trim((string) ($line[1] ?? ''));
+        $extra = trim((string) ($line[2] ?? ''));
+        if ($code === '') {
+            return null;
+        }
+
+        $batchNo = null;
+        if (preg_match('/Batch:\s*([^\/]+)/i', $extra, $m)) {
+            $batchNo = trim($m[1]);
+        }
+
+        // Variant item_code first
+        $productVariant = ProductVariant::where('item_code', $code)->first();
+        if ($productVariant) {
+            $product = Product::select('id', 'code', 'cost')->find($productVariant->product_id);
+            if (!$product) {
+                return null;
+            }
+            $stock = Product_Warehouse::where([
+                ['warehouse_id', $warehouseId],
+                ['product_id', $product->id],
+                ['variant_id', $productVariant->variant_id],
+            ])->first();
+
+            return [
+                'product_id' => (int) $product->id,
+                'display_code' => $code,
+                'qty' => (float) ($stock->qty ?? 0),
+                'cost' => (float) $product->cost,
+                'extra_label' => $extra,
+                'variant_id' => (int) $productVariant->variant_id,
+                'product_batch_id' => null,
+            ];
+        }
+
+        $product = Product::select('id', 'code', 'cost')
+            ->where('code', $code)
+            ->first();
+        if (!$product) {
+            $product = Product::select('id', 'code', 'cost')
+                ->where('code', 'LIKE', "%{$code}%")
+                ->first();
+        }
+        if (!$product) {
+            return null;
+        }
+
+        $stockQuery = Product_Warehouse::where([
+            ['warehouse_id', $warehouseId],
+            ['product_id', $product->id],
+        ]);
+
+        $batchId = null;
+        if ($batchNo !== null && $batchNo !== '') {
+            $batch = ProductBatch::where('product_id', $product->id)
+                ->where('batch_no', $batchNo)
+                ->first();
+            if ($batch) {
+                $batchId = (int) $batch->id;
+                $stockQuery->where('product_batch_id', $batchId);
+            }
+        } else {
+            $stockQuery->whereNull('variant_id');
+        }
+
+        $stock = $stockQuery->first();
+        if (!$stock && $batchId === null) {
+            $stock = Product_Warehouse::where([
+                ['warehouse_id', $warehouseId],
+                ['product_id', $product->id],
+            ])->first();
+        }
+
+        return [
+            'product_id' => (int) $product->id,
+            'display_code' => $product->code,
+            'qty' => (float) ($stock->qty ?? 0),
+            'cost' => (float) $product->cost,
+            'extra_label' => $extra,
+            'variant_id' => $stock?->variant_id ? (int) $stock->variant_id : null,
+            'product_batch_id' => $batchId ?? ($stock?->product_batch_id ? (int) $stock->product_batch_id : null),
+        ];
+    }
+
     public function adjustmentForm(Request $request, $id)
     {
         if (!$this->userCanAccessStockCount()) {
@@ -395,43 +607,54 @@ class StockCountController extends Controller
         $i = 0;
         $lines = [];
 
-        while (!feof($file_handle)) {
-            $current_line = fgetcsv($file_handle);
-            if ($current_line && $i > 0) {
-                $product_data = Product::select('id', 'code', 'qty')->where('code', $current_line[1])->first();
-                if (!$product_data) {
-                    $i++;
-                    continue;
-                }
-
-                $product_warehouse_data = Product_Warehouse::select('qty')->where([
-                    'warehouse_id' => $warehouse_id,
-                    'product_id' => $product_data->id,
-                ])->first();
-
-                if (isset($current_line[3])) {
-                    $temp_qty = $current_line[3] - $product_warehouse_data->qty;
-                } else {
-                    $temp_qty = $product_warehouse_data->qty * (-1);
-                }
-
-                if ($temp_qty < 0) {
-                    $qty = $temp_qty * (-1);
-                    $action = '-';
-                } else {
-                    $qty = $temp_qty;
-                    $action = '+';
-                }
-
-                $lines[] = [
-                    'product_id' => $product_data->id,
-                    'product_code' => $current_line[1],
-                    'name' => $current_line[0],
-                    'qty' => (float) $qty,
-                    'action' => $action,
-                    'unit_cost' => 0,
-                ];
+        while (($current_line = fgetcsv($file_handle)) !== false) {
+            if ($i === 0) {
+                $i++;
+                continue;
             }
+            if (!$current_line || !isset($current_line[1])) {
+                $i++;
+                continue;
+            }
+
+            $resolved = $this->resolveCsvStockLine($warehouse_id, $current_line);
+            if (!$resolved) {
+                $i++;
+                continue;
+            }
+
+            $counted_qty = 0;
+            if (isset($current_line[3])) {
+                $csvQty = str_replace(',', '', trim($current_line[3]));
+                if (is_numeric($csvQty)) {
+                    $counted_qty = (float) $csvQty;
+                }
+            }
+
+            $temp_qty = $counted_qty - (float) $resolved['qty'];
+            if ($temp_qty < 0) {
+                $qty = $temp_qty * (-1);
+                $action = '-';
+            } else {
+                $qty = $temp_qty;
+                $action = '+';
+            }
+
+            if ($qty == 0) {
+                $i++;
+                continue;
+            }
+
+            $lines[] = [
+                'product_id' => $resolved['product_id'],
+                'product_code' => $resolved['display_code'],
+                'name' => $current_line[0],
+                'qty' => (float) $qty,
+                'action' => $action,
+                'unit_cost' => 0,
+                'variant_id' => $resolved['variant_id'],
+                'product_batch_id' => $resolved['product_batch_id'],
+            ];
             $i++;
         }
         fclose($file_handle);

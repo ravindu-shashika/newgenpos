@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { NavBar, SideNav, ComponentContainer, PosStockRealtimeListener } from './components';
 import { Login } from './auth';
 import { HashRouter, useLocation, useNavigate, Routes, Route } from 'react-router-dom';
+import { ToastProvider } from './components/ui/Toast';
 import PosPage from './views/backend/pos/PosPage';
 import {
   flattenMenuTreeToRoutes,
@@ -225,18 +226,20 @@ function App() {
   return (
     <div className="app-root">
       <HashRouter>
-        {isAuthenticated ? (
-          <AppContent
-            menuRoutes={menuRoutes}
-            menuTree={menuTree}
-            navCollapse={navCollapse}
-            collapseSideBar={collapseSideBar}
-            selectedComponent={selectedComponent}
-            componentName={componentName}
-          />
-        ) : (
-          <Login />
-        )}
+        <ToastProvider>
+          {isAuthenticated ? (
+            <AppContent
+              menuRoutes={menuRoutes}
+              menuTree={menuTree}
+              navCollapse={navCollapse}
+              collapseSideBar={collapseSideBar}
+              selectedComponent={selectedComponent}
+              componentName={componentName}
+            />
+          ) : (
+            <Login />
+          )}
+        </ToastProvider>
       </HashRouter>
     </div>
   );

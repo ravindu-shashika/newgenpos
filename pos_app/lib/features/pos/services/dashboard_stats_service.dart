@@ -234,6 +234,7 @@ class DashboardStatsService {
 
   DashboardTransaction _mapTransaction(LocalSale sale) {
     return DashboardTransaction(
+      localSaleId: sale.id,
       referenceNo: _formatReferenceNo(sale),
       createdAt: sale.createdAt,
       itemCount: sale.itemCount,

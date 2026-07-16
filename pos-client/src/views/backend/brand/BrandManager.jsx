@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { faDownload, faPlus, faSave, faTrash, faUpload } from '@fortawesome/free-solid-svg-icons';
 
 import {
     PageLayout,
     DataTable,
     Modal,
     ConfirmModal,
+    ModalActions,
     FormField,
     FormRow,
     FormSection,
     TextInput,
     FileInput,
-    Toast,
     useToast,
     ActionMenu,
     Pagination,
     SelectionBar,
+    BtnIcon,
+    actionItem,
 } from '../../../components/ui';
 import { api, brandImageUrl } from '../../../services';
 import usePermissions from '../../../stores/usePermissions';
@@ -61,7 +64,7 @@ const BrandManager = ({ controllerName }) => {
     const importFileRef = useRef(null);
 
     // ── Toast ──────────────────────────────────────────────────────────────────
-    const { toast, showToast, showApiSuccess, showApiError } = useToast();
+    const { showToast, showApiSuccess, showApiError } = useToast();
 
     // -- Permissions (resolved against the controllerName passed from the router) --
     const { canAdd, canEdit, canDelete, canImport } = usePermissions(controllerName);
@@ -292,9 +295,9 @@ const BrandManager = ({ controllerName }) => {
                     openId={openMenu}
                     setOpenId={setOpenMenu}
                     items={[
-                        canEdit && { label: '✎ Edit', onClick: () => openEdit(r) },
+                        canEdit && actionItem('edit', 'Edit', { onClick: () => openEdit(r) }),
                         (canEdit && canDelete) && { divider: true },
-                        canDelete && { label: '🗑 Delete', danger: true, onClick: () => setDeleteId(r.id) },
+                        canDelete && actionItem('delete', 'Delete', { danger: true, onClick: () => setDeleteId(r.id) }),
                     ].filter(Boolean)}
                 />
             ),
@@ -347,15 +350,15 @@ const BrandManager = ({ controllerName }) => {
                             className="ui-btn primary"
                             onClick={() => { resetForm(); setAddOpen(true); }}
                         >
-                            + Add Brand
+                            <BtnIcon icon={faPlus} /> Add Brand
                         </button>
                     )}
                     {canImport && (
                         <button
-                            className="ui-btn ghost"
+                            className="ui-btn outline"
                             onClick={() => setImportOpen(true)}
                         >
-                            ↑ Import
+                            <BtnIcon icon={faUpload} /> Import
                         </button>
                     )}
                     {selected.size > 0 && (
@@ -363,7 +366,7 @@ const BrandManager = ({ controllerName }) => {
                             className="ui-btn danger"
                             onClick={() => setBulkDeleteOpen(true)}
                         >
-                            🗑 Delete Selected ({selected.size})
+                            <BtnIcon icon={faTrash} /> Delete Selected ({selected.size})
                         </button>
                     )}
                 </>
@@ -417,10 +420,12 @@ const BrandManager = ({ controllerName }) => {
                     title="Add Brand"
                     onClose={() => setAddOpen(false)}
                     footer={
-                        <>
-                            <button className="ui-btn ghost" onClick={() => setAddOpen(false)}>Cancel</button>
-                            <button className="ui-btn primary" onClick={handleAdd}>Add Brand</button>
-                        </>
+                        <ModalActions
+                            onCancel={() => setAddOpen(false)}
+                            onConfirm={handleAdd}
+                            confirmLabel="Add Brand"
+                            confirmIcon={faPlus}
+                        />
                     }
                 >
                     {renderFormFields()}
@@ -433,10 +438,12 @@ const BrandManager = ({ controllerName }) => {
                     title="Update Brand"
                     onClose={() => setEditOpen(false)}
                     footer={
-                        <>
-                            <button className="ui-btn ghost" onClick={() => setEditOpen(false)}>Cancel</button>
-                            <button className="ui-btn primary" onClick={handleEdit}>Update</button>
-                        </>
+                        <ModalActions
+                            onCancel={() => setEditOpen(false)}
+                            onConfirm={handleEdit}
+                            confirmLabel="Update"
+                            confirmIcon={faSave}
+                        />
                     }
                 >
                     {renderFormFields()}
@@ -449,10 +456,12 @@ const BrandManager = ({ controllerName }) => {
                     title="Import Brands"
                     onClose={() => setImportOpen(false)}
                     footer={
-                        <>
-                            <button className="ui-btn ghost" onClick={() => setImportOpen(false)}>Cancel</button>
-                            <button className="ui-btn primary" onClick={handleImport}>Import</button>
-                        </>
+                        <ModalActions
+                            onCancel={() => setImportOpen(false)}
+                            onConfirm={handleImport}
+                            confirmLabel="Import"
+                            confirmIcon={faUpload}
+                        />
                     }
                 >
                     <p style={{ fontSize: '0.8rem', marginBottom: 16, lineHeight: 1.6 }}>
@@ -470,10 +479,10 @@ const BrandManager = ({ controllerName }) => {
                             <a
                                 href="/sample_file/sample_brand.csv"
                                 download
-                                className="ui-btn ghost"
+                                className="ui-btn outline"
                                 style={{ justifyContent: 'center' }}
                             >
-                                ↓ Download Sample
+                                <BtnIcon icon={faDownload} /> Download Sample
                             </a>
                         </FormField>
                     </FormRow>
@@ -502,8 +511,6 @@ const BrandManager = ({ controllerName }) => {
                 />
             )}
 
-            {/* Toast */}
-            <Toast toast={toast} />
         </PageLayout>
     );
 };

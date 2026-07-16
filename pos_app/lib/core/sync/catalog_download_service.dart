@@ -600,6 +600,7 @@ class CatalogDownloadService {
             variantId: Value(_intOrNull(m['variant_id'])),
             qty: Value(_dbl(m['qty'])),
             price: Value(_dblOrNull(m['price'])),
+            maxPrice: Value(_dblOrNull(m['max_price'])),
             productBatchId: Value(_intOrNull(m['product_batch_id'])),
             imeiNumber: Value(m['imei_number']?.toString()),
             updatedAt: Value(m['updated_at']?.toString()),

@@ -54,7 +54,7 @@ export default function ReturnPurchaseCreate() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const referenceNo = searchParams.get('reference_no') || '';
-    const { toast, showToast } = useToast();
+    const { toast, showToast, dismissToast } = useToast();
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -391,7 +391,7 @@ export default function ReturnPurchaseCreate() {
                 <button type="button" className="ui-btn primary mt-2" onClick={applyImeiSelection}>Update</button>
             </Modal>
 
-            <Toast {...toast} />
+            <Toast toast={toast} onDismiss={dismissToast} />
         </PageLayout>
     );
 }

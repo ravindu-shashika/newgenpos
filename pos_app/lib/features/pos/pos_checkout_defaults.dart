@@ -42,6 +42,19 @@ bool checkoutPartiesMissing({
   return parts.missingCustomer || parts.missingBiller;
 }
 
+/// Clear message shown when checkout is blocked without party selection.
+String pleaseSelectCheckoutPartiesMessage({
+  required bool missingCustomer,
+  required bool missingBiller,
+}) {
+  if (missingCustomer && missingBiller) {
+    return 'Please select customer and biller';
+  }
+  if (missingCustomer) return 'Please select customer';
+  if (missingBiller) return 'Please select biller';
+  return 'Please select customer and biller';
+}
+
 /// Resolves register customer / biller / warehouse for a new sale.
 ///
 /// Only IDs present in the downloaded catalog are used. Defaults come from

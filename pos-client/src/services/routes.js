@@ -127,6 +127,17 @@ export function flattenMenuTreeToRoutes(menuTree) {
       }
       controllerName = base.controllerName ?? 'quotations';
       group = base.group ?? 'Quotation';
+    } else if (pathURL.startsWith('/sales') || pathURL.startsWith('/sale/')) {
+      const base = out.find((r) => r.pathURL === '/sales') || {};
+      if (pathURL.includes('/edit')) {
+        name = 'Edit Sale';
+      } else if (pathURL.includes('create') || pathURL.includes('add')) {
+        name = 'Add Sale';
+      } else {
+        name = 'Sale List';
+      }
+      controllerName = base.controllerName ?? 'sales';
+      group = base.group ?? 'Sale';
     } else if (pathURL.startsWith('/transfers') || pathURL.startsWith('/transfer')) {
       const base = out.find((r) => r.pathURL === '/transfers') || out.find((r) => r.pathURL === '/transfer-list') || {};
       if (pathURL.includes('import') || pathURL.includes('csv')) {

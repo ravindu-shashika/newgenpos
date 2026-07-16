@@ -17,6 +17,10 @@ trait BroadcastsPosStockChanges
         array $stockIds = [],
         array $batchIds = [],
     ): void {
+        // REVERB_DISABLED: uncomment below when Reverb live stock sync is enabled.
+        return;
+
+        /*
         app(PosStockBroadcastService::class)->broadcast(
             $warehouseId,
             $reason,
@@ -24,5 +28,6 @@ trait BroadcastsPosStockChanges
             $stockIds,
             $batchIds,
         );
+        */
     }
 }

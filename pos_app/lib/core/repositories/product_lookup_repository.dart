@@ -560,6 +560,10 @@ class ProductLookupRepository {
     required int productId,
     required int warehouseId,
   }) async {
+    final product = await (_db.select(_db.products)
+          ..where((p) => p.id.equals(productId)))
+        .getSingleOrNull();
+
     final stockRows = await (_db.select(_db.productStock)
           ..where(
             (s) =>
@@ -582,6 +586,8 @@ class ProductLookupRepository {
     final qtyByBatch = <int, double>{};
     final batchNoById = <int, String>{};
     final expiryById = <int, String?>{};
+    final priceByBatch = <int, double?>{};
+    final maxPriceByBatch = <int, double?>{};
 
     for (final stock in stockRows) {
       final batchId = stock.productBatchId;
@@ -595,6 +601,12 @@ class ProductLookupRepository {
       qtyByBatch[batchId] = (qtyByBatch[batchId] ?? 0) + stock.qty;
       batchNoById[batchId] = batch?.batchNo ?? 'Batch #$batchId';
       expiryById[batchId] = batch?.expiredDate;
+      if (stock.price != null && stock.price! > 0) {
+        priceByBatch[batchId] = stock.price;
+      }
+      if (stock.maxPrice != null && stock.maxPrice! > 0) {
+        maxPriceByBatch[batchId] = stock.maxPrice;
+      }
     }
 
     return _sortBatchOptions(
@@ -605,6 +617,8 @@ class ProductLookupRepository {
               batchNo: batchNoById[e.key] ?? 'Batch #${e.key}',
               qty: e.value,
               expiredDate: expiryById[e.key],
+              price: priceByBatch[e.key] ?? product?.price,
+              maxPrice: maxPriceByBatch[e.key] ?? product?.maxPrice,
             ),
           )
           .toList(),
@@ -615,6 +629,10 @@ class ProductLookupRepository {
     required int productId,
     required int warehouseId,
   }) async {
+    final product = await (_db.select(_db.products)
+          ..where((p) => p.id.equals(productId)))
+        .getSingleOrNull();
+
     final batchRows = await (_db.select(_db.productBatches)
           ..where(
             (b) =>
@@ -644,12 +662,25 @@ class ProductLookupRepository {
       final qty = warehouseQty > 0 ? warehouseQty : batch.qty;
       if (qty <= 0) continue;
 
+      double? batchPrice;
+      double? batchMaxPrice;
+      for (final row in warehouseRows) {
+        if (row.price != null && row.price! > 0) {
+          batchPrice = row.price;
+        }
+        if (row.maxPrice != null && row.maxPrice! > 0) {
+          batchMaxPrice = row.maxPrice;
+        }
+      }
+
       options.add(
         ProductBatchOption(
           batchId: batch.id,
           batchNo: batch.batchNo,
           qty: qty,
           expiredDate: batch.expiredDate,
+          price: batchPrice ?? product?.price,
+          maxPrice: batchMaxPrice ?? product?.maxPrice,
         ),
       );
     }

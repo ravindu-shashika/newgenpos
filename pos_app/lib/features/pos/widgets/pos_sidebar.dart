@@ -71,7 +71,7 @@ class PosSidebar extends StatelessWidget {
     return Material(
       color: brand.sidebarBg,
       child: SizedBox(
-        width: 68,
+        width: 72,
         child: Container(
           decoration: BoxDecoration(
             border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
@@ -83,7 +83,7 @@ class PosSidebar extends StatelessWidget {
               child: PosBrandLogo(
                 logoPath: sidebarLogoPath,
                 appName: displayAppName,
-                size: 44,
+                size: 48,
                 variant: PosBrandLogoVariant.sidebar,
               ),
             ),
@@ -180,30 +180,25 @@ class PosSidebar extends StatelessWidget {
                       onTap: _enabled ? onSettings : null,
                       enabled: _enabled,
                     ),
+                    _NavIcon(
+                      icon: Icons.person_outline,
+                      tooltip: 'Operator profile',
+                      onTap: _enabled ? onProfile : null,
+                      enabled: _enabled,
+                    ),
+                    SafeArea(
+                      top: false,
+                      minimum: const EdgeInsets.only(bottom: 4),
+                      child: _NavIcon(
+                        icon: Icons.logout_rounded,
+                        tooltip: 'Sign out',
+                        onTap: _enabled ? onLogout : null,
+                        enabled: _enabled,
+                        danger: true,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ),
-            SafeArea(
-              top: false,
-              minimum: const EdgeInsets.only(bottom: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _NavIcon(
-                    icon: Icons.person_outline,
-                    tooltip: 'Operator profile',
-                    onTap: _enabled ? onProfile : null,
-                    enabled: _enabled,
-                  ),
-                  _NavIcon(
-                    icon: Icons.logout_rounded,
-                    tooltip: 'Sign out',
-                    onTap: _enabled ? onLogout : null,
-                    enabled: _enabled,
-                    danger: true,
-                  ),
-                ],
               ),
             ),
           ],
@@ -255,7 +250,7 @@ class _NavIcon extends StatelessWidget {
     final Color labelColor = active ? Colors.white : inactiveColor;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       child: Tooltip(
         message: tooltip,
         child: Material(
@@ -265,8 +260,8 @@ class _NavIcon extends StatelessWidget {
             onTap: enabled ? onTap : null,
             borderRadius: BorderRadius.circular(kPosButtonRadius),
             child: SizedBox(
-              width: 48,
-              height: label == null ? 48 : 52,
+              width: 56,
+              height: label == null ? 52 : 58,
               child: Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
@@ -274,15 +269,15 @@ class _NavIcon extends StatelessWidget {
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(icon, size: label == null ? 22 : 20, color: iconColor),
+                      Icon(icon, size: label == null ? 28 : 26, color: iconColor),
                       if (label != null) ...[
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           label!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 9,
+                            fontSize: 10,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.2,
                             color: labelColor,
@@ -293,7 +288,7 @@ class _NavIcon extends StatelessWidget {
                   ),
                   if (badgeCount > 0)
                     Positioned(
-                      right: 2,
+                      right: 0,
                       top: 0,
                       child: Container(
                         constraints: const BoxConstraints(
@@ -323,8 +318,8 @@ class _NavIcon extends StatelessWidget {
                     ),
                   if (statusDotColor != null)
                     Positioned(
-                      right: 6,
-                      top: 6,
+                      right: 4,
+                      top: 4,
                       child: Container(
                         width: 9,
                         height: 9,

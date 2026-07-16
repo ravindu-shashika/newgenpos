@@ -149,6 +149,101 @@ class PurchaseController extends Controller
             return redirect()->back()->with('not_permitted', __('db.Sorry! You are not allowed to access this module'));
     }
 
+    private function nullablePurchasePrice($value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (float) $value;
+    }
+
+    private function applyPurchaseWarehousePricing(
+        Product_Warehouse $warehouseRow,
+        float $salePrice,
+        $maxPrice
+    ): void {
+        $warehouseRow->price = $salePrice;
+        $normalizedMax = $this->nullablePurchasePrice($maxPrice);
+        if ($normalizedMax !== null) {
+            $warehouseRow->max_price = $normalizedMax;
+        }
+    }
+
+    private function batchWarehouseStock(
+        int $productId,
+        int $batchId,
+        ?int $warehouseId
+    ): ?Product_Warehouse {
+        $query = Product_Warehouse::where('product_id', $productId)
+            ->where('product_batch_id', $batchId);
+
+        if ($warehouseId !== null && $warehouseId > 0) {
+            $stock = (clone $query)->where('warehouse_id', $warehouseId)->first();
+            if ($stock) {
+                return $stock;
+            }
+        }
+
+        // Fall back to any warehouse row for this batch (avoids product-wide max_price).
+        return $query->orderByDesc('id')->first();
+    }
+
+    /**
+     * Sale price + max price for a batch (warehouse stock first, then purchase line, then product).
+     *
+     * @return array{net_unit_price: float, net_unit_max_price: float|null}
+     */
+    private function batchSalePricing(
+        int $productId,
+        int $batchId,
+        ?int $warehouseId,
+        Product $product,
+        ?ProductPurchase $purchase = null
+    ): array {
+        $stock = $this->batchWarehouseStock($productId, $batchId, $warehouseId);
+
+        $price = $stock && $stock->price !== null
+            ? (float) $stock->price
+            : ($purchase
+                ? (float) $purchase->net_unit_price
+                : (float) $product->price);
+
+        $maxPrice = null;
+        if ($stock && $stock->max_price !== null) {
+            $maxPrice = (float) $stock->max_price;
+        } elseif ($stock && $stock->price !== null) {
+            // Batch stock exists but max was never set — do not show product-wide max from another batch.
+            $maxPrice = (float) $stock->price;
+        } elseif ($product->max_price !== null) {
+            $maxPrice = (float) $product->max_price;
+        }
+
+        return [
+            'net_unit_price' => $price,
+            'net_unit_max_price' => $maxPrice,
+        ];
+    }
+
+    private function maxPriceForPurchaseLine(
+        ProductPurchase $line,
+        Product $product,
+        ?int $warehouseId
+    ): ?float {
+        if ($line->product_batch_id && $warehouseId) {
+            $stock = $this->batchWarehouseStock(
+                (int) $line->product_id,
+                (int) $line->product_batch_id,
+                $warehouseId
+            );
+            if ($stock && $stock->max_price !== null) {
+                return (float) $stock->max_price;
+            }
+        }
+
+        return $product->max_price !== null ? (float) $product->max_price : null;
+    }
+
     private function isImeiExist(string $imei, string $product_id): bool
     {
         $product_warehouses = Product_Warehouse::where('product_id', $product_id)->get();
@@ -312,6 +407,7 @@ class PurchaseController extends Controller
             $net_unit_margin = $data['net_unit_margin'];
             $net_unit_margin_type = $data['net_unit_margin_type'];
             $net_unit_price = $data['net_unit_price'];
+            $net_unit_max_price = $data['net_unit_max_price'] ?? [];
             $discount = $data['discount'];
             $discount_type = $data['discount_type'] ?? [];
             $tax_rate = $data['tax_rate'];
@@ -337,10 +433,16 @@ class PurchaseController extends Controller
                 }
                 $lims_product_data = Product::find($id);
                 $price = $lims_product_data->price;
-                // Batch: use client batch when provided; otherwise auto-increment / match cost+price
+                // Batch: auto generates when empty; manual mode requires client batch_no
                 if ($lims_product_data->is_batch) {
                     $clientBatch = isset($batch_no[$i]) ? trim((string) $batch_no[$i]) : '';
+                    $batchMode = ($lims_product_data->batch_number_mode ?? 'auto') === 'manual' ? 'manual' : 'auto';
                     if ($clientBatch === '') {
+                        if ($batchMode === 'manual') {
+                            throw new \InvalidArgumentException(
+                                'Batch number is required for product: ' . ($lims_product_data->name ?? $id)
+                            );
+                        }
                         $resolvedBatch = $this->resolvePurchaseBatchForLine(
                             (int) $id,
                             (float) $net_unit_cost[$i],
@@ -426,6 +528,10 @@ class PurchaseController extends Controller
                 $lims_product_data->profit_margin_type = $net_unit_margin_type[$i];
 
                 $lims_product_data->price = $net_unit_price[$i];
+                $lineMaxPrice = $this->nullablePurchasePrice($net_unit_max_price[$i] ?? null);
+                if ($lineMaxPrice !== null) {
+                    $lims_product_data->max_price = $lineMaxPrice;
+                }
 
                 $lims_product_data->save();
                 //add quantity to warehouse
@@ -439,11 +545,14 @@ class PurchaseController extends Controller
                     $lims_product_warehouse_data->product_batch_id = $product_purchase['product_batch_id'];
                     $lims_product_warehouse_data->warehouse_id = $data['warehouse_id'];
                     $lims_product_warehouse_data->qty = $quantity;
-                    if($price)
-                        $lims_product_warehouse_data->price = $price;
                     if($lims_product_data->is_variant)
                         $lims_product_warehouse_data->variant_id = $lims_product_variant_data->variant_id;
                 }
+                $this->applyPurchaseWarehousePricing(
+                    $lims_product_warehouse_data,
+                    (float) $net_unit_price[$i],
+                    $net_unit_max_price[$i] ?? null
+                );
 
                 if($imei_numbers[$i]) {
                     // prevent duplication
@@ -1274,6 +1383,7 @@ class PurchaseController extends Controller
         $product['profit_margin'] = $lims_product_data->profit_margin;
         $product['profit_margin_type'] = $lims_product_data->profit_margin_type;
         $product['product_price'] = $lims_product_data->price;
+        $product['product_max_price'] = $lims_product_data->max_price;
 
         $cost = (float)$lims_product_data->cost;
         $price = (float)$lims_product_data->price;
@@ -1332,7 +1442,10 @@ class PurchaseController extends Controller
             $product['tax_method'] = (int) ($lims_product_data->tax_method ?? 1);
             $product['is_batch'] = (bool) ($lims_product_data->is_batch ?? false);
             $product['is_imei'] = (bool) ($lims_product_data->is_imei ?? false);
-            if ($lims_product_data->is_batch) {
+            $product['batch_number_mode'] = ($lims_product_data->is_batch && ($lims_product_data->batch_number_mode ?? 'auto') === 'manual')
+                ? 'manual'
+                : 'auto';
+            if ($lims_product_data->is_batch && $product['batch_number_mode'] === 'auto') {
                 $batchSuggestion = $this->resolvePurchaseBatchForLine(
                     (int) $lims_product_data->id,
                     (float) $lims_product_data->cost,
@@ -1342,6 +1455,12 @@ class PurchaseController extends Controller
                 $product['product_batch_id'] = $batchSuggestion['product_batch_id'];
                 $product['is_new_batch'] = $batchSuggestion['is_new_batch'];
                 $product['expired_date'] = $batchSuggestion['expired_date'];
+            } elseif ($lims_product_data->is_batch) {
+                $product['batch_no'] = '';
+                $product['product_batch_id'] = null;
+                $product['is_new_batch'] = true;
+                $product['expired_date'] = null;
+                $product['next_batch_no'] = $this->nextPurchaseBatchNumber((int) $lims_product_data->id);
             }
             $product['units'] = collect($units)->map(fn ($u) => [
                 'id' => $u->id,
@@ -1365,7 +1484,14 @@ class PurchaseController extends Controller
                 if (!$purchase) {
                     return $this->spaJson($request, ['message' => __('db.Purchase not found')], 404);
                 }
-                $lines = ProductPurchase::where('purchase_id', $id)->get()->map(function ($line) {
+                $lims_product_purchase_data = ProductPurchase::where('purchase_id', $id)->get();
+                if ($this->purchaseHasSale($lims_product_purchase_data)) {
+                    return $this->spaJson($request, [
+                        'message' => $this->purchaseEditBlockedMessage(),
+                        'editable' => false,
+                    ], 422);
+                }
+                $lines = $lims_product_purchase_data->map(function ($line) use ($purchase) {
                     $product = Product::find($line->product_id);
                     $unit = Unit::find($line->purchase_unit_id);
                     $tax = Tax::where('rate', $line->tax_rate)->first();
@@ -1385,6 +1511,11 @@ class PurchaseController extends Controller
                         'net_unit_margin' => $line->net_unit_margin,
                         'net_unit_margin_type' => $line->net_unit_margin_type,
                         'net_unit_price' => $line->net_unit_price,
+                        'net_unit_max_price' => $this->maxPriceForPurchaseLine(
+                            $line,
+                            $product,
+                            (int) $purchase->warehouse_id
+                        ),
                         'discount' => $line->discount,
                         'discount_type' => $line->discount_type ?? 'flat',
                         'tax_rate' => $line->tax_rate,
@@ -1392,6 +1523,9 @@ class PurchaseController extends Controller
                         'subtotal' => $line->total,
                         'tax_name' => $tax->name ?? 'No Tax',
                         'is_batch' => $isBatch,
+                        'batch_number_mode' => $isBatch && ($product->batch_number_mode ?? 'auto') === 'manual'
+                            ? 'manual'
+                            : 'auto',
                         'product_batch_id' => $line->product_batch_id,
                         'batch_no' => $isBatch ? ($batch->batch_no ?? '') : '',
                         'expired_date' => $isBatch && $batch?->expired_date
@@ -1435,6 +1569,9 @@ class PurchaseController extends Controller
             $lims_product_list_with_variant = $this->productWithVariant();
             $lims_purchase_data = Purchase::find($id);
             $lims_product_purchase_data = ProductPurchase::where('purchase_id', $id)->get();
+            if ($this->purchaseHasSale($lims_product_purchase_data)) {
+                return redirect('purchases')->with('not_permitted', $this->purchaseEditBlockedMessage());
+            }
             foreach ($lims_product_purchase_data as $purchase) {
                 $lims_product_data = Product::select('cost', 'profit_margin', 'profit_margin_type', 'price')->where('id', $purchase->product_id)->first();
                 $cost = (float) $purchase->net_unit_cost;
@@ -1476,6 +1613,24 @@ class PurchaseController extends Controller
     public function update(UpdatePurchaseRequest $request, $id)
     {
         $lims_purchase_data = Purchase::find($id);
+        if (!$lims_purchase_data) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => __('db.Purchase not found')], 404);
+            }
+            return redirect('purchases')->with('not_permitted', __('db.Purchase not found'));
+        }
+
+        $lims_product_purchase_data = ProductPurchase::where('purchase_id', $id)->get();
+        if ($this->purchaseHasSale($lims_product_purchase_data)) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, [
+                    'success' => false,
+                    'message' => $this->purchaseEditBlockedMessage(),
+                ], 422);
+            }
+            return redirect()->back()->with('not_permitted', $this->purchaseEditBlockedMessage());
+        }
+
         $data = $request->except('document');
         $document = $request->document;
         if ($document) {
@@ -1544,6 +1699,7 @@ class PurchaseController extends Controller
             $net_unit_margin = $data['net_unit_margin'];
             $net_unit_margin_type = $data['net_unit_margin_type'];
             $net_unit_price = $data['net_unit_price'];
+            $net_unit_max_price = $data['net_unit_max_price'] ?? [];
             $discount = $data['discount'];
             $discount_type = $data['discount_type'] ?? [];
             $tax_rate = $data['tax_rate'];
@@ -1621,6 +1777,10 @@ class PurchaseController extends Controller
                     $lims_product_data->profit_margin = $net_unit_margin[$i];
                     $lims_product_data->profit_margin_type = $net_unit_margin_type[$i];
                     $lims_product_data->price = $net_unit_price[$i];
+                    $lineMaxPrice = $this->nullablePurchasePrice($net_unit_max_price[$i] ?? null);
+                    if ($lineMaxPrice !== null) {
+                        $lims_product_data->max_price = $lineMaxPrice;
+                    }
                 }
 
                 $lims_product_data->save();
@@ -1642,10 +1802,16 @@ class PurchaseController extends Controller
 
                 $lims_product_data = Product::find($pro_id);
                 $price = null;
-                // Batch: use client batch when provided; otherwise auto-increment / match cost+price
+                // Batch: auto generates when empty; manual mode requires client batch_no
                 if ($lims_product_data->is_batch) {
                     $clientBatch = isset($batch_no[$key]) ? trim((string) $batch_no[$key]) : '';
+                    $batchMode = ($lims_product_data->batch_number_mode ?? 'auto') === 'manual' ? 'manual' : 'auto';
                     if ($clientBatch === '') {
+                        if ($batchMode === 'manual') {
+                            throw new \InvalidArgumentException(
+                                'Batch number is required for product: ' . ($lims_product_data->name ?? $pro_id)
+                            );
+                        }
                         $resolvedBatch = $this->resolvePurchaseBatchForLine(
                             (int) $pro_id,
                             (float) $net_unit_cost[$key],
@@ -1723,7 +1889,6 @@ class PurchaseController extends Controller
                 $lims_product_data->qty += $new_recieved_value;
                 if($lims_product_warehouse_data){
                     $lims_product_warehouse_data->qty += $new_recieved_value;
-                    $lims_product_warehouse_data->save();
                 }
                 else {
                     $lims_product_warehouse_data = new Product_Warehouse();
@@ -1733,9 +1898,12 @@ class PurchaseController extends Controller
                         $lims_product_warehouse_data->variant_id = $lims_product_variant_data->variant_id;
                     $lims_product_warehouse_data->warehouse_id = $data['warehouse_id'];
                     $lims_product_warehouse_data->qty = $new_recieved_value;
-                    if($price)
-                        $lims_product_warehouse_data->price = $price;
                 }
+                $this->applyPurchaseWarehousePricing(
+                    $lims_product_warehouse_data,
+                    (float) $net_unit_price[$key],
+                    $net_unit_max_price[$key] ?? null
+                );
 
 
                 //dealing with imei numbers
@@ -1857,7 +2025,7 @@ class PurchaseController extends Controller
                     return $this->spaJson($request, ['message' => __('db.Purchase not found')], 404);
                 }
                 $meta = $this->purchaseFormMeta();
-                $lines = ProductPurchase::where('purchase_id', $id)->get()->map(function ($line) {
+                $lines = ProductPurchase::where('purchase_id', $id)->get()->map(function ($line) use ($purchase) {
                     $product = Product::find($line->product_id);
                     $unit = Unit::find($line->purchase_unit_id);
                     $tax = Tax::where('rate', $line->tax_rate)->first();
@@ -1877,6 +2045,11 @@ class PurchaseController extends Controller
                         'net_unit_margin' => $line->net_unit_margin,
                         'net_unit_margin_type' => $line->net_unit_margin_type,
                         'net_unit_price' => $line->net_unit_price,
+                        'net_unit_max_price' => $this->maxPriceForPurchaseLine(
+                            $line,
+                            $product,
+                            (int) $purchase->warehouse_id
+                        ),
                         'discount' => $line->discount,
                         'discount_type' => $line->discount_type ?? 'flat',
                         'tax_rate' => $line->tax_rate,
@@ -1884,6 +2057,9 @@ class PurchaseController extends Controller
                         'subtotal' => $line->total,
                         'tax_name' => $tax->name ?? 'No Tax',
                         'is_batch' => $isBatch,
+                        'batch_number_mode' => $isBatch && ($product->batch_number_mode ?? 'auto') === 'manual'
+                            ? 'manual'
+                            : 'auto',
                         'product_batch_id' => $line->product_batch_id,
                         'batch_no' => $isBatch ? ($batch->batch_no ?? '') : '',
                         'expired_date' => $isBatch && $batch?->expired_date
@@ -2254,7 +2430,21 @@ class PurchaseController extends Controller
 
     private function purchaseHasSale($lims_product_purchase_data)
     {
-        $has_sale = false;
+        if ($lims_product_purchase_data->isEmpty()) {
+            return false;
+        }
+
+        $batchIds = $lims_product_purchase_data
+            ->pluck('product_batch_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($batchIds->isNotEmpty()
+            && Product_Sale::whereIn('product_batch_id', $batchIds)->exists()) {
+            return true;
+        }
+
         foreach ($lims_product_purchase_data as $product_purchase_data) {
             $product_sale = Product_Sale::where('product_id', $product_purchase_data->product_id)
                 ->select('updated_at')
@@ -2266,11 +2456,16 @@ class PurchaseController extends Controller
             }
 
             if ($product_sale->updated_at->gt($product_purchase_data->updated_at)) {
-                $has_sale = true;
+                return true;
             }
         }
 
-        return $has_sale;
+        return false;
+    }
+
+    private function purchaseEditBlockedMessage(): string
+    {
+        return __('db.Can not edit, purchase or batch has sale!');
     }
 
     public function deleteBySelection(Request $request)
@@ -2559,6 +2754,10 @@ class PurchaseController extends Controller
             }
             $lims_purchase_data = Purchase::find($id);
             $lims_product_purchase_data = ProductPurchase::where('purchase_id', $id)->get();
+            if ($this->purchaseHasSale($lims_product_purchase_data)) {
+                DB::rollBack();
+                return redirect()->back()->with('not_permitted', $this->purchaseEditBlockedMessage());
+            }
 
             $data['created_at'] = date("Y-m-d", strtotime(str_replace("/", "-", $data['created_at'])));
             $product_id = $data['product_id'];
@@ -2957,14 +3156,30 @@ class PurchaseController extends Controller
                 'product_batch_id' => null,
                 'is_new_batch' => false,
                 'expired_date' => null,
+                'batch_number_mode' => 'auto',
+            ]);
+        }
+
+        $batchMode = ($product->batch_number_mode ?? 'auto') === 'manual' ? 'manual' : 'auto';
+        if ($batchMode === 'manual') {
+            return $this->spaJson($request, [
+                'batch_no' => '',
+                'product_batch_id' => null,
+                'is_new_batch' => true,
+                'expired_date' => null,
+                'batch_number_mode' => 'manual',
+                'next_batch_no' => $this->nextPurchaseBatchNumber($productId),
             ]);
         }
 
         $resolved = $this->resolvePurchaseBatchForLine(
             $productId,
             (float) $request->input('net_unit_cost', 0),
-            (float) $request->input('net_unit_price', 0)
+            (float) $request->input('net_unit_price', 0),
+            $this->nullablePurchasePrice($request->input('net_unit_max_price')),
+            (int) $request->input('warehouse_id', 0) ?: null
         );
+        $resolved['batch_number_mode'] = 'auto';
 
         return $this->spaJson($request, $resolved);
     }
@@ -2979,6 +3194,7 @@ class PurchaseController extends Controller
         }
 
         $productId = (int) $request->input('product_id');
+        $warehouseId = (int) $request->input('warehouse_id', 0) ?: null;
         $product = Product::find($productId);
         if (!$product) {
             return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
@@ -2988,11 +3204,19 @@ class PurchaseController extends Controller
             ->orderByDesc('id')
             ->get(['id', 'batch_no', 'expired_date', 'qty']);
 
-        $items = $batches->map(function (ProductBatch $batch) use ($product) {
+        $items = $batches->map(function (ProductBatch $batch) use ($product, $warehouseId) {
             $purchase = ProductPurchase::query()
                 ->where('product_batch_id', $batch->id)
                 ->orderByDesc('id')
                 ->first();
+
+            $pricing = $this->batchSalePricing(
+                (int) $product->id,
+                (int) $batch->id,
+                $warehouseId,
+                $product,
+                $purchase
+            );
 
             return [
                 'batch_no' => (string) $batch->batch_no,
@@ -3005,9 +3229,8 @@ class PurchaseController extends Controller
                 'net_unit_cost' => $purchase
                     ? (float) $purchase->net_unit_cost
                     : (float) $product->cost,
-                'net_unit_price' => $purchase
-                    ? (float) $purchase->net_unit_price
-                    : (float) $product->price,
+                'net_unit_price' => $pricing['net_unit_price'],
+                'net_unit_max_price' => $pricing['net_unit_max_price'],
                 'net_unit_margin' => $purchase
                     ? (float) $purchase->net_unit_margin
                     : (float) ($product->profit_margin ?? 0),
@@ -3018,10 +3241,14 @@ class PurchaseController extends Controller
         })->values();
 
         $nextBatchNo = $this->nextPurchaseBatchNumber($productId);
+        $batchMode = ($product->is_batch && ($product->batch_number_mode ?? 'auto') === 'manual')
+            ? 'manual'
+            : 'auto';
 
         return $this->spaJson($request, [
             'batches' => $items,
             'next_batch_no' => $nextBatchNo,
+            'batch_number_mode' => $batchMode,
         ]);
     }
 
@@ -3036,6 +3263,7 @@ class PurchaseController extends Controller
 
         $productId = (int) $request->input('product_id');
         $batchNo = trim((string) $request->input('batch_no', ''));
+        $warehouseId = (int) $request->input('warehouse_id', 0) ?: null;
         $product = Product::find($productId);
         if (!$product) {
             return $this->spaJson($request, ['message' => __('db.Product not found')], 404);
@@ -3063,6 +3291,14 @@ class PurchaseController extends Controller
             ->orderByDesc('id')
             ->first();
 
+        $pricing = $this->batchSalePricing(
+            $productId,
+            (int) $batch->id,
+            $warehouseId,
+            $product,
+            $purchase
+        );
+
         return $this->spaJson($request, [
             'batch_no' => (string) $batch->batch_no,
             'product_batch_id' => (int) $batch->id,
@@ -3074,9 +3310,8 @@ class PurchaseController extends Controller
             'net_unit_cost' => $purchase
                 ? (float) $purchase->net_unit_cost
                 : (float) $product->cost,
-            'net_unit_price' => $purchase
-                ? (float) $purchase->net_unit_price
-                : (float) $product->price,
+            'net_unit_price' => $pricing['net_unit_price'],
+            'net_unit_max_price' => $pricing['net_unit_max_price'],
             'net_unit_margin' => $purchase
                 ? (float) $purchase->net_unit_margin
                 : (float) ($product->profit_margin ?? 0),
@@ -3087,34 +3322,61 @@ class PurchaseController extends Controller
     }
 
     /**
-     * Reuse an existing batch when cost and sale price match a prior purchase line;
+     * Reuse an existing batch when cost, sale price, and max price match a prior batch;
      * otherwise assign the next incremental batch number for the product.
      */
-    protected function resolvePurchaseBatchForLine(int $productId, float $netUnitCost, float $netUnitPrice): array
-    {
+    protected function resolvePurchaseBatchForLine(
+        int $productId,
+        float $netUnitCost,
+        float $netUnitPrice,
+        ?float $netUnitMaxPrice = null,
+        ?int $warehouseId = null
+    ): array {
         $cost = round($netUnitCost, 2);
         $price = round($netUnitPrice, 2);
+        $max = $netUnitMaxPrice !== null ? round($netUnitMaxPrice, 2) : null;
 
-        $existingPurchase = ProductPurchase::query()
+        $candidates = ProductPurchase::query()
             ->where('product_id', $productId)
             ->whereNotNull('product_batch_id')
             ->whereRaw('ROUND(net_unit_cost, 2) = ?', [$cost])
             ->whereRaw('ROUND(net_unit_price, 2) = ?', [$price])
             ->orderByDesc('id')
-            ->first();
+            ->get();
 
-        if ($existingPurchase) {
+        foreach ($candidates as $existingPurchase) {
             $batch = ProductBatch::find($existingPurchase->product_batch_id);
-            if ($batch) {
-                return [
-                    'batch_no' => $batch->batch_no,
-                    'product_batch_id' => $batch->id,
-                    'is_new_batch' => false,
-                    'expired_date' => $batch->expired_date
-                        ? date('Y-m-d', strtotime($batch->expired_date))
-                        : null,
-                ];
+            if (!$batch) {
+                continue;
             }
+
+            $whId = $warehouseId;
+            if (!$whId) {
+                $whId = (int) (DB::table('purchases')
+                    ->where('id', $existingPurchase->purchase_id)
+                    ->value('warehouse_id') ?? 0) ?: null;
+            }
+
+            $stock = $this->batchWarehouseStock($productId, (int) $batch->id, $whId);
+            $stockMax = $stock && $stock->max_price !== null
+                ? round((float) $stock->max_price, 2)
+                : null;
+
+            $maxMatches = ($max === null && $stockMax === null)
+                || ($max !== null && $stockMax !== null && $max === $stockMax);
+
+            if (!$maxMatches) {
+                continue;
+            }
+
+            return [
+                'batch_no' => $batch->batch_no,
+                'product_batch_id' => $batch->id,
+                'is_new_batch' => false,
+                'expired_date' => $batch->expired_date
+                    ? date('Y-m-d', strtotime($batch->expired_date))
+                    : null,
+            ];
         }
 
         return [
@@ -3376,14 +3638,14 @@ class PurchaseController extends Controller
         }
         $standard = Product::ActiveStandard()->where(function ($q) { $q->whereNull('is_variant')->orWhere('is_variant', 0); })
             ->where(function ($q) use ($term) { $q->where('name', 'LIKE', "%{$term}%")->orWhere('code', 'LIKE', "%{$term}%"); })
-            ->select('id', 'name', 'code', 'cost', 'price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->limit(20)->get();
+            ->select('id', 'name', 'code', 'cost', 'price', 'max_price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->limit(20)->get();
         $variantParents = Product::ActiveStandard()->where('is_variant', 1)
             ->where(function ($q) use ($term) { $q->where('name', 'LIKE', "%{$term}%")->orWhere('code', 'LIKE', "%{$term}%"); })
-            ->select('id', 'name', 'code', 'cost', 'price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->limit(20)->get();
+            ->select('id', 'name', 'code', 'cost', 'price', 'max_price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->limit(20)->get();
         $variantParentIds = Product::ActiveStandard()->join('product_variants', 'products.id', '=', 'product_variants.product_id')
             ->where('products.is_variant', 1)->where('product_variants.item_code', 'LIKE', "%{$term}%")->pluck('products.id');
         $variantByCode = Product::ActiveStandard()->whereIn('id', $variantParentIds)
-            ->select('id', 'name', 'code', 'cost', 'price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->get();
+            ->select('id', 'name', 'code', 'cost', 'price', 'max_price', 'tax_id', 'is_variant', 'is_batch', 'purchase_unit_id', 'profit_margin', 'profit_margin_type')->get();
         $merged = $standard->merge($variantParents)->merge($variantByCode)->unique('id')->values();
         $variantCounts = ProductVariant::whereIn('product_id', $merged->pluck('id'))->select('product_id', DB::raw('COUNT(*) as cnt'))->groupBy('product_id')->pluck('cnt', 'product_id');
         $taxRates = Tax::whereIn('id', $merged->pluck('tax_id')->filter()->unique())->pluck('rate', 'id');
@@ -3392,6 +3654,7 @@ class PurchaseController extends Controller
             return [
                 'id' => $p->id, 'name' => $p->name, 'code' => $p->code, 'cost' => $p->cost,
                 'price' => $p->price,
+                'max_price' => $p->max_price,
                 'profit_margin' => $p->profit_margin,
                 'profit_margin_type' => $p->profit_margin_type ?? 'percentage',
                 'is_batch' => (bool) ($p->is_batch ?? false),

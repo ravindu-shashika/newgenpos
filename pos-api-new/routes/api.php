@@ -150,9 +150,10 @@ Route::middleware($middleware)->name('api.')->group(function () {
     Route::middleware('auth.api.token')->get('labels/print', [LabelsController::class, 'printLabel']);
 
     Route::middleware(['auth:sanctum'])->group(function () {
-        Route::post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Support\Facades\Broadcast::auth($request);
-        });
+        // REVERB_DISABLED: uncomment when Reverb is enabled.
+        // Route::post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
+        //     return \Illuminate\Support\Facades\Broadcast::auth($request);
+        // });
         // --- Auth bootstrap ---
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/generalsettings', [AuthController::class, 'generalsettings']);
@@ -172,6 +173,7 @@ Route::middleware($middleware)->name('api.')->group(function () {
             Route::get('products/saleunit/{id}', 'saleUnit');
             Route::get('products/{id}/edit', 'editInitialData');
             Route::post('products/product-data', 'productData');
+            Route::post('products/export-data', 'exportProductData');
             Route::post('products/update', 'updateProduct');
         });
         Route::post('product', [DashboardProductController::class, 'store']);
@@ -424,6 +426,14 @@ Route::controller(SaleController::class)->group(function () {
 
         Route::post('sales/set-price-type', 'setPriceType');
     });
+
+    // SPA sale form routes — register before `sales/{sale}` resource
+    Route::get('sales/create', [SaleDashboardController::class, 'createForm']);
+    Route::get('sales/{id}/edit', [SaleDashboardController::class, 'editForm']);
+    Route::get('sales/product-search', [SaleDashboardController::class, 'productSearch']);
+    Route::get('sales/warehouse-products', [SaleDashboardController::class, 'warehouseProducts']);
+    Route::get('sales/customer-group/{customerId}', [SaleDashboardController::class, 'customerGroup']);
+
     Route::resource('sales', SaleController::class)->except('show');
 
     Route::get('/installmentplan/{id}', [InstallmentPlanController::class, 'show']);
@@ -876,9 +886,12 @@ Route::controller(SettingController::class)->group(function () {
 
         Route::get('sales', [SaleDashboardController::class, 'index']);
         Route::get('sales/create', [SaleDashboardController::class, 'createForm']);
+        Route::get('sales/{id}/edit', [SaleDashboardController::class, 'editForm']);
         Route::get('sales/product-search', [SaleDashboardController::class, 'productSearch']);
         Route::get('sales/warehouse-products', [SaleDashboardController::class, 'warehouseProducts']);
         Route::get('sales/customer-group/{customerId}', [SaleDashboardController::class, 'customerGroup']);
+        Route::put('sales/{id}', [SaleController::class, 'update']);
+        Route::post('sales/{id}', [SaleController::class, 'update']);
 
         Route::get('challans', [ChallanDashboardController::class, 'index']);
 

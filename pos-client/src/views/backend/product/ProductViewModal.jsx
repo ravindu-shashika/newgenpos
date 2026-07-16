@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Modal } from '../../../components/ui';
-import { api } from '../../../services';
+import { api, productImageUrl } from '../../../services';
 import authStore from '../../../stores/authStore';
 import { hasPermission } from '../../../config/permissions';
 import { usePermissionNames } from '../../../stores/usePermissions';
@@ -23,6 +23,23 @@ function cleanToken(value) {
     return String(value ?? '')
         .replace(/^[\s\["']+|[\s\]"']+$/g, '')
         .trim();
+}
+
+function productImageUrls(imageField, imagePathFallback) {
+    if (imagePathFallback) {
+        return [imagePathFallback];
+    }
+    if (!imageField) {
+        return [productImageUrl('zummXD2dvAtI.png')];
+    }
+
+    const urls = String(imageField)
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((file) => productImageUrl(file));
+
+    return urls.length ? urls : [productImageUrl('zummXD2dvAtI.png')];
 }
 
 export function parseProductPayload(raw) {
@@ -84,30 +101,6 @@ function resolveProductDetails(row) {
         alertQuantity: parsed?.alertQuantity || '—',
         details: parsed?.details || '',
     };
-}
-
-function productImageUrls(imageField, imagePathFallback) {
-    const serverBase = api.defaultPath.replace(/\/api\/?$/, '');
-
-    if (imagePathFallback) {
-        return [imagePathFallback];
-    }
-    if (!imageField) {
-        return [`${serverBase}/images/zummXD2dvAtI.png`];
-    }
-
-    const urls = String(imageField)
-        .split(',')
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .map((file) => {
-            if (file === 'zummXD2dvAtI.png') {
-                return `${serverBase}/images/zummXD2dvAtI.png`;
-            }
-            return `${serverBase}/images/product/${file}`;
-        });
-
-    return urls.length ? urls : [`${serverBase}/images/zummXD2dvAtI.png`];
 }
 
 function DetailTable({ columns, rows, emptyText = 'No records.' }) {

@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/services/server_reconnect_auth_guard.dart';
-import '../../core/providers/local_reverb_settings_provider.dart';
+// REVERB_DISABLED: uncomment when Reverb is enabled.
+// import '../../core/providers/local_reverb_settings_provider.dart';
 import '../../core/providers/pos_ui_settings_provider.dart';
-import '../../core/realtime/pos_realtime_service.dart';
+// REVERB_DISABLED: uncomment when Reverb is enabled.
+// import '../../core/realtime/pos_realtime_service.dart';
 import '../../core/sync/pos_stock_fallback_scheduler.dart';
 import '../../core/sync/database_backup_scheduler.dart';
 import '../../core/sync/sync_upload_scheduler.dart';
@@ -27,7 +29,8 @@ import 'widgets/database_backup_reminder_banner.dart';
 import 'widgets/pos_main_shell.dart';
 import 'widgets/pos_sidebar.dart';
 import 'widgets/pos_professional_dialog.dart';
-import 'widgets/pos_reverb_status_dialog.dart';
+// REVERB_DISABLED: uncomment when Reverb is enabled.
+// import 'widgets/pos_reverb_status_dialog.dart';
 import 'widgets/pos_window_title_bar.dart';
 
 /// Single host after login — persistent sidebar + sliding page content.
@@ -57,7 +60,8 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
         return CashRegisterExitGuard.ensureClosed(ref: ref, context: ctx);
       });
       if (mounted) {
-        unawaited(connectPosRealtimeIfConfigured(ref));
+        // REVERB_DISABLED: uncomment when Reverb is enabled.
+        // unawaited(connectPosRealtimeIfConfigured(ref));
       }
     });
   }
@@ -134,6 +138,7 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
     await showRecentTransactionsDialog(
       context: context,
       transactions: stats.recentTransactions,
+      db: db,
     );
   }
 
@@ -194,6 +199,8 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       });
     });
 
+    // REVERB_DISABLED: uncomment blocks below when Reverb is enabled.
+    /*
     ref.listen<bool>(
       localReverbSettingsProvider.select((s) => s.enableLiveStockSync),
       (previous, next) {
@@ -228,6 +235,7 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
         }
       });
     });
+    */
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,

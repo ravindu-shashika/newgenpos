@@ -50,6 +50,11 @@ class AdjustmentController extends Controller
         return Schema::hasColumn('product_adjustments', 'product_batch_id');
     }
 
+    protected function normalizeAdjustmentAction(mixed $action): string
+    {
+        return trim((string) ($action ?? '')) === '-' ? '-' : '+';
+    }
+
     protected function warehouseBatchesForProduct(int $productId, int $warehouseId): array
     {
         $pwTable = Product_Warehouse::resolveTable();
@@ -75,6 +80,23 @@ class AdjustmentController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    protected function nextAdjustmentBatchNumber(int $productId): string
+    {
+        $maxSequence = 0;
+        $batches = ProductBatch::where('product_id', $productId)->pluck('batch_no');
+        foreach ($batches as $batchNo) {
+            if (is_numeric($batchNo)) {
+                $maxSequence = max($maxSequence, (int) $batchNo);
+                continue;
+            }
+            if (preg_match('/(\d+)$/', (string) $batchNo, $matches)) {
+                $maxSequence = max($maxSequence, (int) $matches[1]);
+            }
+        }
+
+        return (string) ($maxSequence + 1);
     }
 
     protected function findOrCreateProductBatch(int $productId, string $batchNo, ?string $expiredDate): ProductBatch
@@ -153,11 +175,19 @@ class AdjustmentController extends Controller
         }
 
         if ($action === '+') {
-            if ($batchNo === null || trim($batchNo) === '' || $expiredDate === null || trim($expiredDate) === '') {
+            $batchMode = ($product->batch_number_mode ?? 'auto') === 'manual' ? 'manual' : 'auto';
+            $resolvedBatchNo = $batchNo !== null ? trim($batchNo) : '';
+            if ($resolvedBatchNo === '') {
+                if ($batchMode === 'manual') {
+                    throw new \InvalidArgumentException('Batch No and Expired Date are required for batch products.');
+                }
+                $resolvedBatchNo = $this->nextAdjustmentBatchNumber((int) $product->id);
+            }
+            if ($expiredDate === null || trim($expiredDate) === '') {
                 throw new \InvalidArgumentException('Batch No and Expired Date are required for batch products.');
             }
 
-            $batch = $this->findOrCreateProductBatch($product->id, trim($batchNo), trim($expiredDate));
+            $batch = $this->findOrCreateProductBatch($product->id, $resolvedBatchNo, trim($expiredDate));
             $batch->qty += $qty;
             $batch->save();
 
@@ -448,26 +478,41 @@ class AdjustmentController extends Controller
         $productLines = [];
 
         foreach (ProductAdjustment::where('adjustment_id', $adjustment->id)->get() as $productAdjustment) {
+            $product = Product::find($productAdjustment->product_id);
+            $name = $product?->name;
+            $variantLabel = null;
+
             if ($productAdjustment->variant_id) {
-                $product = Product::join('product_variants', 'products.id', '=', 'product_variants.product_id')
-                    ->select('products.name', 'product_variants.item_code as code')
-                    ->where([
-                        ['products.id', $productAdjustment->product_id],
-                        ['product_variants.id', $productAdjustment->variant_id],
-                    ])
+                $productVariant = ProductVariant::select('variant_id')
+                    ->FindExactProduct(
+                        $productAdjustment->product_id,
+                        $productAdjustment->variant_id
+                    )
                     ->first();
-            } else {
-                $product = Product::select('name', 'code')->find($productAdjustment->product_id);
+
+                if ($productVariant?->variant_id) {
+                    $variantLabel = DB::table('variant_master_values')
+                        ->where('id', $productVariant->variant_id)
+                        ->value('value');
+                }
             }
 
-            if ($product) {
-                $productLines[] = [
-                    'name' => $product->name,
-                    'qty' => $productAdjustment->qty,
-                    'unit_cost' => $productAdjustment->unit_cost,
-                    'label' => "{$product->name} — {$productAdjustment->qty} x {$productAdjustment->unit_cost}",
-                ];
+            if (!$name) {
+                $name = 'Product #' . $productAdjustment->product_id;
             }
+
+            $displayName = $variantLabel ? "{$name} ({$variantLabel})" : $name;
+            $qtyLabel = rtrim(rtrim((string) $productAdjustment->qty, '0'), '.');
+            $costLabel = rtrim(rtrim(number_format((float) $productAdjustment->unit_cost, 2, '.', ''), '0'), '.');
+
+            $productLines[] = [
+                'name' => $name,
+                'variant_label' => $variantLabel,
+                'display' => $displayName,
+                'qty' => $productAdjustment->qty,
+                'unit_cost' => $productAdjustment->unit_cost,
+                'label' => "{$displayName} ({$qtyLabel} x {$costLabel})",
+            ];
         }
 
         return [
@@ -477,7 +522,7 @@ class AdjustmentController extends Controller
             'warehouse_id' => $adjustment->warehouse_id,
             'warehouse_name' => $warehouse->name ?? '',
             'products' => $productLines,
-            'products_summary' => collect($productLines)->pluck('label')->join("\n"),
+            'products_summary' => collect($productLines)->pluck('label')->join(', '),
             'note' => $adjustment->note ?? '',
         ];
     }
@@ -512,20 +557,25 @@ class AdjustmentController extends Controller
             config()->set('database.connections.mysql.strict', false);
             DB::reconnect();
 
+            // Include every active non-variant product (even qty 0 / no warehouse row yet).
             $products = DB::table('products')
-                ->join($pwTable, 'products.id', '=', "{$pwTable}.product_id")
+                ->leftJoin($pwTable, function ($join) use ($pwTable, $warehouseId) {
+                    $join->on('products.id', '=', "{$pwTable}.product_id")
+                        ->where("{$pwTable}.warehouse_id", '=', $warehouseId)
+                        ->whereNull("{$pwTable}.variant_id")
+                        ->whereNull("{$pwTable}.product_batch_id");
+                })
                 ->where(function ($q) {
                     $q->whereNull('products.is_variant')->orWhere('products.is_variant', 0);
                 })
                 ->where('products.is_active', 1)
-                ->where("{$pwTable}.warehouse_id", $warehouseId)
                 ->groupBy('products.id', 'products.code', 'products.name', 'products.cost')
                 ->select(
                     'products.id',
                     'products.code',
                     'products.name',
                     'products.cost',
-                    DB::raw("SUM({$pwTable}.qty) as qty")
+                    DB::raw("COALESCE(SUM({$pwTable}.qty), 0) as qty")
                 )
                 ->get();
 
@@ -658,11 +708,40 @@ class AdjustmentController extends Controller
         return (float) $fallbackCost;
     }
 
+    protected function warehouseQtyForProduct(int $productId, int $warehouseId, ?int $variantId = null): float
+    {
+        if ($warehouseId <= 0) {
+            return 0.0;
+        }
+
+        $pwTable = Product_Warehouse::resolveTable();
+        $query = DB::table($pwTable)
+            ->where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->whereNull('product_batch_id');
+
+        if ($variantId) {
+            $query->where('variant_id', $variantId);
+        } else {
+            $query->whereNull('variant_id');
+        }
+
+        return (float) $query->sum('qty');
+    }
+
     protected function buildSingleSearchPayload(Product $product, ?int $productVariantId, float $unitCost, int $warehouseId): array
     {
+        $productVariant = $productVariantId ? ProductVariant::find($productVariantId) : null;
         $code = $product->is_variant
-            ? ProductVariant::find($productVariantId)?->item_code
+            ? ($productVariant?->item_code ?? '')
             : $product->code;
+
+        $variantMasterId = $productVariant?->variant_id;
+        $warehouseQty = $this->warehouseQtyForProduct(
+            (int) $product->id,
+            $warehouseId,
+            $variantMasterId ? (int) $variantMasterId : null
+        );
 
         $payload = [
             'data' => [
@@ -671,8 +750,15 @@ class AdjustmentController extends Controller
                 $product->id,
                 $productVariantId,
                 $unitCost,
+                $warehouseQty,
             ],
             'is_batch' => (bool) $product->is_batch,
+            'batch_number_mode' => ($product->is_batch && ($product->batch_number_mode ?? 'auto') === 'manual')
+                ? 'manual'
+                : 'auto',
+            'next_batch_no' => $product->is_batch
+                ? $this->nextAdjustmentBatchNumber((int) $product->id)
+                : '',
             'batches' => [],
         ];
 
@@ -706,6 +792,12 @@ class AdjustmentController extends Controller
         $batches = ($product->is_batch && $warehouseId)
             ? $this->warehouseBatchesForProduct((int) $product->id, $warehouseId)
             : [];
+        $batchMode = ($product->is_batch && ($product->batch_number_mode ?? 'auto') === 'manual')
+            ? 'manual'
+            : 'auto';
+        $nextBatchNo = $product->is_batch
+            ? $this->nextAdjustmentBatchNumber((int) $product->id)
+            : '';
 
         $variants = [];
         foreach ($rows as $row) {
@@ -736,6 +828,8 @@ class AdjustmentController extends Controller
                 ],
                 'variant_label' => $row->variant_label ?? '',
                 'is_batch' => (bool) $product->is_batch,
+                'batch_number_mode' => $batchMode,
+                'next_batch_no' => $nextBatchNo,
                 'batches' => $batches,
             ];
         }
@@ -804,6 +898,12 @@ class AdjustmentController extends Controller
             ['code', $product_code[0]],
             ['is_active', true]
         ])->first();
+        if (!$lims_product_data) {
+            $lims_product_data = Product::where([
+                ['alt_code', $product_code[0]],
+                ['is_active', true]
+            ])->first();
+        }
         if(!$lims_product_data) {
             $lims_product_data = Product::join('product_variants', 'products.id', 'product_variants.product_id')
                 ->select(
@@ -947,6 +1047,7 @@ class AdjustmentController extends Controller
 
         if ($this->wantsSpaResponse($request)) {
             return $this->spaJson($request, [
+                'default_action' => '+',
                 'warehouses' => $lims_warehouse_list->map(fn ($w) => [
                     'id' => $w->id,
                     'name' => $w->name,
@@ -1018,12 +1119,13 @@ class AdjustmentController extends Controller
 
             foreach ($product_id as $key => $pro_id) {
                 $lims_product_data = Product::find($pro_id);
+                $lineAction = $this->normalizeAdjustmentAction($action[$key] ?? null);
                 $lineMeta = $this->applyAdjustmentLineStock(
                     $lims_product_data,
                     (int) $data['warehouse_id'],
                     $product_code[$key],
                     (float) $qty[$key],
-                    $action[$key],
+                    $lineAction,
                     $batch_no[$key] ?? null,
                     $expired_date[$key] ?? null,
                     !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
@@ -1041,7 +1143,7 @@ class AdjustmentController extends Controller
                     'variant_id' => $lineMeta['variant_id'],
                     'adjustment_id' => $lims_adjustment_data->id,
                     'qty' => $qty[$key],
-                    'action' => $action[$key],
+                    'action' => $lineAction,
                 ];
                 if (isset($data['unit_cost'])) {
                     $product_adjustment['unit_cost'] = $unit_cost[$key];
@@ -1053,13 +1155,13 @@ class AdjustmentController extends Controller
             }
             DB::commit();
 
-            $this->broadcastPosStockChanges(
-                (int) $data['warehouse_id'],
-                'adjustment',
-                $lims_adjustment_data->reference_no,
-                $posStockIds,
-                $posBatchIds,
-            );
+            // $this->broadcastPosStockChanges(
+            //     (int) $data['warehouse_id'],
+            //     'adjustment',
+            //     $lims_adjustment_data->reference_no,
+            //     $posStockIds,
+            //     $posBatchIds,
+            // );
 
             if ($this->wantsSpaResponse($request)) {
                 return $this->spaJson($request, [
@@ -1150,6 +1252,9 @@ class AdjustmentController extends Controller
                     'variant_id' => $productAdjustment->variant_id,
                     'product_variant_id' => $productVariantId,
                     'is_batch' => $isBatch,
+                    'batch_number_mode' => $isBatch && ($product->batch_number_mode ?? 'auto') === 'manual'
+                        ? 'manual'
+                        : 'auto',
                     'product_batch_id' => $this->adjustmentStoresBatchId()
                         ? ($productAdjustment->product_batch_id ?? null)
                         : null,
@@ -1241,7 +1346,7 @@ class AdjustmentController extends Controller
                     $meta = $this->resolveSubmittedAdjustmentLineMeta(
                         (int) $pro_id,
                         (string) ($product_code[$key] ?? ''),
-                        (string) ($action[$key] ?? '-'),
+                        $this->normalizeAdjustmentAction($action[$key] ?? null),
                         $batch_no[$key] ?? null,
                         !empty($product_batch_id[$key]) ? (int) $product_batch_id[$key] : null
                     );
@@ -1272,7 +1377,7 @@ class AdjustmentController extends Controller
 
                 foreach ($product_id as $key => $pro_id) {
                     $delta = (float) ($qty[$key] ?? 0);
-                    $lineAction = (string) ($action[$key] ?? '-');
+                    $lineAction = $this->normalizeAdjustmentAction($action[$key] ?? null);
                     $lims_product_data = Product::find($pro_id);
                     if (!$lims_product_data) {
                         continue;

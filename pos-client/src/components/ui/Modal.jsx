@@ -1,75 +1,128 @@
 import React from 'react';
+import { Dialog } from 'primereact/dialog';
+import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
+import { faCheck } from '@fortawesome/free-solid-svg-icons';
+import { Button } from './Button';
+import { resolvePrimeIcon } from './primeUtils';
 
-/**
- * Modal — base modal with dark-header matching the design system.
- *
- * <Modal title="Add Item" onClose={...} footer={<>...</>}>
- *   {body content}
- * </Modal>
- *
- * ConfirmModal — pre-built destructive confirmation dialog.
- */
-export function Modal({ isOpen = true, title, onClose, children, footer, size, hideHint = true, headerExtra = null }) {
+const SIZE_WIDTH = {
+  sm: '26rem',
+  md: '40rem',
+  lg: '52rem',
+  xl: '68rem',
+  '2xl': 'min(94vw, 88rem)',
+};
+
+export function Modal({
+  isOpen = true,
+  title,
+  onClose,
+  children,
+  footer,
+  size = 'md',
+  hideHint = true,
+  headerExtra = null,
+}) {
   if (!isOpen) return null;
-  const sizeClass = size === 'sm' ? ' sm' : size === 'lg' ? ' lg' : '';
+
   return (
-    <div
-      className="ui-modal-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
-      }}
+    <Dialog
+      visible
+      header={
+        <div className="ui-modal-header-inner">
+          <span className="ui-modal-title">{title}</span>
+          {headerExtra}
+        </div>
+      }
+      onHide={onClose}
+      footer={footer ? <div className="ui-modal-actions">{footer}</div> : null}
+      modal
+      blockScroll
+      draggable={false}
+      resizable={false}
+      dismissableMask
+      style={{ width: SIZE_WIDTH[size] ?? SIZE_WIDTH.md, maxWidth: '95vw' }}
+      contentStyle={{ overflow: 'auto', maxHeight: 'calc(90vh - 11rem)' }}
+      className="ui-prime-modal"
+      maskClassName="ui-prime-modal-mask"
     >
-      <div className={`ui-modal-box${sizeClass}`} onClick={(e) => e.stopPropagation()}>
-        <div className="ui-modal-head">
-          <h5>{title}</h5>
-          <div className="d-flex align-items-center gap-2">
-            {headerExtra}
-            <button className="ui-modal-close" onClick={onClose} type="button" aria-label="Close">
-              ✕
-            </button>
-          </div>
-        </div>
-        <div className="ui-modal-body">
-          {!hideHint && (
-            <p className="ui-modal-hint">
-              Fields marked <span style={{ color: 'var(--ui-debit)' }}>*</span> are required.
-            </p>
-          )}
-          {children}
-        </div>
-        {footer && <div className="ui-modal-foot">{footer}</div>}
-      </div>
-    </div>
+      {!hideHint && (
+        <p className="ui-modal-hint">
+          Fields marked <span className="text-red-500">*</span> are required.
+        </p>
+      )}
+      <div className="ui-modal-body">{children}</div>
+    </Dialog>
   );
 }
 
 export function ConfirmModal({ title, message, onConfirm, onClose, danger }) {
   return (
-    <div
-      className="ui-modal-overlay"
-    >
-      <div className="ui-modal-box sm">
-        <div className="ui-modal-head">
-          <h5>{title}</h5>
-          <button className="ui-modal-close" onClick={onClose} type="button">
-            ✕
-          </button>
-        </div>
-        <div className="ui-modal-body">{message}</div>
-        <div className="ui-modal-foot">
-          <button className="ui-btn ghost sm" onClick={onClose} type="button">
-            <i className="fa fa-times ui-btn-icon" /> Cancel
-          </button>
-          <button
-            className={`ui-btn sm ${danger ? 'danger' : 'primary'}`}
-            onClick={onConfirm}
+    <Dialog
+      visible
+      header={title}
+      onHide={onClose}
+      modal
+      blockScroll
+      draggable={false}
+      dismissableMask
+      style={{ width: SIZE_WIDTH.sm, maxWidth: '95vw' }}
+      className="ui-prime-modal ui-prime-modal--confirm"
+      maskClassName="ui-prime-modal-mask"
+      footer={
+        <div className="ui-modal-actions">
+          <Button variant="outline" icon="pi pi-times" type="button" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant={danger ? 'danger' : 'primary'}
+            icon={danger ? 'pi pi-trash' : 'pi pi-check'}
             type="button"
+            onClick={onConfirm}
           >
-            <i className={`fa ${danger ? 'fa-trash' : 'fa-check'} ui-btn-icon`} />
             {danger ? 'Yes, Delete' : 'Confirm'}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <div className="ui-modal-body ui-modal-body--confirm">{message}</div>
+    </Dialog>
   );
 }
+
+/** Standard modal footer — Cancel + primary action (matches page header buttons). */
+export function ModalActions({
+  onCancel,
+  onConfirm,
+  cancelLabel = 'Cancel',
+  confirmLabel = 'Save',
+  confirmIcon = faCheck,
+  confirming = false,
+  danger = false,
+}) {
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        icon="pi pi-times"
+        onClick={onCancel}
+        disabled={confirming}
+      >
+        {cancelLabel}
+      </Button>
+      <Button
+        type="button"
+        variant={danger ? 'danger' : 'primary'}
+        icon={resolvePrimeIcon(confirmIcon, danger ? 'pi pi-trash' : 'pi pi-check')}
+        onClick={onConfirm}
+        disabled={confirming}
+        loading={confirming}
+      >
+        {confirmLabel}
+      </Button>
+    </>
+  );
+}
+
+export { ConfirmDialog, confirmDialog };

@@ -5,12 +5,19 @@ export function masterValueList(master) {
     return master.values.map((v) => (typeof v === 'string' ? v : v.value)).filter(Boolean);
 }
 
+function valueInList(value, list = []) {
+    const needle = String(value ?? '').trim().toLowerCase();
+    if (!needle) return false;
+    return list.some((v) => String(v).trim().toLowerCase() === needle);
+}
+
+/** Prefer master catalog chips; never bleed selected values from another type into available. */
 export function normalizeProductVariantRow(row, masters = []) {
     const legacyValues = String(row?.values ?? '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-    const selectedValues = Array.isArray(row?.selectedValues) && row.selectedValues.length
+    const selectedRaw = Array.isArray(row?.selectedValues) && row.selectedValues.length
         ? [...row.selectedValues]
         : legacyValues;
 
@@ -20,17 +27,21 @@ export function normalizeProductVariantRow(row, masters = []) {
     );
 
     const availableFromMaster = master ? masterValueList(master) : [];
-    const availableValues = Array.isArray(row?.availableValues) && row.availableValues.length
-        ? [...row.availableValues]
-        : availableFromMaster;
+    const availableValues = availableFromMaster.length
+        ? availableFromMaster
+        : (Array.isArray(row?.availableValues) && row.availableValues.length
+            ? [...row.availableValues]
+            : []);
 
-    const mergedAvailable = Array.from(new Set([...availableValues, ...selectedValues]));
+    const selectedValues = availableValues.length
+        ? selectedRaw.filter((v) => valueInList(v, availableValues))
+        : selectedRaw;
 
     return {
         master_id: master?.id ?? row?.master_id ?? null,
-        name: row?.name || master?.name || '',
+        name: master?.name || row?.name || '',
         selectedValues,
-        availableValues: mergedAvailable,
+        availableValues,
     };
 }
 
@@ -39,38 +50,54 @@ export function normalizeProductVariantRows(rows, masters = []) {
     return rows.map((row) => normalizeProductVariantRow(row, masters));
 }
 
-/** Ensure saved product_variants appear as checked attribute chips on edit. */
+/**
+ * Ensure saved product_variants appear as checked attribute chips on edit.
+ * Assigns each combo attribute to the row whose availableValues contains it
+ * (so "28" lands on Numeric Size, not Size).
+ */
 export function mergeVariantSelectionsFromCombinations(variantRows, combinations = []) {
     if (!Array.isArray(variantRows) || variantRows.length === 0) return variantRows;
     if (!Array.isArray(combinations) || combinations.length === 0) return variantRows;
 
-    if (variantRows.length === 1) {
-        const comboNames = combinations.map((c) => String(c?.name ?? '').trim()).filter(Boolean);
-        const row = variantRows[0];
-        const selectedValues = Array.from(new Set([...(row.selectedValues || []), ...comboNames]));
-        return [{
-            ...row,
-            selectedValues,
-            availableValues: Array.from(new Set([...(row.availableValues || []), ...selectedValues])),
-        }];
-    }
+    const rows = variantRows.map((row) => ({
+        ...row,
+        selectedValues: [...(row.selectedValues || [])],
+        availableValues: [...(row.availableValues || [])],
+    }));
 
-    return variantRows.map((row, index) => {
-        const selected = new Set(row.selectedValues || []);
-        combinations.forEach((combo) => {
-            const parts = String(combo?.name ?? '')
-                .split('/')
-                .map((s) => s.trim())
-                .filter(Boolean);
-            if (parts[index]) selected.add(parts[index]);
-        });
-        const selectedValues = Array.from(selected);
-        return {
-            ...row,
-            selectedValues,
-            availableValues: Array.from(new Set([...(row.availableValues || []), ...selectedValues])),
-        };
+    const addToBestRow = (part) => {
+        const value = String(part ?? '').trim();
+        if (!value) return;
+
+        const byAvailable = rows.findIndex((row) => valueInList(value, row.availableValues));
+        if (byAvailable >= 0) {
+            const set = new Set(rows[byAvailable].selectedValues);
+            set.add(value);
+            rows[byAvailable].selectedValues = Array.from(set);
+            return;
+        }
+
+        // Single-type products: only row — still avoid inventing chips outside catalog.
+        if (rows.length === 1) {
+            const set = new Set(rows[0].selectedValues);
+            set.add(value);
+            rows[0].selectedValues = Array.from(set);
+            if (!rows[0].availableValues.length) {
+                rows[0].availableValues = Array.from(set);
+            }
+        }
+    };
+
+    combinations.forEach((combo) => {
+        const name = String(combo?.name ?? '').trim();
+        if (!name) return;
+        const parts = name.includes('/')
+            ? name.split('/').map((s) => s.trim()).filter(Boolean)
+            : [name];
+        parts.forEach(addToBestRow);
     });
+
+    return rows;
 }
 
 export function parseValuesInput(text) {

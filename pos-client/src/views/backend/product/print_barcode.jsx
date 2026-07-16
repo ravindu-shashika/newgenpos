@@ -45,6 +45,7 @@ function mapApiRowToProduct(row) {
             ? row[15].map((wp) => ({
                 warehouse_name: wp.warehouse_name,
                 price: wp.price,
+                max_price: wp.max_price,
             }))
             : [],
         selected_price: row[14] === true ? '' : row[2],
@@ -325,6 +326,7 @@ export default function BackendProductPrintBarcode() {
                                                 {p.warehouse_prices.map((wp, j) => (
                                                     <option key={j} value={wp.price}>
                                                         {wp.warehouse_name} | Price: {wp.price}
+                                                        {wp.max_price ? ` | Max: ${wp.max_price}` : ''}
                                                     </option>
                                                 ))}
                                             </SelectInput>

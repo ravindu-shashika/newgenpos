@@ -4,6 +4,7 @@ import { getToken, clearToken } from './tokenStorage';
 import msg from './alerts';
 import authStore from '../stores/authStore';
 import { permissionsBypassed } from '../config/permissions';
+import { getAppDefaultPath, getAppDomain } from '../config/appEnv';
 
 const COOKIE_OPTS = { path: '/' };
 
@@ -34,15 +35,7 @@ const getHeaders = (extra = {}, { multipart = false } = {}) => {
   return headers;
 };
 
-// Vite: import.meta.env (REACT_APP_* still supported via .env / vite.config define)
-const env = import.meta.env;
-const DEFAULT_PATH =
-  env.VITE_APP_DEFAULT_PATH ||
-  env.REACT_APP_DEFAULT_PATH ||
-  (typeof process !== 'undefined' ? process.env.REACT_APP_DEFAULT_PATH : '') ||
-  'http://127.0.0.1:8000';
-
-const normalizedBase = String(DEFAULT_PATH).trim().replace(/\/$/, '');
+const normalizedBase = getAppDefaultPath();
 export const defaultPath = `${normalizedBase}/api`;
 
 const appRoot = defaultPath.replace(/\/api$/, '');
@@ -54,12 +47,25 @@ export function getServerBase() {
   return appRoot;
 }
 
+export { getAppDomain, getViteAppDomain, getReactAppDomain } from '../config/appEnv';
+
 export function brandImageUrl(filename) {
   if (!filename) return null;
   const value = String(filename).trim();
   if (!value) return null;
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
   return `${appRoot}/images/brand/${value}`;
+}
+
+/** Product image under Laravel public/images/product (optional size folder: small|medium|large|xlarge). */
+export function productImageUrl(filename, size = '') {
+  if (!filename) return `${appRoot}/images/product/zummXD2dvAtI.png`;
+  const value = String(filename).trim();
+  if (!value) return `${appRoot}/images/product/zummXD2dvAtI.png`;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  if (value === 'zummXD2dvAtI.png') return `${appRoot}/images/zummXD2dvAtI.png`;
+  const folder = size ? `images/product/${size}` : 'images/product';
+  return `${appRoot}/${folder}/${value}`;
 }
 
 export function signOut() {

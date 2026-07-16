@@ -142,6 +142,10 @@ class PosAppController extends SaleDashboardController
      */
     protected function realtimeConfig(?Terminal $terminal, ?int $warehouseId): array
     {
+        // REVERB_DISABLED: uncomment block below when Reverb is enabled.
+        return ['enabled' => false];
+
+        /*
         $enabled = filter_var(env('REVERB_ENABLED', false), FILTER_VALIDATE_BOOLEAN)
             && in_array(config('broadcasting.default'), ['reverb', 'pusher'], true);
 
@@ -163,6 +167,7 @@ class PosAppController extends SaleDashboardController
             'auth_endpoint' => url('/pos/broadcasting/auth'),
             'channel' => 'private-pos.warehouse.'.$warehouseId,
         ];
+        */
     }
 
     /**
@@ -803,7 +808,7 @@ class PosAppController extends SaleDashboardController
         $this->applySince($q, $since);
 
         return $q->get([
-            'id', 'product_id', 'variant_id', 'warehouse_id', 'qty', 'price',
+            'id', 'product_id', 'variant_id', 'warehouse_id', 'qty', 'price', 'max_price',
             'product_batch_id', 'imei_number', 'updated_at',
         ]);
     }

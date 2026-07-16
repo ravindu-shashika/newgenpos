@@ -47,11 +47,14 @@ class VariantMasterImportService
                         if ($optionName === '') {
                             continue;
                         }
-                        $masterName = $optionName;
                         $raw = $values[$idx] ?? '';
                         foreach (preg_split('/\s*,\s*/', (string) $raw) as $piece) {
                             $piece = trim($piece);
                             if ($piece !== '') {
+                                // Numbers → Numeric Size; letter sizes stay under Size; colors keep option name.
+                                $masterName = preg_match('/^\d+(\.\d+)?$/', $piece)
+                                    ? 'Numeric Size'
+                                    : $optionName;
                                 $grouped[$masterName][$piece] = true;
                             }
                         }
@@ -146,6 +149,62 @@ class VariantMasterImportService
     }
 
     /**
+     * Map each attribute value to the correct variant master name.
+     * Prefers the master that owns the value; pure numbers go to Numeric Size.
+     */
+    public function resolveMasterNameForAttribute(string $value, ?string $hintOption = null): string
+    {
+        $value = trim($value);
+        $resolver = app(VariantMasterResolver::class);
+        $isNumeric = (bool) preg_match('/^\d+(\.\d+)?$/', $value);
+
+        $owned = VariantMasterValue::query()
+            ->where('is_active', true)
+            ->whereRaw('LOWER(value) = ?', [strtolower($value)])
+            ->with('master')
+            ->get();
+
+        // Pure numbers always prefer Numeric Size when that master owns the value (or exists).
+        if ($isNumeric) {
+            $numeric = $owned->first(fn ($row) => strtolower(trim((string) ($row->master?->name ?? ''))) === 'numeric size');
+            if ($numeric) {
+                return trim((string) $numeric->master->name);
+            }
+
+            return $resolver->masterNameForValue($value);
+        }
+
+        if ($owned->count() === 1) {
+            $name = trim((string) ($owned->first()->master?->name ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        if ($owned->count() > 1 && $hintOption) {
+            $hint = strtolower(trim($hintOption));
+            $match = $owned->first(fn ($row) => strtolower(trim((string) ($row->master?->name ?? ''))) === $hint);
+            if ($match) {
+                return trim((string) $match->master->name);
+            }
+        }
+
+        if ($owned->isNotEmpty()) {
+            $name = trim((string) ($owned->first()->master?->name ?? ''));
+            if ($name !== '') {
+                return $name;
+            }
+        }
+
+        $hint = trim((string) $hintOption);
+        if ($hint !== '') {
+            return $hint;
+        }
+
+        return $resolver->masterNameForValue($value);
+    }
+
+    /**
      * Values actually used on a product (from product_variants + variant_option JSON).
      *
      * @return array<string, list<string>> master name => values
@@ -158,23 +217,31 @@ class VariantMasterImportService
         }
 
         $selections = [];
+        $add = function (string $masterName, string $value) use (&$selections) {
+            $masterName = trim($masterName);
+            $value = trim($value);
+            if ($masterName === '' || $value === '') {
+                return;
+            }
+            $selections[$masterName] = array_values(array_unique(array_merge(
+                $selections[$masterName] ?? [],
+                [$value]
+            )));
+        };
+
         $options = json_decode($product->variant_option, true) ?: [];
         $values = json_decode($product->variant_value, true) ?: [];
 
         foreach ($options as $idx => $optionName) {
             $optionName = trim((string) $optionName);
-            if ($optionName === '') {
-                continue;
-            }
-            $selected = [];
             $raw = $values[$idx] ?? '';
             foreach (preg_split('/\s*,\s*/', (string) $raw) as $piece) {
                 $piece = trim($piece);
-                if ($piece !== '') {
-                    $selected[] = $piece;
+                if ($piece === '') {
+                    continue;
                 }
+                $add($this->resolveMasterNameForAttribute($piece, $optionName !== '' ? $optionName : null), $piece);
             }
-            $selections[$optionName] = array_values(array_unique($selected));
         }
 
         $resolver = app(VariantMasterResolver::class);
@@ -188,18 +255,18 @@ class VariantMasterImportService
             ->get();
 
         foreach ($valueRows as $valueRow) {
-            $masterName = trim((string) ($valueRow->master?->name ?? ''));
-            if ($masterName === '') {
-                $masterName = $resolver->masterNameForValue((string) $valueRow->value);
-            }
             $value = trim((string) $valueRow->value);
             if ($value === '') {
                 continue;
             }
-            $selections[$masterName] = array_values(array_unique(array_merge(
-                $selections[$masterName] ?? [],
-                [$value]
-            )));
+            $masterName = trim((string) ($valueRow->master?->name ?? ''));
+            if ($masterName === '') {
+                $masterName = $this->resolveMasterNameForAttribute($value);
+            } elseif (preg_match('/^\d+(\.\d+)?$/', $value) && strcasecmp($masterName, 'Size') === 0) {
+                // Linked under Size but value is numeric — prefer Numeric Size when it exists.
+                $masterName = $this->resolveMasterNameForAttribute($value, $masterName);
+            }
+            $add($masterName, $value);
         }
 
         $comboNames = ProductVariant::where('product_id', $productId)
@@ -210,11 +277,21 @@ class VariantMasterImportService
             ->values()
             ->all();
 
-        if (count($selections) === 1) {
-            $key = array_key_first($selections);
-            $selections[$key] = array_values(array_unique(array_merge($selections[$key], $comboNames)));
-        } elseif (empty($selections) && !empty($comboNames)) {
-            $selections['Size'] = $comboNames;
+        foreach ($comboNames as $comboName) {
+            $comboName = trim((string) $comboName);
+            if ($comboName === '') {
+                continue;
+            }
+            if (str_contains($comboName, '/')) {
+                foreach (preg_split('/\s*\/\s*/', $comboName) as $part) {
+                    $part = trim($part);
+                    if ($part !== '') {
+                        $add($this->resolveMasterNameForAttribute($part), $part);
+                    }
+                }
+                continue;
+            }
+            $add($this->resolveMasterNameForAttribute($comboName), $comboName);
         }
 
         return $selections;

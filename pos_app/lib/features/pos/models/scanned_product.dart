@@ -112,12 +112,16 @@ class ProductBatchOption {
     required this.batchNo,
     required this.qty,
     this.expiredDate,
+    this.price,
+    this.maxPrice,
   });
 
   final int batchId;
   final String batchNo;
   final double qty;
   final String? expiredDate;
+  final double? price;
+  final double? maxPrice;
 }
 
 enum ProductSource { local, remote }

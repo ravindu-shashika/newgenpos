@@ -135,7 +135,8 @@ class _PosSettingsScreenState extends ConsumerState<PosSettingsScreen> {
         ref.invalidate(posDeviceSettingsProvider);
         ref.invalidate(posSettingsProvider);
       } catch (_) {}
-      unawaited(connectPosRealtimeIfConfigured(ref));
+      // REVERB_DISABLED: uncomment when Reverb is enabled.
+      // unawaited(connectPosRealtimeIfConfigured(ref));
       _snack(
         snapshot
             ? 'Catalog snapshot imported'

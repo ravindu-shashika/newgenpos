@@ -3697,6 +3697,14 @@ class SaleController extends Controller
             }
         }
 
+        if ($request->expectsJson() || $request->ajax() || $request->is('api/*')) {
+            return response()->json([
+                'success' => true,
+                'message' => strip_tags($message),
+                'id' => $lims_sale_data->id,
+            ]);
+        }
+
         return redirect('sales')->with('message', $message);
     }
 
@@ -5705,6 +5713,10 @@ class SaleController extends Controller
                             THEN product_warehouse.price
                             ELSE products.price + product_variants.additional_price
                         END as price"),
+                DB::raw("CASE WHEN products.is_diffPrice = 1
+                            THEN product_warehouse.max_price
+                            ELSE products.max_price
+                        END as max_price"),
                 'product_warehouse.qty',
                 'product_warehouse.imei_number',
                 'product_warehouse.product_batch_id'
@@ -5740,6 +5752,10 @@ class SaleController extends Controller
                     THEN product_warehouse.price
                     ELSE products.price + product_variants.additional_price
                 END as price"),
+                DB::raw("CASE WHEN products.is_diffPrice = 1
+                    THEN product_warehouse.max_price
+                    ELSE products.max_price
+                END as max_price"),
                 DB::raw('1 as qty'),
                 'product_warehouse.imei_number',
                 'product_warehouse.product_batch_id'
@@ -5753,7 +5769,7 @@ class SaleController extends Controller
         // 🔹 Step 2: Prefetch data for efficiency
         $warehouseStocks = DB::table('product_warehouse')
             ->where('warehouse_id', $warehouse_id)
-            ->select('product_id', 'variant_id', 'qty', 'imei_number', 'price', 'product_batch_id')
+            ->select('product_id', 'variant_id', 'qty', 'imei_number', 'price', 'max_price', 'product_batch_id')
             ->get()
             ->groupBy('product_id');
 
@@ -5791,6 +5807,7 @@ class SaleController extends Controller
             ->select(
                 'products.*',
                 DB::raw("CASE WHEN products.is_diffPrice = 1 THEN product_warehouse.price ELSE products.price END as price"),
+                DB::raw("CASE WHEN products.is_diffPrice = 1 THEN product_warehouse.max_price ELSE products.max_price END as max_price"),
                 'product_warehouse.qty',
                 'product_warehouse.imei_number',
                 'product_warehouse.product_batch_id'
@@ -5816,6 +5833,7 @@ class SaleController extends Controller
                 ->select(
                     'products.*',
                     DB::raw("CASE WHEN products.is_diffPrice = 1 THEN product_warehouse.price ELSE products.price END as price"),
+                DB::raw("CASE WHEN products.is_diffPrice = 1 THEN product_warehouse.max_price ELSE products.max_price END as max_price"),
                     'product_warehouse.qty',
                     'product_warehouse.imei_number',
                     'product_warehouse.product_batch_id'

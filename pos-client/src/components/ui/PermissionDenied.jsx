@@ -1,10 +1,7 @@
 import React from 'react';
+import { Message } from 'primereact/message';
 import { PageLayout } from './PageLayout';
 
-/**
- * Shown when the user opens a route without the required permission.
- * @param {{ title?: string, message?: string, action?: string }} props
- */
 export function PermissionDenied({
   title = 'Access denied',
   message,
@@ -12,11 +9,11 @@ export function PermissionDenied({
 }) {
   return (
     <PageLayout title={title}>
-      <div className="ui-card" style={{ padding: 24, maxWidth: 560 }}>
-        <p className="text-muted" style={{ margin: 0 }}>
-          {message || `You do not have permission to ${action}.`}
-        </p>
-      </div>
+      <Message
+        severity="warn"
+        className="w-full"
+        text={message || `You do not have permission to ${action}.`}
+      />
     </PageLayout>
   );
 }

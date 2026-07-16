@@ -210,6 +210,7 @@ class ProductStock extends Table {
   IntColumn get variantId => integer().nullable()();
   RealColumn get qty => real().withDefault(const Constant(0))();
   RealColumn get price => real().nullable()();
+  RealColumn get maxPrice => real().nullable()();
   IntColumn get productBatchId => integer().nullable()();
   TextColumn get imeiNumber => text().nullable()();
   TextColumn get updatedAt => text().nullable()();

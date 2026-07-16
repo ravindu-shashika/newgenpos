@@ -1,24 +1,36 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     PageLayout,
     DataTable,
     ConfirmModal,
-    TextInput,
+    Modal,
+    Button,
+    SearchInput,
+    ListToolbar,
     Toast,
     useToast,
     ActionMenu,
     Pagination,
     SelectionBar,
     PermissionDenied,
+    actionItem,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions from '../../../stores/usePermissions';
+import AdjustmentForm from './AdjustmentForm';
 
 const PAGE_SIZES = [10, 25, 50, -1];
 
 export default function AdjustmentList({ controllerName }) {
+    const location = useLocation();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const legacyHandled = useRef(false);
+
+    /** @type {[{ type: 'create' } | { type: 'edit', id: string } | null, Function]} */
+    const [formMode, setFormMode] = useState(null);
+
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [pageSize, setPageSize] = useState(10);
@@ -28,7 +40,7 @@ export default function AdjustmentList({ controllerName }) {
     const [openMenu, setOpenMenu] = useState(null);
     const [deleteId, setDeleteId] = useState(null);
     const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-    const { toast, showToast } = useToast();
+    const { toast, showToast, dismissToast } = useToast();
 
     const permsAdjustments = usePermissions(controllerName || 'adjustments');
     const permsAdjustment = usePermissions('adjustment');
@@ -37,6 +49,26 @@ export default function AdjustmentList({ controllerName }) {
     const canAdd = permsAdjustments.canAdd || permsAdjustment.canAdd || permsQty.canAdd;
     const canEdit = permsAdjustments.canEdit || permsAdjustment.canEdit || permsQty.canEdit;
     const canDelete = permsAdjustments.canDelete || permsAdjustment.canDelete || permsQty.canDelete;
+
+    const closeForm = useCallback(() => {
+        setFormMode(null);
+    }, []);
+
+    const openCreate = useCallback(() => {
+        if (!canAdd) {
+            showToast('You are not allowed to add adjustments.', 'error');
+            return;
+        }
+        setFormMode({ type: 'create' });
+    }, [canAdd, showToast]);
+
+    const openEdit = useCallback((id) => {
+        if (!canEdit) {
+            showToast('You are not allowed to edit adjustments.', 'error');
+            return;
+        }
+        setFormMode({ type: 'edit', id: String(id) });
+    }, [canEdit, showToast]);
 
     const fetchList = useCallback(async () => {
         setLoading(true);
@@ -49,11 +81,41 @@ export default function AdjustmentList({ controllerName }) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         fetchList();
     }, [fetchList]);
+
+    useEffect(() => {
+        if (legacyHandled.current) return;
+        legacyHandled.current = true;
+
+        const createParam = searchParams.get('create');
+        const editParam = searchParams.get('edit');
+        const navState = location.state;
+
+        if (createParam === '1' || navState?.adjustmentForm === 'create') {
+            if (canAdd) setFormMode({ type: 'create' });
+        } else if (editParam || navState?.adjustmentForm === 'edit') {
+            const id = editParam || navState?.id;
+            if (id && canEdit) setFormMode({ type: 'edit', id: String(id) });
+        }
+
+        if (createParam || editParam) {
+            setSearchParams({}, { replace: true });
+        }
+        if (navState?.adjustmentForm) {
+            navigate('/qty_adjustment', { replace: true, state: null });
+        }
+    }, [
+        canAdd,
+        canEdit,
+        location.state,
+        navigate,
+        searchParams,
+        setSearchParams,
+    ]);
 
     const filtered = useMemo(() => {
         if (!search.trim()) return rows;
@@ -116,6 +178,20 @@ export default function AdjustmentList({ controllerName }) {
         }
     };
 
+    const handleFormSaved = () => {
+        closeForm();
+        fetchList();
+    };
+
+    if (!canView) {
+        return (
+            <PermissionDenied
+                title="Adjustments"
+                action="view adjustments"
+            />
+        );
+    }
+
     const columns = [
         { label: 'Date', key: 'date', sortable: true },
         { label: 'Reference', key: 'reference_no', sortable: true },
@@ -123,17 +199,22 @@ export default function AdjustmentList({ controllerName }) {
         {
             label: 'Products',
             key: 'products_summary',
-            render: (row) => (
-                <div style={{ whiteSpace: 'pre-line', fontSize: 13 }}>
-                    {(row.products || []).map((p, i) => (
-                        <div key={i}>
-                            {p.name}
-                            <br />
-                            <span className="text-muted">{p.qty} x {p.unit_cost}</span>
-                        </div>
-                    ))}
-                </div>
-            ),
+            render: (row) => {
+                const products = row.products || [];
+                if (!products.length) {
+                    return <span className="cell-muted">—</span>;
+                }
+                const summary = row.products_summary
+                    || products.map((p) => p.label || p.display || p.name).join(', ');
+                return (
+                    <span
+                        className="ui-cell-compact"
+                        title={summary}
+                    >
+                        {summary}
+                    </span>
+                );
+            },
         },
         { label: 'Note', key: 'note' },
         {
@@ -145,45 +226,45 @@ export default function AdjustmentList({ controllerName }) {
                     openId={openMenu}
                     setOpenId={setOpenMenu}
                     items={[
-                        canEdit && { label: '✎ Edit', onClick: () => navigate(`/qty_adjustment/${row.id}/edit`) },
+                        canEdit && actionItem('edit', 'Edit', { onClick: () => openEdit(row.id) }),
                         (canEdit && canDelete) && { divider: true },
-                        canDelete && { label: '🗑 Delete', danger: true, onClick: () => setDeleteId(row.id) },
+                        canDelete && actionItem('delete', 'Delete', { danger: true, onClick: () => setDeleteId(row.id) }),
                     ].filter(Boolean)}
                 />
             ),
         },
     ];
 
-    if (!canView) {
-        return (
-            <PermissionDenied
-                title="Adjustment List"
-                action="view adjustments"
-            />
-        );
-    }
+    const formTitle = formMode?.type === 'edit' ? 'Update Adjustment' : 'Add Adjustment';
+    const formEditId = formMode?.type === 'edit' ? formMode.id : null;
 
     return (
-        <PageLayout eyebrow="Product" title="Adjustment List">
-            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
-                {canAdd && (
-                    <Link to="/qty_adjustment/create" className="ui-btn primary">
-                        <i className="fa fa-plus" /> Add Adjustment
-                    </Link>
-                )}
-                {canDelete && selected.size > 0 && (
-                    <button type="button" className="ui-btn danger" onClick={() => setBulkDeleteOpen(true)}>
-                        <i className="fa fa-trash" /> Delete selected ({selected.size})
-                    </button>
-                )}
-                <div style={{ marginLeft: 'auto', width: 260 }}>
-                    <TextInput
-                        placeholder="Search reference, warehouse, note..."
-                        value={search}
-                        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    />
-                </div>
-            </div>
+        <PageLayout
+            eyebrow="Product"
+            title="Adjustments"
+            onClick={(e) => { if (!e.target.closest('.ui-action-wrap')) setOpenMenu(null); }}
+            actions={
+                <>
+                    {canAdd && (
+                        <Button variant="primary" icon="pi pi-plus" onClick={openCreate}>
+                            Add Adjustment
+                        </Button>
+                    )}
+                    {canDelete && selected.size > 0 && (
+                        <Button variant="danger" icon="pi pi-trash" onClick={() => setBulkDeleteOpen(true)}>
+                            Delete selected ({selected.size})
+                        </Button>
+                    )}
+                </>
+            }
+        >
+            <ListToolbar>
+                <SearchInput
+                    placeholder="Search reference, warehouse, note…"
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                />
+            </ListToolbar>
 
             <SelectionBar count={selected.size} onClear={() => setSelected(new Set())} />
 
@@ -207,6 +288,22 @@ export default function AdjustmentList({ controllerName }) {
                 onPageSize={(s) => { setPageSize(s); setPage(1); }}
             />
 
+            {formMode && (
+                <Modal
+                    isOpen
+                    size="2xl"
+                    title={formTitle}
+                    onClose={closeForm}
+                >
+                    <AdjustmentForm
+                        key={formEditId ?? 'create'}
+                        adjustmentId={formEditId}
+                        onSaved={handleFormSaved}
+                        onCancel={closeForm}
+                    />
+                </Modal>
+            )}
+
             {deleteId && (
                 <ConfirmModal
                     title="Delete Adjustment"
@@ -227,7 +324,7 @@ export default function AdjustmentList({ controllerName }) {
                 />
             )}
 
-            <Toast toast={toast} />
+            <Toast toast={toast} onDismiss={dismissToast} />
         </PageLayout>
     );
 }

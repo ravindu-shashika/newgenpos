@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/pos_window_service.dart';
 import '../../core/theme/pos_theme.dart';
@@ -18,7 +19,7 @@ import 'providers/pos_nav_provider.dart';
 import 'widgets/pos_sidebar.dart';
 import 'services/dashboard_stats_service.dart';
 import 'widgets/pos_professional_dialog.dart';
-import 'widgets/show_pos_dialog.dart';
+import 'widgets/sale_bill_detail_dialog.dart';
 
 final dashboardStatsProvider =
     FutureProvider.autoDispose<DashboardStats>((ref) async {
@@ -108,9 +109,11 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
   Future<void> _showRecentTransactions() async {
     final stats = await ref.read(dashboardStatsProvider.future);
     if (!mounted) return;
+    final db = ref.read(appDatabaseProvider);
     await showRecentTransactionsDialog(
       context: context,
       transactions: stats.recentTransactions,
+      db: db,
     );
   }
 
@@ -199,13 +202,30 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
                   staff: stats.staffPerformance,
                   onTap: _openStaff,
                 );
+                final todaysBills = _TodaysSalesCard(
+                  transactions: stats.recentTransactions,
+                  onBillTap: (localSaleId) {
+                    final db = ref.read(appDatabaseProvider);
+                    return showSaleBillDetailDialog(
+                      context: context,
+                      db: db,
+                      localSaleId: localSaleId,
+                    );
+                  },
+                );
                 if (wide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  return Column(
                     children: [
-                      Expanded(child: topProducts),
-                      SizedBox(width: 20),
-                      Expanded(child: staff),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: topProducts),
+                          SizedBox(width: 20),
+                          Expanded(child: staff),
+                        ],
+                      ),
+                      SizedBox(height: 20),
+                      todaysBills,
                     ],
                   );
                 }
@@ -214,6 +234,8 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
                     topProducts,
                     SizedBox(height: 20),
                     staff,
+                    SizedBox(height: 20),
+                    todaysBills,
                   ],
                 );
               },
@@ -896,6 +918,99 @@ class _StaffRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TodaysSalesCard extends StatelessWidget {
+  const _TodaysSalesCard({
+    required this.transactions,
+    required this.onBillTap,
+  });
+
+  final List<DashboardTransaction> transactions;
+  final Future<void> Function(int localSaleId) onBillTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final timeFmt = DateFormat('h:mm a');
+
+    return _DashboardPanel(
+      title: "Today's Sales",
+      trailing: Text(
+        '${transactions.length} bill${transactions.length == 1 ? '' : 's'}',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      child: transactions.isEmpty
+          ? Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Text(
+                'No completed sales today yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            )
+          : Column(
+              children: [
+                for (final t in transactions.take(8))
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => onBillTap(t.localSaleId),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    t.referenceNo,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    '${timeFmt.format(t.createdAt)} · ${t.itemCount} item${t.itemCount == 1 ? '' : 's'} · ${t.paymentLabel}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              formatPosMoney(t.total),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: PosColors.blue,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.chevron_right,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }

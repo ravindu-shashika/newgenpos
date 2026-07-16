@@ -295,9 +295,9 @@ const VariantMasterManager = ({ controllerName }) => {
                 totalPages={totalPages}
                 pageSize={pageSize}
                 pageSizes={PAGE_SIZES}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
-                totalItems={filtered.length}
+                totalRows={filtered.length}
+                onChange={setPage}
+                onPageSize={(size) => { setPageSize(size); setPage(1); }}
             />
 
             <Modal isOpen={addOpen} title="Add variant type" onClose={() => setAddOpen(false)} hideHint>

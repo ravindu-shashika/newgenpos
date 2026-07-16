@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
     PageLayout,
     FormField,
@@ -34,6 +34,48 @@ function hasSaleAddAccess(permissions) {
     );
 }
 
+function hasSaleEditAccess(permissions) {
+    const list = Array.isArray(permissions) ? permissions : [];
+    return list.some(
+        (p) => p === 'sales-edit' || p === 'sales-add' || p.startsWith('sales-')
+    );
+}
+
+function mapLineFromApi(l) {
+    const qty = parseFloat(l.qty) || 1;
+    const totalDiscount = parseFloat(l.discount) || 0;
+    return {
+        _id: lineId++,
+        product_id: l.product_id,
+        variant_id: l.variant_id ?? null,
+        product_variant_id: l.product_variant_id ?? '',
+        code: l.code,
+        name: l.name,
+        qty,
+        product_batch_id: l.product_batch_id ?? '',
+        batch_no: l.batch_no ?? '',
+        unit_discount: qty ? totalDiscount / qty : 0,
+        discount: totalDiscount,
+        tax_rate: l.tax_rate ?? 0,
+        tax_name: l.tax_name ?? 'No Tax',
+        tax_method: l.tax_method ?? 1,
+        product_price: l.product_price ?? 0,
+        row_product_price: l.row_product_price ?? l.product_price ?? 0,
+        net_unit_price: l.net_unit_price ?? 0,
+        tax: l.tax ?? 0,
+        subtotal: l.subtotal ?? 0,
+        sale_unit: l.sale_unit ?? 'n/a',
+        unit_names: l.unit_names ?? [],
+        unit_operators: l.unit_operators ?? [],
+        unit_operation_values: l.unit_operation_values ?? [],
+        is_batch: Boolean(l.is_batch),
+        is_imei: Boolean(l.is_imei),
+        imei_number: l.imei_number ?? '',
+        type: l.type ?? 'standard',
+        net_unit_cost: l.net_unit_cost ?? 0,
+    };
+}
+
 function buildTaxOptions(meta) {
     const opts = meta?.order_tax_options ?? meta?.taxes ?? [];
     const items = [{ value: '0', label: 'No Tax' }];
@@ -57,10 +99,14 @@ function defaultAccountId(meta) {
 
 export default function SaleForm() {
     const navigate = useNavigate();
+    const { id } = useParams();
+    const isEdit = Boolean(id);
     const { toast, showToast } = useToast();
     const perms = usePermissions('sales');
     const authPerms = authStore.getPermissions();
     const canAdd = perms.canAdd || hasSaleAddAccess(authPerms);
+    const canEdit = perms.canEdit || hasSaleEditAccess(authPerms);
+    const canAccess = isEdit ? canEdit : canAdd;
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -106,30 +152,64 @@ export default function SaleForm() {
     const loadForm = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await api.get('sales/create');
-            const data = res.data || {};
-            setMeta(data);
-            setHeader((h) => ({
-                ...h,
-                created_at: data.default_created_at || h.created_at,
-                customer_id: data.default_customer_id ? String(data.default_customer_id) : (data.customers?.[0]?.id ? String(data.customers[0].id) : ''),
-                warehouse_id: data.default_warehouse_id ? String(data.default_warehouse_id) : (data.warehouses?.[0]?.id ? String(data.warehouses[0].id) : ''),
-                biller_id: data.default_biller_id ? String(data.default_biller_id) : (data.billers?.[0]?.id ? String(data.billers[0].id) : ''),
-                currency_id: data.default_currency_id ? String(data.default_currency_id) : '',
-                exchange_rate: data.default_exchange_rate || 1,
-                account_id: defaultAccountId(data),
-            }));
+            if (isEdit) {
+                const res = await api.get(`sales/${id}/edit`);
+                if (res.error) {
+                    throw res.error;
+                }
+                const data = res.data || {};
+                const sale = data.sale || {};
+                setMeta(data.meta || data);
+                setHeader({
+                    created_at: sale.created_at || new Date().toISOString().slice(0, 10),
+                    reference_no: sale.reference_no || '',
+                    customer_id: sale.customer_id ? String(sale.customer_id) : '',
+                    warehouse_id: sale.warehouse_id ? String(sale.warehouse_id) : '',
+                    biller_id: sale.biller_id ? String(sale.biller_id) : '',
+                    currency_id: sale.currency_id ? String(sale.currency_id) : '',
+                    exchange_rate: sale.exchange_rate || 1,
+                    order_tax_rate: String(sale.order_tax_rate ?? 0),
+                    order_discount: sale.order_discount ?? 0,
+                    shipping_cost: sale.shipping_cost ?? 0,
+                    sale_status: String(sale.sale_status ?? 1),
+                    payment_status: String(sale.payment_status ?? 2),
+                    paid_by_id: '1',
+                    paying_amount: '',
+                    paid_amount: String(sale.paid_amount ?? 0),
+                    account_id: defaultAccountId(data.meta || data),
+                    sale_note: sale.sale_note || '',
+                    staff_note: sale.staff_note || '',
+                });
+                setLines((data.lines || []).map(mapLineFromApi));
+            } else {
+                const res = await api.get('sales/create');
+                if (res.error) {
+                    throw res.error;
+                }
+                const data = res.data || {};
+                setMeta(data);
+                setHeader((h) => ({
+                    ...h,
+                    created_at: data.default_created_at || h.created_at,
+                    customer_id: data.default_customer_id ? String(data.default_customer_id) : (data.customers?.[0]?.id ? String(data.customers[0].id) : ''),
+                    warehouse_id: data.default_warehouse_id ? String(data.default_warehouse_id) : (data.warehouses?.[0]?.id ? String(data.warehouses[0].id) : ''),
+                    biller_id: data.default_biller_id ? String(data.default_biller_id) : (data.billers?.[0]?.id ? String(data.billers[0].id) : ''),
+                    currency_id: data.default_currency_id ? String(data.default_currency_id) : '',
+                    exchange_rate: data.default_exchange_rate || 1,
+                    account_id: defaultAccountId(data),
+                }));
+            }
         } catch (err) {
             showToast(err?.message || 'Failed to load sale form.', 'error');
         } finally {
             setLoading(false);
         }
-    }, [showToast]);
+    }, [id, isEdit, showToast]);
 
     useEffect(() => {
-        if (canAdd) loadForm();
+        if (canAccess) loadForm();
         else setLoading(false);
-    }, [canAdd, loadForm]);
+    }, [canAccess, loadForm]);
 
     useEffect(() => {
         if (!header.customer_id) {
@@ -164,7 +244,7 @@ export default function SaleForm() {
     );
     const displayGrandTotal = installment.enabled ? installmentTotal : baseGrandTotal;
     const hasLines = (totals.updated?.length ?? 0) > 0;
-    const showInstallment = meta?.installment_enabled ?? true;
+    const showInstallment = !isEdit && (meta?.installment_enabled ?? true);
 
     useEffect(() => {
         if (!installment.enabled) return;
@@ -358,30 +438,35 @@ export default function SaleForm() {
         fd.append('total_qty', totals.total_qty);
         fd.append('total_discount', totals.total_discount);
         fd.append('total_tax', totals.total_tax);
-        fd.append('total_price', installment.enabled ? installmentTotal : totals.total_price);
+        fd.append('total_price', !isEdit && installment.enabled ? installmentTotal : totals.total_price);
         fd.append('item', totals.item);
-        fd.append('grand_total', installment.enabled ? installmentTotal : totals.grand_total);
+        fd.append('grand_total', !isEdit && installment.enabled ? installmentTotal : totals.grand_total);
         fd.append('sale_note', header.sale_note || '');
         fd.append('staff_note', header.staff_note || '');
         if (documentFile) fd.append('document', documentFile);
 
-        fd.append('enable_installment', installment.enabled ? '1' : '0');
-        if (installment.enabled) {
-            fd.append('installment_plan[name]', installment.name);
-            fd.append('installment_plan[price]', String(installmentPrice));
-            fd.append('installment_plan[additional_amount]', String(installment.additional_amount || 0));
-            fd.append('installment_plan[total_amount]', String(installmentTotal));
-            fd.append('installment_plan[down_payment]', String(installment.down_payment || 0));
-            fd.append('installment_plan[months]', String(installment.months || 12));
-            fd.append('installment_plan[reference_type]', 'sale');
-        }
+        if (!isEdit) {
+            fd.append('enable_installment', installment.enabled ? '1' : '0');
+            if (installment.enabled) {
+                fd.append('installment_plan[name]', installment.name);
+                fd.append('installment_plan[price]', String(installmentPrice));
+                fd.append('installment_plan[additional_amount]', String(installment.additional_amount || 0));
+                fd.append('installment_plan[total_amount]', String(installmentTotal));
+                fd.append('installment_plan[down_payment]', String(installment.down_payment || 0));
+                fd.append('installment_plan[months]', String(installment.months || 12));
+                fd.append('installment_plan[reference_type]', 'sale');
+            }
 
-        const payAmt = parseFloat(header.paid_amount) || 0;
-        fd.append('paid_by_id[]', header.paid_by_id);
-        fd.append('paying_amount[]', header.paying_amount || payAmt);
-        fd.append('paid_amount[]', payAmt);
-        if (header.paid_by_id === '6' && header.account_id) {
-            fd.append('account_id[]', header.account_id);
+            const payAmt = parseFloat(header.paid_amount) || 0;
+            fd.append('paid_by_id[]', header.paid_by_id);
+            fd.append('paying_amount[]', header.paying_amount || payAmt);
+            fd.append('paid_amount[]', payAmt);
+            if (header.paid_by_id === '6' && header.account_id) {
+                fd.append('account_id[]', header.account_id);
+            }
+        } else {
+            // Keep existing paid amount; backend recalculates payment_status from balance.
+            fd.append('paid_amount', header.paid_amount || 0);
         }
 
         totals.updated.forEach((l) => {
@@ -396,32 +481,48 @@ export default function SaleForm() {
             fd.append('tax[]', l.tax);
             fd.append('subtotal[]', l.subtotal);
             fd.append('product_price[]', l.product_price);
-            if (l.imei_number) fd.append('imei_number[]', l.imei_number);
+            fd.append('imei_number[]', l.imei_number || '');
+            if (isEdit) {
+                fd.append('product_variant_id[]', l.product_variant_id ?? '');
+                if (l.net_unit_cost != null && l.net_unit_cost !== '') {
+                    fd.append('net_unit_cost[]', l.net_unit_cost);
+                }
+            }
         });
 
         setSubmitting(true);
         try {
-            await api.post('sales', fd);
-            showToast('Sale created.', 'success');
+            if (isEdit) {
+                fd.append('_method', 'PUT');
+                await api.post(`sales/${id}`, fd);
+                showToast('Sale updated.', 'success');
+            } else {
+                await api.post('sales', fd);
+                showToast('Sale created.', 'success');
+            }
             navigate('/sales');
         } catch (err) {
-            showToast(err?.message || 'Failed to create sale.', 'error');
+            showToast(err?.message || (isEdit ? 'Failed to update sale.' : 'Failed to create sale.'), 'error');
         } finally {
             setSubmitting(false);
         }
     };
 
-    if (!canAdd) {
+    if (!canAccess) {
         return (
-            <PageLayout eyebrow="Sale" title="Add Sale">
-                <p className="text-muted">You do not have permission to add sales.</p>
+            <PageLayout eyebrow="Sale" title={isEdit ? 'Edit Sale' : 'Add Sale'}>
+                <p className="text-muted">
+                    {isEdit
+                        ? 'You do not have permission to edit sales.'
+                        : 'You do not have permission to add sales.'}
+                </p>
             </PageLayout>
         );
     }
 
     if (loading) {
         return (
-            <PageLayout eyebrow="Sale" title="Add Sale">
+            <PageLayout eyebrow="Sale" title={isEdit ? 'Edit Sale' : 'Add Sale'}>
                 <p>Loading…</p>
             </PageLayout>
         );
@@ -435,7 +536,7 @@ export default function SaleForm() {
     ];
 
     return (
-        <PageLayout eyebrow="Sale" title="Add Sale">
+        <PageLayout eyebrow="Sale" title={isEdit ? 'Edit Sale' : 'Add Sale'}>
             <p className="text-muted small mb-3">
                 <Link to="/sales">Back to sale list</Link>
             </p>
@@ -455,6 +556,7 @@ export default function SaleForm() {
                         <FormField label="Reference no">
                             <TextInput
                                 value={header.reference_no}
+                                readOnly={isEdit}
                                 onChange={(e) => setHeader({ ...header, reference_no: e.target.value })}
                                 placeholder="Auto if empty"
                             />
@@ -616,7 +718,7 @@ export default function SaleForm() {
                     </div>
                 </FormSection>
 
-                <FormSection title="Totals & payment">
+                <FormSection title={isEdit ? 'Totals' : 'Totals & payment'}>
                     <FormRow>
                         <FormField label="Order tax">
                             <SelectInput
@@ -655,54 +757,78 @@ export default function SaleForm() {
                                 ]}
                             />
                         </FormField>
-                        <FormField label="Payment status">
-                            <SelectInput
-                                value={header.payment_status}
-                                onChange={(e) => setHeader({ ...header, payment_status: e.target.value })}
-                                options={[
-                                    { value: '1', label: 'Pending' },
-                                    { value: '2', label: 'Due' },
-                                    { value: '3', label: 'Partial' },
-                                    { value: '4', label: 'Paid' },
-                                ]}
-                            />
-                        </FormField>
-                        <FormField label="Paid by">
-                            <SelectInput
-                                value={header.paid_by_id}
-                                onChange={(e) => setHeader({ ...header, paid_by_id: e.target.value })}
-                                options={paymentMethods}
-                            />
-                        </FormField>
-                        {header.paid_by_id === '6' && (
-                            <FormField label="Account">
-                                <SelectInput
-                                    value={header.account_id}
-                                    onChange={(e) => setHeader({ ...header, account_id: e.target.value })}
-                                    options={[
-                                        { value: '', label: 'Select account…' },
-                                        ...(meta?.accounts || []).map((a) => ({
-                                            value: String(a.id),
-                                            label: a.name,
-                                        })),
-                                    ]}
-                                />
-                            </FormField>
+                        {isEdit ? (
+                            <>
+                                <FormField label="Payment status">
+                                    <TextInput
+                                        value={
+                                            ({ 1: 'Pending', 2: 'Due', 3: 'Partial', 4: 'Paid' })[
+                                                Number(header.payment_status)
+                                            ] || header.payment_status
+                                        }
+                                        readOnly
+                                    />
+                                </FormField>
+                                <FormField label="Paid amount">
+                                    <NumberInput
+                                        step="any"
+                                        value={header.paid_amount}
+                                        readOnly
+                                    />
+                                </FormField>
+                            </>
+                        ) : (
+                            <>
+                                <FormField label="Payment status">
+                                    <SelectInput
+                                        value={header.payment_status}
+                                        onChange={(e) => setHeader({ ...header, payment_status: e.target.value })}
+                                        options={[
+                                            { value: '1', label: 'Pending' },
+                                            { value: '2', label: 'Due' },
+                                            { value: '3', label: 'Partial' },
+                                            { value: '4', label: 'Paid' },
+                                        ]}
+                                    />
+                                </FormField>
+                                <FormField label="Paid by">
+                                    <SelectInput
+                                        value={header.paid_by_id}
+                                        onChange={(e) => setHeader({ ...header, paid_by_id: e.target.value })}
+                                        options={paymentMethods}
+                                    />
+                                </FormField>
+                                {header.paid_by_id === '6' && (
+                                    <FormField label="Account">
+                                        <SelectInput
+                                            value={header.account_id}
+                                            onChange={(e) => setHeader({ ...header, account_id: e.target.value })}
+                                            options={[
+                                                { value: '', label: 'Select account…' },
+                                                ...(meta?.accounts || []).map((a) => ({
+                                                    value: String(a.id),
+                                                    label: a.name,
+                                                })),
+                                            ]}
+                                        />
+                                    </FormField>
+                                )}
+                                <FormField label="Paying amount">
+                                    <NumberInput
+                                        step="any"
+                                        value={header.paying_amount}
+                                        onChange={(e) => setHeader({ ...header, paying_amount: e.target.value })}
+                                    />
+                                </FormField>
+                                <FormField label="Paid amount">
+                                    <NumberInput
+                                        step="any"
+                                        value={header.paid_amount}
+                                        onChange={(e) => setHeader({ ...header, paid_amount: e.target.value })}
+                                    />
+                                </FormField>
+                            </>
                         )}
-                        <FormField label="Paying amount">
-                            <NumberInput
-                                step="any"
-                                value={header.paying_amount}
-                                onChange={(e) => setHeader({ ...header, paying_amount: e.target.value })}
-                            />
-                        </FormField>
-                        <FormField label="Paid amount">
-                            <NumberInput
-                                step="any"
-                                value={header.paid_amount}
-                                onChange={(e) => setHeader({ ...header, paid_amount: e.target.value })}
-                            />
-                        </FormField>
                     </FormRow>
 
                     <div className="border rounded p-3 mb-3">
@@ -740,7 +866,9 @@ export default function SaleForm() {
 
                 <div className="d-flex gap-2 flex-wrap align-items-center">
                     <button type="submit" className="ui-btn primary" disabled={submitting}>
-                        {submitting ? 'Submitting…' : 'Create sale'}
+                        {submitting
+                            ? (isEdit ? 'Updating…' : 'Submitting…')
+                            : (isEdit ? 'Update sale' : 'Create sale')}
                     </button>
                     <button type="button" className="ui-btn" onClick={() => navigate('/sales')}>
                         Cancel

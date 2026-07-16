@@ -27,7 +27,8 @@ Route::prefix('pos')->name('pos.')->group(function () {
     Route::middleware(['auth.pos.token'])->group(function () {
         Route::get('auth/me', [PosAuthController::class, 'me']);
         Route::get('bootstrap', [PosAppController::class, 'bootstrap']);
-        Route::post('broadcasting/auth', [PosBroadcastingController::class, 'auth']);
+        // REVERB_DISABLED: uncomment when Reverb is enabled.
+        // Route::post('broadcasting/auth', [PosBroadcastingController::class, 'auth']);
         Route::get('cash-register/check/{warehouseId}', [PosCashRegisterController::class, 'check']);
         Route::post('cash-register/open', [PosCashRegisterController::class, 'open']);
         Route::get('cash-register/{id}/details', [PosCashRegisterController::class, 'details']);

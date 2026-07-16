@@ -6143,6 +6143,12 @@ class $ProductStockTable extends ProductStock
   late final GeneratedColumn<double> price = GeneratedColumn<double>(
       'price', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _maxPriceMeta =
+      const VerificationMeta('maxPrice');
+  @override
+  late final GeneratedColumn<double> maxPrice = GeneratedColumn<double>(
+      'max_price', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _productBatchIdMeta =
       const VerificationMeta('productBatchId');
   @override
@@ -6169,6 +6175,7 @@ class $ProductStockTable extends ProductStock
         variantId,
         qty,
         price,
+        maxPrice,
         productBatchId,
         imeiNumber,
         updatedAt
@@ -6212,6 +6219,10 @@ class $ProductStockTable extends ProductStock
       context.handle(
           _priceMeta, price.isAcceptableOrUnknown(data['price']!, _priceMeta));
     }
+    if (data.containsKey('max_price')) {
+      context.handle(_maxPriceMeta,
+          maxPrice.isAcceptableOrUnknown(data['max_price']!, _maxPriceMeta));
+    }
     if (data.containsKey('product_batch_id')) {
       context.handle(
           _productBatchIdMeta,
@@ -6249,6 +6260,8 @@ class $ProductStockTable extends ProductStock
           .read(DriftSqlType.double, data['${effectivePrefix}qty'])!,
       price: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}price']),
+      maxPrice: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}max_price']),
       productBatchId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}product_batch_id']),
       imeiNumber: attachedDatabase.typeMapping
@@ -6272,6 +6285,7 @@ class ProductStockData extends DataClass
   final int? variantId;
   final double qty;
   final double? price;
+  final double? maxPrice;
   final int? productBatchId;
   final String? imeiNumber;
   final String? updatedAt;
@@ -6282,6 +6296,7 @@ class ProductStockData extends DataClass
       this.variantId,
       required this.qty,
       this.price,
+      this.maxPrice,
       this.productBatchId,
       this.imeiNumber,
       this.updatedAt});
@@ -6297,6 +6312,9 @@ class ProductStockData extends DataClass
     map['qty'] = Variable<double>(qty);
     if (!nullToAbsent || price != null) {
       map['price'] = Variable<double>(price);
+    }
+    if (!nullToAbsent || maxPrice != null) {
+      map['max_price'] = Variable<double>(maxPrice);
     }
     if (!nullToAbsent || productBatchId != null) {
       map['product_batch_id'] = Variable<int>(productBatchId);
@@ -6321,6 +6339,9 @@ class ProductStockData extends DataClass
       qty: Value(qty),
       price:
           price == null && nullToAbsent ? const Value.absent() : Value(price),
+      maxPrice: maxPrice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxPrice),
       productBatchId: productBatchId == null && nullToAbsent
           ? const Value.absent()
           : Value(productBatchId),
@@ -6343,6 +6364,7 @@ class ProductStockData extends DataClass
       variantId: serializer.fromJson<int?>(json['variantId']),
       qty: serializer.fromJson<double>(json['qty']),
       price: serializer.fromJson<double?>(json['price']),
+      maxPrice: serializer.fromJson<double?>(json['maxPrice']),
       productBatchId: serializer.fromJson<int?>(json['productBatchId']),
       imeiNumber: serializer.fromJson<String?>(json['imeiNumber']),
       updatedAt: serializer.fromJson<String?>(json['updatedAt']),
@@ -6358,6 +6380,7 @@ class ProductStockData extends DataClass
       'variantId': serializer.toJson<int?>(variantId),
       'qty': serializer.toJson<double>(qty),
       'price': serializer.toJson<double?>(price),
+      'maxPrice': serializer.toJson<double?>(maxPrice),
       'productBatchId': serializer.toJson<int?>(productBatchId),
       'imeiNumber': serializer.toJson<String?>(imeiNumber),
       'updatedAt': serializer.toJson<String?>(updatedAt),
@@ -6371,6 +6394,7 @@ class ProductStockData extends DataClass
           Value<int?> variantId = const Value.absent(),
           double? qty,
           Value<double?> price = const Value.absent(),
+          Value<double?> maxPrice = const Value.absent(),
           Value<int?> productBatchId = const Value.absent(),
           Value<String?> imeiNumber = const Value.absent(),
           Value<String?> updatedAt = const Value.absent()}) =>
@@ -6381,6 +6405,7 @@ class ProductStockData extends DataClass
         variantId: variantId.present ? variantId.value : this.variantId,
         qty: qty ?? this.qty,
         price: price.present ? price.value : this.price,
+        maxPrice: maxPrice.present ? maxPrice.value : this.maxPrice,
         productBatchId:
             productBatchId.present ? productBatchId.value : this.productBatchId,
         imeiNumber: imeiNumber.present ? imeiNumber.value : this.imeiNumber,
@@ -6395,6 +6420,7 @@ class ProductStockData extends DataClass
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
       qty: data.qty.present ? data.qty.value : this.qty,
       price: data.price.present ? data.price.value : this.price,
+      maxPrice: data.maxPrice.present ? data.maxPrice.value : this.maxPrice,
       productBatchId: data.productBatchId.present
           ? data.productBatchId.value
           : this.productBatchId,
@@ -6413,6 +6439,7 @@ class ProductStockData extends DataClass
           ..write('variantId: $variantId, ')
           ..write('qty: $qty, ')
           ..write('price: $price, ')
+          ..write('maxPrice: $maxPrice, ')
           ..write('productBatchId: $productBatchId, ')
           ..write('imeiNumber: $imeiNumber, ')
           ..write('updatedAt: $updatedAt')
@@ -6422,7 +6449,7 @@ class ProductStockData extends DataClass
 
   @override
   int get hashCode => Object.hash(id, productId, warehouseId, variantId, qty,
-      price, productBatchId, imeiNumber, updatedAt);
+      price, maxPrice, productBatchId, imeiNumber, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -6433,6 +6460,7 @@ class ProductStockData extends DataClass
           other.variantId == this.variantId &&
           other.qty == this.qty &&
           other.price == this.price &&
+          other.maxPrice == this.maxPrice &&
           other.productBatchId == this.productBatchId &&
           other.imeiNumber == this.imeiNumber &&
           other.updatedAt == this.updatedAt);
@@ -6445,6 +6473,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
   final Value<int?> variantId;
   final Value<double> qty;
   final Value<double?> price;
+  final Value<double?> maxPrice;
   final Value<int?> productBatchId;
   final Value<String?> imeiNumber;
   final Value<String?> updatedAt;
@@ -6455,6 +6484,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
     this.variantId = const Value.absent(),
     this.qty = const Value.absent(),
     this.price = const Value.absent(),
+    this.maxPrice = const Value.absent(),
     this.productBatchId = const Value.absent(),
     this.imeiNumber = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -6466,6 +6496,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
     this.variantId = const Value.absent(),
     this.qty = const Value.absent(),
     this.price = const Value.absent(),
+    this.maxPrice = const Value.absent(),
     this.productBatchId = const Value.absent(),
     this.imeiNumber = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -6478,6 +6509,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
     Expression<int>? variantId,
     Expression<double>? qty,
     Expression<double>? price,
+    Expression<double>? maxPrice,
     Expression<int>? productBatchId,
     Expression<String>? imeiNumber,
     Expression<String>? updatedAt,
@@ -6489,6 +6521,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
       if (variantId != null) 'variant_id': variantId,
       if (qty != null) 'qty': qty,
       if (price != null) 'price': price,
+      if (maxPrice != null) 'max_price': maxPrice,
       if (productBatchId != null) 'product_batch_id': productBatchId,
       if (imeiNumber != null) 'imei_number': imeiNumber,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -6502,6 +6535,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
       Value<int?>? variantId,
       Value<double>? qty,
       Value<double?>? price,
+      Value<double?>? maxPrice,
       Value<int?>? productBatchId,
       Value<String?>? imeiNumber,
       Value<String?>? updatedAt}) {
@@ -6512,6 +6546,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
       variantId: variantId ?? this.variantId,
       qty: qty ?? this.qty,
       price: price ?? this.price,
+      maxPrice: maxPrice ?? this.maxPrice,
       productBatchId: productBatchId ?? this.productBatchId,
       imeiNumber: imeiNumber ?? this.imeiNumber,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -6539,6 +6574,9 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
     if (price.present) {
       map['price'] = Variable<double>(price.value);
     }
+    if (maxPrice.present) {
+      map['max_price'] = Variable<double>(maxPrice.value);
+    }
     if (productBatchId.present) {
       map['product_batch_id'] = Variable<int>(productBatchId.value);
     }
@@ -6560,6 +6598,7 @@ class ProductStockCompanion extends UpdateCompanion<ProductStockData> {
           ..write('variantId: $variantId, ')
           ..write('qty: $qty, ')
           ..write('price: $price, ')
+          ..write('maxPrice: $maxPrice, ')
           ..write('productBatchId: $productBatchId, ')
           ..write('imeiNumber: $imeiNumber, ')
           ..write('updatedAt: $updatedAt')
@@ -13965,6 +14004,7 @@ typedef $$ProductStockTableCreateCompanionBuilder = ProductStockCompanion
   Value<int?> variantId,
   Value<double> qty,
   Value<double?> price,
+  Value<double?> maxPrice,
   Value<int?> productBatchId,
   Value<String?> imeiNumber,
   Value<String?> updatedAt,
@@ -13977,6 +14017,7 @@ typedef $$ProductStockTableUpdateCompanionBuilder = ProductStockCompanion
   Value<int?> variantId,
   Value<double> qty,
   Value<double?> price,
+  Value<double?> maxPrice,
   Value<int?> productBatchId,
   Value<String?> imeiNumber,
   Value<String?> updatedAt,
@@ -14008,6 +14049,9 @@ class $$ProductStockTableFilterComposer
 
   ColumnFilters<double> get price => $composableBuilder(
       column: $table.price, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get maxPrice => $composableBuilder(
+      column: $table.maxPrice, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get productBatchId => $composableBuilder(
       column: $table.productBatchId,
@@ -14047,6 +14091,9 @@ class $$ProductStockTableOrderingComposer
   ColumnOrderings<double> get price => $composableBuilder(
       column: $table.price, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get maxPrice => $composableBuilder(
+      column: $table.maxPrice, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get productBatchId => $composableBuilder(
       column: $table.productBatchId,
       builder: (column) => ColumnOrderings(column));
@@ -14084,6 +14131,9 @@ class $$ProductStockTableAnnotationComposer
 
   GeneratedColumn<double> get price =>
       $composableBuilder(column: $table.price, builder: (column) => column);
+
+  GeneratedColumn<double> get maxPrice =>
+      $composableBuilder(column: $table.maxPrice, builder: (column) => column);
 
   GeneratedColumn<int> get productBatchId => $composableBuilder(
       column: $table.productBatchId, builder: (column) => column);
@@ -14127,6 +14177,7 @@ class $$ProductStockTableTableManager extends RootTableManager<
             Value<int?> variantId = const Value.absent(),
             Value<double> qty = const Value.absent(),
             Value<double?> price = const Value.absent(),
+            Value<double?> maxPrice = const Value.absent(),
             Value<int?> productBatchId = const Value.absent(),
             Value<String?> imeiNumber = const Value.absent(),
             Value<String?> updatedAt = const Value.absent(),
@@ -14138,6 +14189,7 @@ class $$ProductStockTableTableManager extends RootTableManager<
             variantId: variantId,
             qty: qty,
             price: price,
+            maxPrice: maxPrice,
             productBatchId: productBatchId,
             imeiNumber: imeiNumber,
             updatedAt: updatedAt,
@@ -14149,6 +14201,7 @@ class $$ProductStockTableTableManager extends RootTableManager<
             Value<int?> variantId = const Value.absent(),
             Value<double> qty = const Value.absent(),
             Value<double?> price = const Value.absent(),
+            Value<double?> maxPrice = const Value.absent(),
             Value<int?> productBatchId = const Value.absent(),
             Value<String?> imeiNumber = const Value.absent(),
             Value<String?> updatedAt = const Value.absent(),
@@ -14160,6 +14213,7 @@ class $$ProductStockTableTableManager extends RootTableManager<
             variantId: variantId,
             qty: qty,
             price: price,
+            maxPrice: maxPrice,
             productBatchId: productBatchId,
             imeiNumber: imeiNumber,
             updatedAt: updatedAt,

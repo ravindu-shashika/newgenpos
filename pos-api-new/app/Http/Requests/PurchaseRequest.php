@@ -34,6 +34,7 @@ class PurchaseRequest extends FormRequest
         $net_unit_margin = [];
         $net_unit_margin_type = [];
         $net_unit_price = [];
+        $net_unit_max_price = [];
         $discount = [];
         $discount_type = [];
         $tax_rate = [];
@@ -64,6 +65,8 @@ class PurchaseRequest extends FormRequest
             $net_unit_margin[] = $product['net_unit_margin'] ?? $product['margin'] ?? 0;
             $net_unit_margin_type[] = $product['net_unit_margin_type'] ?? 'percentage';
             $net_unit_price[] = $product['net_unit_price'] ?? $product['price'] ?? 0;
+            $maxPrice = $product['net_unit_max_price'] ?? $product['max_price'] ?? null;
+            $net_unit_max_price[] = ($maxPrice === '' || $maxPrice === null) ? null : $maxPrice;
             $discount[] = $product['discount'] ?? 0;
             $discount_type[] = in_array($product['discount_type'] ?? 'flat', ['flat', 'percentage'], true)
                 ? $product['discount_type']
@@ -88,6 +91,7 @@ class PurchaseRequest extends FormRequest
             'net_unit_margin' => $net_unit_margin,
             'net_unit_margin_type' => $net_unit_margin_type,
             'net_unit_price' => $net_unit_price,
+            'net_unit_max_price' => $net_unit_max_price,
             'discount' => $discount,
             'discount_type' => $discount_type,
             'tax_rate' => $tax_rate,
@@ -101,6 +105,7 @@ class PurchaseRequest extends FormRequest
     {
         return [
             'warehouse_id' => 'required|exists:warehouses,id',
+            'supplier_id' => 'required|exists:suppliers,id',
             'currency_id' => 'required',
             'exchange_rate' => 'required|numeric',
             'product_code' => 'required|array',
@@ -117,6 +122,8 @@ class PurchaseRequest extends FormRequest
     {
         return [
             'warehouse_id.required' => 'select a warehouse',
+            'supplier_id.required' => 'Supplier is required. Please select a supplier to save this purchase.',
+            'supplier_id.exists' => 'Selected supplier is invalid.',
             'currency_id.required' => 'currency field is required.',
             'exchange_rate.required' => 'The exchange rate is required.',
             'exchange_rate.numeric' => 'The exchange rate must be a valid number.',
@@ -127,5 +134,29 @@ class PurchaseRequest extends FormRequest
             'qty.*.numeric' => 'Each quantity must be a valid number.',
             'qty.*.min' => 'Each quantity must be at least 1.',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $prices = $this->input('net_unit_price', []);
+            $maxPrices = $this->input('net_unit_max_price', []);
+            if (!is_array($prices) || !is_array($maxPrices)) {
+                return;
+            }
+            foreach ($prices as $i => $price) {
+                $max = $maxPrices[$i] ?? null;
+                if ($max === null || $max === '') {
+                    continue;
+                }
+                if ((float) $max < (float) $price) {
+                    $lineNo = (int) $i + 1;
+                    $validator->errors()->add(
+                        "net_unit_max_price.{$i}",
+                        "Max price must be equal to or greater than sale price for line {$lineNo}."
+                    );
+                }
+            }
+        });
     }
 }

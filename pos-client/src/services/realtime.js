@@ -19,6 +19,10 @@ function resolveWarehouseId(user) {
 }
 
 export function startAdminStockRealtime() {
+  // REVERB_DISABLED: uncomment block below when Reverb is enabled.
+  return null;
+
+  /*
   if (!reverbEnabled()) return null;
   if (echoInstance) return echoInstance;
 
@@ -60,14 +64,20 @@ export function startAdminStockRealtime() {
     });
 
   return echoInstance;
+  */
 }
 
 export function stopAdminStockRealtime() {
+  // REVERB_DISABLED: uncomment block below when Reverb is enabled.
+  return;
+
+  /*
   if (!echoInstance) return;
   try {
     echoInstance.disconnect();
   } catch (_) {
-    /* ignore */
+    // ignore
   }
   echoInstance = null;
+  */
 }

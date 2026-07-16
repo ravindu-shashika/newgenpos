@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/pos_theme.dart';
+import '../pos_checkout_defaults.dart';
 import 'pos_professional_dialog.dart';
 import 'show_pos_dialog.dart';
 
@@ -17,11 +18,10 @@ Future<CheckoutPartyDialogResult?> showCheckoutPartyRequiredDialog({
   String? defaultBillerLabel,
   bool canApplyDefaults = true,
 }) {
-  final missing = <String>[
-    if (missingCustomer) 'Customer',
-    if (missingBiller) 'Biller',
-  ];
-  final missingText = missing.join(' and ');
+  final message = pleaseSelectCheckoutPartiesMessage(
+    missingCustomer: missingCustomer,
+    missingBiller: missingBiller,
+  );
 
   return showPosDialog<CheckoutPartyDialogResult>(
     context: context,
@@ -29,16 +29,18 @@ Future<CheckoutPartyDialogResult?> showCheckoutPartyRequiredDialog({
       final scheme = Theme.of(ctx).colorScheme;
 
       return PosProfessionalDialogShell(
-        title: 'Customer & biller required',
-        subtitle: 'Select both before checkout',
+        title: message,
+        subtitle: 'Required before checkout',
         icon: Icons.warning_amber_rounded,
         maxWidth: 460,
-        maxBodyHeight: 280,
+        maxBodyHeight: 300,
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$missingText not selected. Choose them on the register header or apply the defaults from server POS settings.',
+              canApplyDefaults
+                  ? '$message from the register header, or apply the defaults from server POS settings.'
+                  : '$message from the customer and biller selectors on the register header.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
@@ -73,14 +75,17 @@ Future<CheckoutPartyDialogResult?> showCheckoutPartyRequiredDialog({
           ],
         ),
         footer: PosProfessionalDialogFooter(
-          secondaryLabel: 'Cancel',
-          primaryLabel: 'Set as default',
-          primaryEnabled: canApplyDefaults,
-          onSecondary: () =>
-              Navigator.of(ctx).pop(CheckoutPartyDialogResult.cancelled),
-          onPrimary: canApplyDefaults
-              ? () => Navigator.of(ctx).pop(CheckoutPartyDialogResult.setDefaults)
+          secondaryLabel: canApplyDefaults ? 'Cancel' : null,
+          primaryLabel: canApplyDefaults ? 'Use defaults' : 'OK',
+          primaryEnabled: true,
+          onSecondary: canApplyDefaults
+              ? () => Navigator.of(ctx).pop(CheckoutPartyDialogResult.cancelled)
               : null,
+          onPrimary: () => Navigator.of(ctx).pop(
+            canApplyDefaults
+                ? CheckoutPartyDialogResult.setDefaults
+                : CheckoutPartyDialogResult.cancelled,
+          ),
         ),
       );
     },

@@ -1,6 +1,6 @@
 export { default as msg } from './alerts';
 export { default as api } from './api';
-export { defaultPath, posApiPath, posApi, signOut, getServerBase, brandImageUrl } from './api';
+export { defaultPath, posApiPath, posApi, signOut, getServerBase, brandImageUrl, productImageUrl } from './api';
 export { default as routes, buildRoutesFromMenuItems, flattenMenuTreeToRoutes } from './routes';
 export {
   buildMenuTree,

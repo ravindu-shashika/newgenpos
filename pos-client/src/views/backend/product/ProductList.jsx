@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { faPlus, faUpload, faFilter, faFileExcel } from '@fortawesome/free-solid-svg-icons';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 import ProductViewModal from './ProductViewModal';
 import {
     PageLayout,
@@ -9,13 +12,34 @@ import {
     FormRow,
     FormField,
     ConfirmModal,
+    Modal,
     ActionMenu,
     useToast,
     Pagination,
+    BtnIcon,
+    CheckboxInput,
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions, { usePermissionNames } from '../../../stores/usePermissions';
 import { hasPermission as checkPermission } from '../../../config/permissions';
+
+const EXPORT_FIELD_OPTIONS = [
+    { key: 'name', label: 'Name' },
+    { key: 'code', label: 'Code' },
+    { key: 'alt_code', label: 'Alt Code' },
+    { key: 'brand', label: 'Brand' },
+    { key: 'category', label: 'Category' },
+    { key: 'qty', label: 'Quantity' },
+    { key: 'unit', label: 'Unit' },
+    { key: 'price', label: 'Price' },
+    { key: 'cost', label: 'Cost' },
+    { key: 'max_price', label: 'Max Price' },
+    { key: 'wholesale_price', label: 'Wholesale Price' },
+    { key: 'type', label: 'Type' },
+    { key: 'alert_quantity', label: 'Alert Qty' },
+];
+
+const DEFAULT_EXPORT_FIELDS = ['name', 'code', 'brand', 'category', 'qty', 'price'];
 
 function productCode(row) {
     if (Array.isArray(row.product) && row.product[2]) {
@@ -70,6 +94,9 @@ export default function ProductList() {
     const [openMenu, setOpenMenu] = useState(null);
     const [deleteId, setDeleteId] = useState(null);
     const [viewRow, setViewRow] = useState(null);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [exportFields, setExportFields] = useState(() => [...DEFAULT_EXPORT_FIELDS]);
     const [options, setOptions] = useState({
         brands: [],
         categories: [],
@@ -105,19 +132,22 @@ export default function ProductList() {
         fetchInitial();
     }, []);
 
+    const appendListFilters = (formData) => {
+        formData.append('search[value]', search);
+        Object.keys(filters).forEach((key) => {
+            formData.append(key, filters[key] || '0');
+        });
+    };
+
     const fetchProducts = async () => {
         setLoading(true);
         try {
             const formData = new FormData();
             formData.append('start', page * size);
             formData.append('length', size);
-            formData.append('search[value]', search);
+            appendListFilters(formData);
             formData.append('order[0][column]', '2');
             formData.append('order[0][dir]', 'asc');
-
-            Object.keys(filters).forEach((key) => {
-                formData.append(key, filters[key] || '0');
-            });
             formData.append('all_permission[]', 'products-edit');
             formData.append('all_permission[]', 'products-delete');
             formData.append('all_permission[]', 'product_history');
@@ -160,10 +190,90 @@ export default function ProductList() {
         }
     };
 
+    const toggleExportField = (key, checked) => {
+        setExportFields((prev) => {
+            if (checked) {
+                return EXPORT_FIELD_OPTIONS.map((f) => f.key).filter(
+                    (k) => k === key || prev.includes(k),
+                );
+            }
+            return prev.filter((k) => k !== key);
+        });
+    };
+
+    const selectAllExportFields = () => {
+        setExportFields(EXPORT_FIELD_OPTIONS.map((f) => f.key));
+    };
+
+    const selectDefaultExportFields = () => {
+        setExportFields([...DEFAULT_EXPORT_FIELDS]);
+    };
+
+    const handleExportExcel = async () => {
+        if (!exportFields.length) {
+            showToast('Select at least one field to export.', 'error');
+            return;
+        }
+        setExporting(true);
+        try {
+            const formData = new FormData();
+            appendListFilters(formData);
+            exportFields.forEach((field) => formData.append('fields[]', field));
+
+            const res = await api.post('products/export-data', formData);
+            if (res.error) {
+                throw res.error;
+            }
+            const payload = res.data ?? {};
+            const rows = Array.isArray(payload.data) ? payload.data : [];
+            const headers = payload.headers || {};
+            const fields = Array.isArray(payload.fields) && payload.fields.length
+                ? payload.fields
+                : exportFields;
+
+            if (!rows.length) {
+                showToast('No products match the current filters.', 'warning');
+                return;
+            }
+
+            const workbook = new ExcelJS.Workbook();
+            const sheet = workbook.addWorksheet('Products');
+            sheet.columns = fields.map((key) => ({
+                header: headers[key] || EXPORT_FIELD_OPTIONS.find((f) => f.key === key)?.label || key,
+                key,
+                width: Math.max(12, String(headers[key] || key).length + 4),
+            }));
+            sheet.getRow(1).font = { bold: true };
+            rows.forEach((row) => {
+                const line = {};
+                fields.forEach((key) => {
+                    line[key] = row[key] ?? '';
+                });
+                sheet.addRow(line);
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const stamp = new Date().toISOString().slice(0, 10);
+            saveAs(
+                new Blob([buffer], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                }),
+                `products-export-${stamp}.xlsx`,
+            );
+            showToast(`Exported ${rows.length} product${rows.length === 1 ? '' : 's'}.`, 'success');
+            setExportOpen(false);
+        } catch (err) {
+            showToast(err?.message || 'Failed to export products.', 'error');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const canPrintBarcode = checkPermission('print_barcode', permissionNames);
     const canProductHistory = checkPermission('product_history', permissionNames);
 
     const stripHtmlCell = stripHtml;
+    const exportFieldSet = useMemo(() => new Set(exportFields), [exportFields]);
 
     const columns = [
         {
@@ -231,20 +341,43 @@ export default function ProductList() {
 
     return (
         <PageLayout title="Product List">
-            <div className="d-flex gap-2 mb-3">
-                {canAdd && (
-                    <Link to="/products/create" className="ui-btn primary">
-                        <i className="fa fa-plus" /> Add Product
-                    </Link>
-                )}
-                {canImport && (
-                    <button type="button" className="ui-btn secondary">
-                        <i className="fa fa-copy" /> Import Product
+            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+                <div className="ui-btn-group">
+                    {canAdd && (
+                        <Link to="/products/create" className="ui-btn primary">
+                            <BtnIcon icon={faPlus} /> Add Product
+                        </Link>
+                    )}
+                    {canImport && (
+                        <button type="button" className="ui-btn outline">
+                            <BtnIcon icon={faUpload} /> Import Product
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className={`ui-btn ${showFilters ? 'outline-primary' : 'outline'}`}
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        <BtnIcon icon={faFilter} /> Filter Products
                     </button>
-                )}
-                <button type="button" className="ui-btn secondary" onClick={() => setShowFilters(!showFilters)}>
-                    <i className="fa fa-filter" /> Filter Products
-                </button>
+                    <button
+                        type="button"
+                        className="ui-btn outline"
+                        onClick={() => {
+                            setExportFields([...DEFAULT_EXPORT_FIELDS]);
+                            setExportOpen(true);
+                        }}
+                    >
+                        <BtnIcon icon={faFileExcel} /> Export Excel
+                    </button>
+                </div>
+                <div style={{ marginLeft: 'auto', width: 280, minWidth: 200 }}>
+                    <TextInput
+                        placeholder="Search products..."
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                    />
+                </div>
             </div>
 
             {showFilters && (
@@ -309,16 +442,6 @@ export default function ProductList() {
                 </div>
             )}
 
-            <div className="d-flex justify-content-between align-items-center mb-3">
-                <div style={{ width: '250px' }}>
-                    <TextInput
-                        placeholder="Search products..."
-                        value={search}
-                        onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                    />
-                </div>
-            </div>
-
             <DataTable
                 columns={columns}
                 rows={tableData}
@@ -338,6 +461,58 @@ export default function ProductList() {
                     setPage(0);
                 }}
             />
+
+            {exportOpen && (
+                <Modal
+                    title="Export products to Excel"
+                    onClose={() => !exporting && setExportOpen(false)}
+                    size="md"
+                    footer={(
+                        <>
+                            <button
+                                type="button"
+                                className="ui-btn ghost"
+                                disabled={exporting}
+                                onClick={() => setExportOpen(false)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="ui-btn primary"
+                                disabled={exporting || exportFields.length === 0}
+                                onClick={handleExportExcel}
+                            >
+                                {exporting ? 'Exporting…' : 'Download Excel'}
+                            </button>
+                        </>
+                    )}
+                >
+                    <p className="text-muted mb-3" style={{ fontSize: '0.9rem' }}>
+                        Exports products matching the current search and filters
+                        {totalRecords ? ` (${totalRecords} in list)` : ''}. Choose which columns to include.
+                    </p>
+                    <div className="d-flex flex-wrap gap-2 mb-3">
+                        <button type="button" className="ui-btn ghost sm" onClick={selectDefaultExportFields}>
+                            Default fields
+                        </button>
+                        <button type="button" className="ui-btn ghost sm" onClick={selectAllExportFields}>
+                            Select all
+                        </button>
+                    </div>
+                    <div className="d-flex flex-wrap gap-3">
+                        {EXPORT_FIELD_OPTIONS.map((field) => (
+                            <CheckboxInput
+                                key={field.key}
+                                label={field.label}
+                                name={`export_${field.key}`}
+                                checked={exportFieldSet.has(field.key)}
+                                onChange={(e) => toggleExportField(field.key, e.target.checked)}
+                            />
+                        ))}
+                    </div>
+                </Modal>
+            )}
 
             {deleteId != null && (
                 <ConfirmModal

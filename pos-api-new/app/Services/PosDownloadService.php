@@ -448,7 +448,7 @@ class PosDownloadService
 
         return $this->chunkByCursor(
             $query->select([
-                'id', 'product_id', 'variant_id', 'warehouse_id', 'qty', 'price',
+                'id', 'product_id', 'variant_id', 'warehouse_id', 'qty', 'price', 'max_price',
                 'product_batch_id', 'imei_number', 'updated_at',
             ]),
             $perPage,

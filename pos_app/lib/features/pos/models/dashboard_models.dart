@@ -102,6 +102,7 @@ class StaffPerformanceRow {
 
 class DashboardTransaction {
   const DashboardTransaction({
+    required this.localSaleId,
     required this.referenceNo,
     required this.createdAt,
     required this.itemCount,
@@ -111,6 +112,7 @@ class DashboardTransaction {
     required this.isPaid,
   });
 
+  final int localSaleId;
   final String referenceNo;
   final DateTime createdAt;
   final int itemCount;
