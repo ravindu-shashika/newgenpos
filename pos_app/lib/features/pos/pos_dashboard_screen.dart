@@ -29,7 +29,7 @@ final dashboardStatsProvider =
   return DashboardStatsService(db).load();
 });
 
-enum _TrendPeriod { week, month, year }
+enum _TrendPeriod { today, week, month, year }
 
 class PosDashboardScreen extends ConsumerStatefulWidget {
   const PosDashboardScreen({super.key, this.embedded = false});
@@ -112,9 +112,37 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
     final db = ref.read(appDatabaseProvider);
     await showRecentTransactionsDialog(
       context: context,
-      transactions: stats.recentTransactions,
+      transactions: _transactionsForPeriod(
+        stats.recentTransactions,
+        _TrendPeriod.week,
+      ),
       db: db,
     );
+  }
+
+  List<DashboardTransaction> _transactionsForPeriod(
+    List<DashboardTransaction> all,
+    _TrendPeriod period,
+  ) {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    final weekStart = todayStart.subtract(const Duration(days: 6));
+    final monthStart = DateTime(now.year, now.month, 1);
+    final yearStart = DateTime(now.year, 1, 1);
+
+    final rangeStart = switch (period) {
+      _TrendPeriod.today => todayStart,
+      _TrendPeriod.week => weekStart,
+      _TrendPeriod.month => monthStart,
+      _TrendPeriod.year => yearStart,
+    };
+
+    return all
+        .where((t) =>
+            !t.createdAt.isBefore(rangeStart) &&
+            t.createdAt.isBefore(todayEnd))
+        .toList();
   }
 
   Future<void> _logout() async {
@@ -190,7 +218,10 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
             _RevenueTrendsCard(
               points: stats.dailyRevenue,
               period: _trendPeriod,
-              onPeriodChanged: (p) => setState(() => _trendPeriod = p),
+              onPeriodChanged: (p) {
+                if (!mounted || p == _trendPeriod) return;
+                setState(() => _trendPeriod = p);
+              },
             ),
             SizedBox(height: 24),
             LayoutBuilder(
@@ -202,8 +233,12 @@ class _PosDashboardScreenState extends ConsumerState<PosDashboardScreen> {
                   staff: stats.staffPerformance,
                   onTap: _openStaff,
                 );
-                final todaysBills = _TodaysSalesCard(
-                  transactions: stats.recentTransactions,
+                final todaysBills = _RecentSalesCard(
+                  period: _trendPeriod,
+                  transactions: _transactionsForPeriod(
+                    stats.recentTransactions,
+                    _trendPeriod,
+                  ),
                   onBillTap: (localSaleId) {
                     final db = ref.read(appDatabaseProvider);
                     return showSaleBillDetailDialog(
@@ -372,7 +407,9 @@ class _KpiCard extends StatelessWidget {
           SizedBox(height: 6),
           Text(
             subtext,
-            style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -446,8 +483,20 @@ class _RevenueTrendsCard extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Daily revenue performance over the last 7 days',
-                      style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      switch (period) {
+                        _TrendPeriod.today =>
+                          'Hourly revenue performance for today',
+                        _TrendPeriod.week =>
+                          'Daily revenue performance over the last 7 days',
+                        _TrendPeriod.month =>
+                          'Daily revenue performance this month',
+                        _TrendPeriod.year =>
+                          'Monthly revenue performance this year',
+                      },
+                      style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -477,15 +526,17 @@ class _PeriodToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F5FA),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _periodBtn(context, 'Today', _TrendPeriod.today),
           _periodBtn(context, 'Last 7 Days', _TrendPeriod.week),
           _periodBtn(context, 'Month', _TrendPeriod.month),
           _periodBtn(context, 'Year', _TrendPeriod.year),
@@ -497,8 +548,10 @@ class _PeriodToggle extends StatelessWidget {
   Widget _periodBtn(BuildContext context, String label, _TrendPeriod value) {
     final active = period == value;
     return Material(
+      key: ValueKey('trend-$value'),
       color: active ? PosColors.blue : Colors.transparent,
       borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => onChanged(value),
         borderRadius: BorderRadius.circular(8),
@@ -509,7 +562,9 @@ class _PeriodToggle extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: active ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: active
+                  ? Colors.white
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -539,7 +594,9 @@ class _WeeklyRevenueChart extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: p.isToday ? FontWeight.w800 : FontWeight.w500,
-                  color: p.isToday ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: p.isToday
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
           ],
@@ -642,7 +699,8 @@ class _TopProductsCard extends StatelessWidget {
               child: Text(
                 'No product sales recorded today.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           : Column(
@@ -770,7 +828,11 @@ class _StaffPerformanceCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.calendar_today_outlined,
-              size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.8)),
+              size: 14,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurfaceVariant
+                  .withValues(alpha: 0.8)),
           SizedBox(width: 6),
           Text(
             'TODAY',
@@ -784,7 +846,11 @@ class _StaffPerformanceCard extends StatelessWidget {
           if (onTap != null) ...[
             SizedBox(width: 8),
             Icon(Icons.chevron_right,
-                size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                size: 18,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.7)),
           ],
         ],
       ),
@@ -794,7 +860,8 @@ class _StaffPerformanceCard extends StatelessWidget {
               child: Text(
                 'No staff sales recorded today.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             )
           : Column(
@@ -831,7 +898,9 @@ class _StaffRow extends StatelessWidget {
         color: highlight ? context.posBrand.primaryLight : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: highlight ? PosColors.blue.withValues(alpha: 0.2) : Theme.of(context).dividerColor,
+          color: highlight
+              ? PosColors.blue.withValues(alpha: 0.2)
+              : Theme.of(context).dividerColor,
         ),
       ),
       child: Column(
@@ -860,8 +929,9 @@ class _StaffRow extends StatelessWidget {
                       bottom: -2,
                       child: CircleAvatar(
                         radius: 9,
-                        backgroundColor:
-                            member.rank == 1 ? PosColors.blue : Theme.of(context).colorScheme.onSurfaceVariant,
+                        backgroundColor: member.rank == 1
+                            ? PosColors.blue
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         child: Text(
                           '${member.rank}',
                           style: TextStyle(
@@ -913,7 +983,9 @@ class _StaffRow extends StatelessWidget {
               value: member.progress,
               minHeight: 6,
               backgroundColor: const Color(0xFFE5E9F2),
-              color: highlight ? PosColors.blue : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: highlight
+                  ? PosColors.blue
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -922,21 +994,37 @@ class _StaffRow extends StatelessWidget {
   }
 }
 
-class _TodaysSalesCard extends StatelessWidget {
-  const _TodaysSalesCard({
+class _RecentSalesCard extends StatelessWidget {
+  const _RecentSalesCard({
+    required this.period,
     required this.transactions,
     required this.onBillTap,
   });
 
+  final _TrendPeriod period;
   final List<DashboardTransaction> transactions;
   final Future<void> Function(int localSaleId) onBillTap;
 
   @override
   Widget build(BuildContext context) {
     final timeFmt = DateFormat('h:mm a');
+    final dateTimeFmt = DateFormat('MMM d · h:mm a');
+    final showDate = period != _TrendPeriod.today;
+    final title = switch (period) {
+      _TrendPeriod.today => "Today's Sales",
+      _TrendPeriod.week => 'Last 7 Days Sales',
+      _TrendPeriod.month => 'This Month Sales',
+      _TrendPeriod.year => 'This Year Sales',
+    };
+    final emptyLabel = switch (period) {
+      _TrendPeriod.today => 'No completed sales today yet.',
+      _TrendPeriod.week => 'No completed sales in the last 7 days.',
+      _TrendPeriod.month => 'No completed sales this month.',
+      _TrendPeriod.year => 'No completed sales this year.',
+    };
 
     return _DashboardPanel(
-      title: "Today's Sales",
+      title: title,
       trailing: Text(
         '${transactions.length} bill${transactions.length == 1 ? '' : 's'}',
         style: TextStyle(
@@ -949,14 +1037,16 @@ class _TodaysSalesCard extends StatelessWidget {
           ? Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Text(
-                'No completed sales today yet.',
+                emptyLabel,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             )
           : Column(
               children: [
-                for (final t in transactions.take(8))
+                for (final t in transactions.take(12))
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -981,10 +1071,12 @@ class _TodaysSalesCard extends StatelessWidget {
                                   ),
                                   SizedBox(height: 2),
                                   Text(
-                                    '${timeFmt.format(t.createdAt)} · ${t.itemCount} item${t.itemCount == 1 ? '' : 's'} · ${t.paymentLabel}',
+                                    '${showDate ? dateTimeFmt.format(t.createdAt) : timeFmt.format(t.createdAt)} · ${t.itemCount} item${t.itemCount == 1 ? '' : 's'} · ${t.paymentLabel}',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -1002,7 +1094,9 @@ class _TodaysSalesCard extends StatelessWidget {
                             Icon(
                               Icons.chevron_right,
                               size: 20,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                           ],
                         ),
@@ -1059,4 +1153,3 @@ class _DashboardPanel extends StatelessWidget {
     );
   }
 }
-

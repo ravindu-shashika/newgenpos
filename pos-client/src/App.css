@@ -53,16 +53,24 @@ body.pos-standalone-mode .app-root {
 }
 
 .Toastify__toast {
-  min-height: auto;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8125rem;
-  border-radius: 6px;
+  min-height: 3.25rem;
+  padding: 0.875rem 1.125rem;
+  font-size: 0.9375rem;
+  border-radius: 8px;
+  line-height: 1.45;
 }
 
 .Toastify__toast-body {
-  padding: 0;
-  font-size: 0.8125rem;
-  line-height: 1.35;
+  padding: 0.125rem 0;
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.Toastify__toast-icon {
+  width: 1.35rem;
+  margin-inline-end: 0.75rem;
 }
 
 .Toastify__toast--success {

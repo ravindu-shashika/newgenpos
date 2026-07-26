@@ -19,7 +19,7 @@ function round(n, d = 2) {
     return Math.round((Number(n) + Number.EPSILON) * f) / f;
 }
 
-/** Matches old Blade create.blade.php calculateTotal() for a selected row. */
+/** Pro-rates tax/subtotal/discount by return qty against remaining (actual_qty). */
 function recalcSelectedLine(line, qty, decimal) {
     let q = Number(qty);
     if (Number.isNaN(q) || q < 1) q = 1;
@@ -28,13 +28,16 @@ function recalcSelectedLine(line, qty, decimal) {
 
     const unitCost = Number(line.unit_cost) || 0;
     const unitTax = Number(line.unit_tax) || 0;
+    const purchaseQty = Number(line.purchase_qty) || max || 1;
+    const unitDiscount = Number(line.unit_discount)
+        || ((Number(line.line_discount) || 0) / purchaseQty);
 
     return {
         ...line,
         qty: q,
         tax: round(unitTax * q, decimal),
         subtotal: round(unitCost * q, decimal),
-        discount: line.line_discount,
+        discount: round(unitDiscount * q, decimal),
     };
 }
 
@@ -170,7 +173,7 @@ export default function ReturnPurchaseCreate() {
         let totalCost = 0;
         selected.forEach((l) => {
             totalQty += Number(l.qty) || 0;
-            totalDiscount += Number(l.line_discount) || 0;
+            totalDiscount += Number(l.discount) || 0;
             totalTax += Number(l.tax) || 0;
             totalCost += Number(l.subtotal) || 0;
         });

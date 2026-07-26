@@ -35,6 +35,7 @@ final inventoryListProvider = FutureProvider.autoDispose
     search: query.search,
     offset: query.page * query.pageSize,
     limit: query.pageSize,
+    stockFilter: query.stockFilter,
   );
 });
 
@@ -167,6 +168,19 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
     );
   }
 
+  Future<void> _showStockListDialog({
+    required InventoryStockFilter filter,
+    required String title,
+  }) async {
+    await showPosDialog<void>(
+      context: context,
+      builder: (ctx) => _InventoryStockListDialog(
+        title: title,
+        stockFilter: filter,
+      ),
+    );
+  }
+
   String get _stationCode {
     final code = ref.read(sessionServiceProvider).terminalCode?.trim();
     if (code != null && code.isNotEmpty) return code.toUpperCase();
@@ -240,6 +254,18 @@ class _PosInventoryScreenState extends ConsumerState<PosInventoryScreen> {
                               unawaited(_syncCatalog(PosDownloadMode.delta)),
                           onFullDownload: () =>
                               unawaited(_syncCatalog(PosDownloadMode.full)),
+                          onLowStockTap: () => unawaited(
+                            _showStockListDialog(
+                              filter: InventoryStockFilter.lowStock,
+                              title: 'Low stock alerts',
+                            ),
+                          ),
+                          onOutOfStockTap: () => unawaited(
+                            _showStockListDialog(
+                              filter: InventoryStockFilter.outOfStock,
+                              title: 'Out of stock items',
+                            ),
+                          ),
                         ),
                         SizedBox(height: 20),
                         _InventoryTable(
@@ -313,18 +339,22 @@ class _SummaryRow extends StatelessWidget {
     required this.summary,
     required this.onSync,
     required this.onFullDownload,
+    required this.onLowStockTap,
+    required this.onOutOfStockTap,
   });
 
   final InventorySummary summary;
   final VoidCallback onSync;
   final VoidCallback onFullDownload;
+  final VoidCallback onLowStockTap;
+  final VoidCallback onOutOfStockTap;
 
   @override
   Widget build(BuildContext context) {
     final styles = context.posStyles;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
+        final wide = constraints.maxWidth >= 1100;
         final cards = [
           _StatCard(
             label: 'TOTAL ITEMS',
@@ -343,28 +373,61 @@ class _SummaryRow extends StatelessWidget {
             progress: summary.totalItems <= 0
                 ? 0
                 : summary.inStockCount / summary.totalItems,
+            onTap: onLowStockTap,
+          ),
+          _StatCard(
+            label: 'OUT OF STOCK',
+            value: summary.outOfStockCount.toString().padLeft(2, '0'),
+            subtext: summary.outOfStockCount == 0
+                ? 'No empty shelves'
+                : '${summary.outOfStockCount} items unavailable',
+            valueColor: summary.outOfStockCount > 0
+                ? const Color(0xFFE57373)
+                : styles.text,
+            onTap: onOutOfStockTap,
           ),
           _AdminCard(onSync: onSync, onFullDownload: onFullDownload),
         ];
 
         if (wide) {
-          return Row(
-            children: [
-              Expanded(child: cards[0]),
-              SizedBox(width: 16),
-              Expanded(child: cards[1]),
-              SizedBox(width: 16),
-              Expanded(flex: 2, child: cards[2]),
-            ],
+          return IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: cards[0]),
+                SizedBox(width: 12),
+                Expanded(child: cards[1]),
+                SizedBox(width: 12),
+                Expanded(child: cards[2]),
+                SizedBox(width: 12),
+                Expanded(flex: 2, child: cards[3]),
+              ],
+            ),
           );
         }
         return Column(
           children: [
-            cards[0],
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: cards[0]),
+                  SizedBox(width: 12),
+                  Expanded(child: cards[1]),
+                ],
+              ),
+            ),
             SizedBox(height: 12),
-            cards[1],
-            SizedBox(height: 12),
-            cards[2],
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: cards[2]),
+                  SizedBox(width: 12),
+                  Expanded(child: cards[3]),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -379,6 +442,7 @@ class _StatCard extends StatelessWidget {
     required this.subtext,
     this.valueColor,
     this.progress,
+    this.onTap,
   });
 
   final String label;
@@ -386,11 +450,14 @@ class _StatCard extends StatelessWidget {
   final String subtext;
   final Color? valueColor;
   final double? progress;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final styles = context.posStyles;
-    return Container(
+    final card = Container(
+      width: double.infinity,
+      height: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: styles.cardBg,
@@ -400,14 +467,26 @@ class _StatCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-              color: styles.textMuted,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: styles.textMuted,
+                  ),
+                ),
+              ),
+              if (onTap != null)
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: styles.textMuted,
+                ),
+            ],
           ),
           const SizedBox(height: 10),
           Text(
@@ -424,19 +503,35 @@ class _StatCard extends StatelessWidget {
             subtext,
             style: styles.caption,
           ),
-          if (progress != null) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress!.clamp(0, 1),
-                minHeight: 6,
-                backgroundColor: styles.inputFill,
-                color: styles.accent,
-              ),
-            ),
-          ],
+          const Spacer(),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 6,
+            child: progress != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progress!.clamp(0, 1),
+                      minHeight: 6,
+                      backgroundColor: styles.inputFill,
+                      color: styles.accent,
+                    ),
+                  )
+                : const SizedBox.expand(),
+          ),
         ],
+      ),
+    );
+
+    if (onTap == null) return card;
+    return SizedBox.expand(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: card,
+        ),
       ),
     );
   }
@@ -455,6 +550,8 @@ class _AdminCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final styles = context.posStyles;
     return Container(
+      width: double.infinity,
+      height: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: context.posBrand.primary,
@@ -480,6 +577,7 @@ class _AdminCard extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          const Spacer(),
           const SizedBox(height: 16),
           Wrap(
             spacing: 10,
@@ -841,6 +939,188 @@ class _Pagination extends StatelessWidget {
           height: 32,
           child: Icon(icon, size: 18, color: styles.textMuted),
         ),
+      ),
+    );
+  }
+}
+
+class _InventoryStockListDialog extends ConsumerStatefulWidget {
+  const _InventoryStockListDialog({
+    required this.title,
+    required this.stockFilter,
+  });
+
+  final String title;
+  final InventoryStockFilter stockFilter;
+
+  @override
+  ConsumerState<_InventoryStockListDialog> createState() =>
+      _InventoryStockListDialogState();
+}
+
+class _InventoryStockListDialogState
+    extends ConsumerState<_InventoryStockListDialog> {
+  static const _pageSize = 10;
+  int _page = 0;
+  bool _loading = true;
+  String? _error;
+  InventoryListPage _data = const InventoryListPage(items: [], totalCount: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final warehouseId = ref.read(sessionServiceProvider).warehouseId;
+      final page = await InventoryService(db).loadPage(
+        warehouseId: warehouseId,
+        stockFilter: widget.stockFilter,
+        offset: _page * _pageSize,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _data = page;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pageCount = _data.totalCount == 0
+        ? 1
+        : ((_data.totalCount - 1) / _pageSize).floor() + 1;
+    final start = _data.totalCount == 0 ? 0 : _page * _pageSize + 1;
+    final end = math.min((_page + 1) * _pageSize, _data.totalCount);
+
+    return PosProfessionalDialogShell(
+      title: widget.title,
+      subtitle: _loading
+          ? 'Loading…'
+          : '${_data.totalCount} item${_data.totalCount == 1 ? '' : 's'}',
+      icon: widget.stockFilter == InventoryStockFilter.outOfStock
+          ? Icons.remove_shopping_cart_outlined
+          : Icons.warning_amber_rounded,
+      maxWidth: 720,
+      maxBodyHeight: 480,
+      footer: PosProfessionalDialogFooter(
+        primaryLabel: 'Close',
+        onPrimary: () => Navigator.pop(context),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text(_error!))
+                    : _data.items.isEmpty
+                        ? const PosProfessionalEmptyState(
+                            icon: Icons.check_circle_outline,
+                            message: 'No products match this stock filter.',
+                          )
+                        : ListView.separated(
+                            itemCount: _data.items.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: Theme.of(context).dividerColor,
+                            ),
+                            itemBuilder: (_, i) {
+                              final row = _data.items[i];
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 4,
+                                ),
+                                title: Text(
+                                  row.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '${row.code} · ${row.categoryName}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      row.statusLabel,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: row.isOutOfStock
+                                            ? const Color(0xFFE57373)
+                                            : context.posStyles.danger,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Qty ${row.qty == row.qty.roundToDouble() ? row.qty.toInt() : row.qty.toStringAsFixed(1)}',
+                                      style: context.posStyles.caption,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+          ),
+          if (!_loading && _data.totalCount > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  'Showing $start–$end of ${_data.totalCount}',
+                  style: context.posStyles.caption,
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Previous',
+                  onPressed: _page <= 0
+                      ? null
+                      : () {
+                          setState(() => _page -= 1);
+                          unawaited(_load());
+                        },
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Text(
+                  '${_page + 1} / $pageCount',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                IconButton(
+                  tooltip: 'Next',
+                  onPressed: _page >= pageCount - 1
+                      ? null
+                      : () {
+                          setState(() => _page += 1);
+                          unawaited(_load());
+                        },
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -386,13 +386,12 @@ class ProductController extends Controller
             $nestedData['price'] = $product->price.$wholesale_price;
             $nestedData['cost'] = $product->cost;
 
-            $stock_worth_price = format_currency($nestedData['qty'] * $product->price);
-            if(Auth::user()->role_id <= 2)
-                $stock_worth_cost = format_currency($nestedData['qty'] * $product->cost);
-            else
-                $stock_worth_cost = '****';
-
-            $nestedData['stock_worth'] = $stock_worth_price.' / '.$stock_worth_cost;
+            $nestedData['created_at'] = $product->created_at
+                ? date(config('date_format').' H:i', strtotime($product->created_at))
+                : '';
+            $nestedData['updated_at'] = $product->updated_at
+                ? date(config('date_format').' H:i', strtotime($product->updated_at))
+                : '';
 
             // Custom fields values
             foreach($field_names as $field_name) {
@@ -505,6 +504,8 @@ class ProductController extends Controller
             'wholesale_price' => 'Wholesale Price',
             'type' => 'Type',
             'alert_quantity' => 'Alert Qty',
+            'created_at' => 'Created At',
+            'updated_at' => 'Updated At',
         ];
 
         $requested = $request->input('fields', array_keys($allowedFields));
@@ -623,6 +624,12 @@ class ProductController extends Controller
                 'wholesale_price' => $product->wholesale_price !== null ? (float) $product->wholesale_price : '',
                 'type' => $product->type,
                 'alert_quantity' => $product->alert_quantity ?? '',
+                'created_at' => $product->created_at
+                    ? date(config('date_format').' H:i', strtotime($product->created_at))
+                    : '',
+                'updated_at' => $product->updated_at
+                    ? date(config('date_format').' H:i', strtotime($product->updated_at))
+                    : '',
             ];
 
             $row = [];

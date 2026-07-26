@@ -18,16 +18,11 @@ import {
 import { api } from '../../../services';
 import authStore from '../../../stores/authStore';
 import { permissionsBypassed } from '../../../config/permissions';
+import { formatMoney } from './reportHelpers.jsx';
 
 function canViewSaleReport() {
     if (permissionsBypassed()) return true;
     return authStore.getPermissions()?.includes('sale-report') ?? false;
-}
-
-function formatMoney(value, decimal = 2) {
-    const n = Number(value);
-    if (Number.isNaN(n)) return Number(0).toFixed(decimal);
-    return n.toFixed(decimal);
 }
 
 function sumRows(rows, key) {
@@ -221,6 +216,11 @@ export default function BackendReportSaleReport() {
             },
             { key: 'category', label: 'Category' },
             {
+                key: 'sale_date',
+                label: 'Sale Date',
+                render: (row) => row.sale_date || '—',
+            },
+            {
                 key: 'sold_amount',
                 label: 'Sold Amount',
                 align: 'right',
@@ -255,6 +255,7 @@ export default function BackendReportSaleReport() {
         const cells = [
             <td key="f-name">Total</td>,
             <td key="f-category" />,
+            <td key="f-sale-date" />,
             <td key="f-sold-amt" className="cell-num">{formatMoney(totals.sold_amount, decimal)}</td>,
             <td key="f-sold-qty" className="cell-num">{formatMoney(totals.sold_qty, decimal)}</td>,
             <td key="f-stock" className="cell-num">{formatMoney(totals.in_stock, decimal)}</td>,
@@ -271,6 +272,7 @@ export default function BackendReportSaleReport() {
         const headers = [
             'Product Name',
             'Category',
+            'Sale Date',
             'Sold Amount',
             'Sold Qty',
             'In Stock',
@@ -281,6 +283,7 @@ export default function BackendReportSaleReport() {
             const base = [
                 String(row.name || '').replace(/<br\s*\/?>/gi, ' '),
                 row.category ?? '',
+                row.sale_date ?? '',
                 row.sold_amount ?? 0,
                 row.sold_qty ?? 0,
                 row.in_stock ?? 0,
@@ -335,7 +338,7 @@ export default function BackendReportSaleReport() {
                     <p className="text-muted mb-0">Loading filters…</p>
                 ) : (
                     <FormRow>
-                        <FormField label="Start Date">
+                        <FormField label="Sale Start Date">
                             <TextInput
                                 type="date"
                                 value={startDate}
@@ -345,7 +348,7 @@ export default function BackendReportSaleReport() {
                                 }}
                             />
                         </FormField>
-                        <FormField label="End Date">
+                        <FormField label="Sale End Date">
                             <TextInput
                                 type="date"
                                 value={endDate}

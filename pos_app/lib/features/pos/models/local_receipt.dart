@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class LocalReceiptLine {
   const LocalReceiptLine({
     required this.name,
@@ -20,6 +22,62 @@ class LocalReceiptLine {
   final double tax;
 }
 
+/// Parsed return-credit settlements from a sale `payloadJson`.
+class ReturnSettlementSummary {
+  const ReturnSettlementSummary({
+    this.credit = 0,
+    this.references = const [],
+  });
+
+  final double credit;
+  final List<String> references;
+
+  bool get hasCredit => credit > 0.0001;
+
+  String get referencesLabel => references.join(', ');
+
+  /// Reads `return_settlements` from a sale sync payload JSON string.
+  static ReturnSettlementSummary fromPayloadJson(String? payloadJson) {
+    if (payloadJson == null || payloadJson.isEmpty) {
+      return const ReturnSettlementSummary();
+    }
+    try {
+      final decoded = jsonDecode(payloadJson);
+      if (decoded is! Map) return const ReturnSettlementSummary();
+      return fromPayloadMap(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      return const ReturnSettlementSummary();
+    }
+  }
+
+  static ReturnSettlementSummary fromPayloadMap(Map<String, dynamic> map) {
+    final raw = map['return_settlements'];
+    if (raw is! List || raw.isEmpty) {
+      return const ReturnSettlementSummary();
+    }
+
+    var credit = 0.0;
+    final refs = <String>[];
+    final seenRefs = <String>{};
+
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final row = Map<String, dynamic>.from(entry);
+      final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+      if (amount > 0) credit += amount;
+
+      final ref = (row['return_reference_no'] ?? row['reference_no'])
+          ?.toString()
+          .trim();
+      if (ref != null && ref.isNotEmpty && seenRefs.add(ref)) {
+        refs.add(ref);
+      }
+    }
+
+    return ReturnSettlementSummary(credit: credit, references: refs);
+  }
+}
+
 /// Sale receipt data for thermal printing.
 class LocalReceipt {
   const LocalReceipt({
@@ -37,6 +95,8 @@ class LocalReceipt {
     this.orderDiscount = 0,
     this.subtotal = 0,
     this.tenderedAmount = 0,
+    this.returnCredit = 0,
+    this.returnReferences = const [],
     this.serverSaleId,
     this.billTo = '',
     this.saleNote = '',
@@ -62,6 +122,10 @@ class LocalReceipt {
   final double orderDiscount;
   final double subtotal;
   final double tenderedAmount;
+  /// Return bill credit applied against this sale (reduces grand total).
+  final double returnCredit;
+  /// Return bill reference numbers applied as credit.
+  final List<String> returnReferences;
   final int? serverSaleId;
   final String billTo;
   final String saleNote;
@@ -69,6 +133,10 @@ class LocalReceipt {
   final int dailySaleNumber;
   final String registerName;
   final String saleType;
+
+  bool get hasReturnCredit => returnCredit > 0.0001;
+
+  String get returnReferencesLabel => returnReferences.join(', ');
 
   int get totalItemCount => lines.length;
 

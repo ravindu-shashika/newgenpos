@@ -119,6 +119,26 @@ class _SaleBillDetailBody extends StatelessWidget {
                   label: 'Shipping',
                   value: formatPosMoney(sale.shippingCost),
                 ),
+              if (detail.hasReturnCredit) ...[
+                _TotalRow(
+                  label: 'Return credit',
+                  value: formatPosMoney(-detail.returnCredit),
+                ),
+                if (detail.returnReferencesLabel.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Return bill: ${detail.returnReferencesLabel}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: muted,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
               _TotalRow(
                 label: 'Grand total',
                 value: formatPosMoney(sale.grandTotal),
@@ -271,7 +291,7 @@ class _TotalRow extends StatelessWidget {
             style: TextStyle(
               fontSize: bold ? 16 : 13,
               fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-              color: bold ? context.posBrand.primary : null,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],

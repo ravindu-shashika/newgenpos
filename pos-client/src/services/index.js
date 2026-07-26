@@ -25,6 +25,7 @@ export {
   hasToken,
   restoreSessionToken,
   syncTokenFromCookie,
+  SESSION_COOKIE_OPTIONS,
   PERSISTENT_COOKIE_OPTIONS,
 } from './tokenStorage';
 export { getPosLegacyUrl, openPosLegacy, posLegacyBasePath } from './posLegacy';

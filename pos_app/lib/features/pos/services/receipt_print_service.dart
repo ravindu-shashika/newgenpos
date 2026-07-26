@@ -390,6 +390,29 @@ class ReceiptPrintService {
               ),
             );
           }
+          if (receipt.hasReturnCredit) {
+            children.add(
+              _totalRow(
+                'Return credit:',
+                -receipt.returnCredit,
+                m,
+                bold: true,
+              ),
+            );
+            final refs = receipt.returnReferencesLabel;
+            if (refs.isNotEmpty) {
+              children.add(
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 2),
+                  child: pw.Text(
+                    'Return bill: $refs',
+                    style: pw.TextStyle(fontSize: m.itemDetailSize),
+                    maxLines: 2,
+                  ),
+                ),
+              );
+            }
+          }
           children.add(
             _totalRow(
               'GRAND TOTAL:',

@@ -185,12 +185,14 @@ class PosApiClient {
     required int userId,
     required double closingBalance,
     required double actualCash,
+    int? warehouseId,
   }) async {
     final res = await _dio.post('/cash-register/close', data: {
       'cash_register_id': registerId,
       'user_id': userId,
       'closing_balance': closingBalance,
       'actual_cash': actualCash,
+      if (warehouseId != null) 'warehouse_id': warehouseId,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }

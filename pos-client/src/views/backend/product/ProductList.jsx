@@ -37,6 +37,8 @@ const EXPORT_FIELD_OPTIONS = [
     { key: 'wholesale_price', label: 'Wholesale Price' },
     { key: 'type', label: 'Type' },
     { key: 'alert_quantity', label: 'Alert Qty' },
+    { key: 'created_at', label: 'Created At' },
+    { key: 'updated_at', label: 'Updated At' },
 ];
 
 const DEFAULT_EXPORT_FIELDS = ['name', 'code', 'brand', 'category', 'qty', 'price'];
@@ -292,7 +294,8 @@ export default function ProductList() {
         { label: 'Unit', key: 'unit' },
         { label: 'Price', key: 'price' },
         { label: 'Cost', key: 'cost' },
-        { label: 'Stock Worth', key: 'stock_worth' },
+        { label: 'Created At', key: 'created_at' },
+        { label: 'Updated At', key: 'updated_at' },
         {
             label: 'Action',
             key: 'action',

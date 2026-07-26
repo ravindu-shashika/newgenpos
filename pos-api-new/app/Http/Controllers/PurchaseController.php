@@ -2177,7 +2177,11 @@ class PurchaseController extends Controller
                 return $this->spaJson($request, ['message' => __('db.Sorry! You are not allowed to access this module')], 403);
             }
             try {
-                $payments = Payment::where('purchase_id', $id)->orderBy('created_at', 'desc')->get()->map(function ($payment) {
+                $payments = Payment::withTrashed()
+                    ->where('purchase_id', $id)
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->map(function ($payment) {
                     if (!$payment->currency_id) {
                         $lims_purchase_data = Purchase::find($payment->purchase_id);
                         if ($lims_purchase_data) {
@@ -2186,9 +2190,11 @@ class PurchaseController extends Controller
                         }
                     }
                     $chequeNo = null;
+                    $isChequeReturned = false;
                     if ($payment->paying_method == 'Cheque') {
                         $cheque = PaymentWithCheque::where('payment_id', $payment->id)->first();
                         $chequeNo = $cheque->cheque_no ?? null;
+                        $isChequeReturned = $payment->isChequeReturned();
                     }
                     $account = Account::find($payment->account_id);
                     $paymentAt = $payment->payment_at ?? $payment->created_at;
@@ -2214,6 +2220,17 @@ class PurchaseController extends Controller
                         'account_name' => $account->name ?? 'N/A',
                         'payment_note' => $payment->payment_note ?? '',
                         'cheque_no' => $chequeNo,
+                        'cheque_status' => $payment->cheque_status,
+                        'cheque_returned' => $isChequeReturned,
+                        'cheque_return_reason' => $payment->cheque_return_reason,
+                        'cheque_returned_at' => $payment->cheque_returned_at
+                            ? date(config('date_format'), strtotime($payment->cheque_returned_at->toDateString()))
+                            : null,
+                        'is_deleted' => $payment->trashed(),
+                        'void_reason' => $payment->void_reason,
+                        'deleted_at' => $payment->deleted_at
+                            ? date(config('date_format'), strtotime($payment->deleted_at->toDateString())).' '.$payment->deleted_at->toTimeString()
+                            : null,
                         'payment_at' => $paymentAt
                             ? date(config('date_format'), strtotime($paymentAt->toDateString()))
                             : '',
@@ -2308,16 +2325,23 @@ class PurchaseController extends Controller
 
         $data = $request->all();
         $lims_payment_data = Payment::find($data['payment_id']);
+        if (!$lims_payment_data) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => __('db.Payment not found!')], 404);
+            }
+            return redirect('purchases')->with('not_permitted', __('db.Payment not found!'));
+        }
+        if ($lims_payment_data->isChequeReturned()) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => 'Returned cheque payments cannot be edited.'], 422);
+            }
+            return redirect('purchases')->with('not_permitted', 'Returned cheque payments cannot be edited.');
+        }
         $lims_purchase_data = Purchase::find($lims_payment_data->purchase_id);
         //updating purchase table
         $amount_dif = $lims_payment_data->amount - $data['edit_amount'];
         $lims_purchase_data->paid_amount = $lims_purchase_data->paid_amount - $amount_dif;
-        $balance = $lims_purchase_data->grand_total - $lims_purchase_data->paid_amount;
-        if($balance > 0 || $balance < 0)
-            $lims_purchase_data->payment_status = 1;
-        elseif ($balance == 0)
-            $lims_purchase_data->payment_status = 2;
-        $lims_purchase_data->save();
+        $this->syncPurchasePaymentStatus($lims_purchase_data);
 
         if (isset($data['payment_at'])) {
             $data['payment_at'] = normalize_to_sql_datetime($data['payment_at']);
@@ -2398,34 +2422,111 @@ class PurchaseController extends Controller
         }
 
         $lims_payment_data = Payment::find($request['id']);
+        if (!$lims_payment_data) {
+            if ($this->wantsSpaResponse($request)) {
+                return $this->spaJson($request, ['message' => __('db.Payment not found!')], 404);
+            }
+            return redirect('purchases')->with('not_permitted', __('db.Payment not found!'));
+        }
+
+        $reason = trim((string) ($request->input('reason') ?? $request->input('void_reason') ?? ''));
+        $alreadyReturned = $lims_payment_data->isChequeReturned();
         $lims_purchase_data = Purchase::where('id', $lims_payment_data->purchase_id)->first();
-        $lims_purchase_data->paid_amount -= $lims_payment_data->amount;
-        $balance = $lims_purchase_data->grand_total - $lims_purchase_data->paid_amount;
-        if($balance > 0 || $balance < 0)
-            $lims_purchase_data->payment_status = 1;
-        elseif ($balance == 0)
-            $lims_purchase_data->payment_status = 2;
-        $lims_purchase_data->save();
+
+        // Active payments (including active cheques) restore due. Returned cheques already did.
+        if ($lims_purchase_data && !$alreadyReturned) {
+            $lims_purchase_data->paid_amount = max(
+                0,
+                (float) $lims_purchase_data->paid_amount - (float) $lims_payment_data->amount
+            );
+            $this->syncPurchasePaymentStatus($lims_purchase_data);
+        }
+
         $lims_pos_setting_data = PosSetting::latest()->first();
 
-        if($lims_payment_data->paying_method == 'Credit Card' && $lims_pos_setting_data->stripe_secret_key) {
+        if ($lims_payment_data->paying_method == 'Credit Card' && $lims_pos_setting_data?->stripe_secret_key) {
             $lims_payment_with_credit_card_data = PaymentWithCreditCard::where('payment_id', $request['id'])->first();
-            \Stripe\Stripe::setApiKey($lims_pos_setting_data->stripe_secret_key);
-            \Stripe\Refund::create(array(
-              "charge" => $lims_payment_with_credit_card_data->charge_id,
-            ));
+            if ($lims_payment_with_credit_card_data) {
+                try {
+                    \Stripe\Stripe::setApiKey($lims_pos_setting_data->stripe_secret_key);
+                    \Stripe\Refund::create([
+                        'charge' => $lims_payment_with_credit_card_data->charge_id,
+                    ]);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
 
-            $lims_payment_with_credit_card_data->delete();
-        }
-        elseif ($lims_payment_data->paying_method == 'Cheque') {
-            $lims_payment_cheque_data = PaymentWithCheque::where('payment_id', $request['id'])->first();
-            $lims_payment_cheque_data->delete();
-        }
-        $lims_payment_data->delete();
+        $existingNote = trim((string) $lims_payment_data->payment_note);
+        $voidLabel = $reason !== '' ? $reason : 'Payment deleted';
+        $lims_payment_data->void_reason = $voidLabel;
+        $lims_payment_data->payment_note = $existingNote === ''
+            ? 'Deleted: '.$voidLabel
+            : $existingNote.' [Deleted: '.$voidLabel.']';
+        $lims_payment_data->save();
+        $lims_payment_data->delete(); // soft delete — keep record
+
         if ($this->wantsSpaResponse($request)) {
-            return $this->spaJson($request, ['message' => __('db.Payment deleted successfully')]);
+            return $this->spaJson($request, [
+                'message' => 'Payment marked as deleted. Purchase balance has been restored.',
+                'paid_amount' => $lims_purchase_data ? (float) $lims_purchase_data->paid_amount : null,
+            ]);
         }
         return redirect('purchases')->with('not_permitted', __('db.Payment deleted successfully'));
+    }
+
+    /**
+     * Mark a purchase cheque payment as returned/bounced.
+     * Restores purchase due (reduces paid_amount) and keeps the payment row for audit.
+     */
+    public function returnChequePayment(Request $request)
+    {
+        if ($this->wantsSpaResponse($request)
+            && !$this->userCanAccessPurchases('purchase-payment-delete')
+            && !$this->userCanAccessPurchases('purchase-payment-edit')) {
+            return $this->spaJson($request, ['message' => __('db.Sorry! You are not allowed to access this module')], 403);
+        }
+
+        $paymentId = $request->input('id') ?? $request->input('payment_id');
+        $reason = trim((string) $request->input('reason', ''));
+
+        $payment = Payment::find($paymentId);
+        if (!$payment || !$payment->purchase_id) {
+            return $this->spaJson($request, ['message' => __('db.Payment not found!')], 404);
+        }
+        if ($payment->paying_method !== 'Cheque') {
+            return $this->spaJson($request, ['message' => 'Only cheque payments can be marked as returned.'], 422);
+        }
+        if ($payment->isChequeReturned()) {
+            return $this->spaJson($request, ['message' => 'This cheque is already marked as returned.'], 422);
+        }
+        if ($reason === '') {
+            return $this->spaJson($request, ['message' => 'Return reason is required.'], 422);
+        }
+
+        $purchase = Purchase::find($payment->purchase_id);
+        if (!$purchase) {
+            return $this->spaJson($request, ['message' => __('db.Purchase not found!')], 404);
+        }
+
+        $purchase->paid_amount = max(0, (float) $purchase->paid_amount - (float) $payment->amount);
+        $this->syncPurchasePaymentStatus($purchase);
+
+        $existingNote = trim((string) $payment->payment_note);
+        $payment->cheque_status = 'returned';
+        $payment->cheque_return_reason = $reason;
+        $payment->cheque_returned_at = now();
+        $payment->payment_note = $existingNote === ''
+            ? 'Cheque returned: '.$reason
+            : $existingNote.' [Cheque returned: '.$reason.']';
+        $payment->save();
+
+        return $this->spaJson($request, [
+            'message' => 'Cheque marked as returned. Purchase balance has been restored.',
+            'paid_amount' => (float) $purchase->paid_amount,
+            'payment_status' => (int) $purchase->payment_status,
+        ]);
     }
 
     private function purchaseHasSale($lims_product_purchase_data)
@@ -3139,6 +3240,20 @@ class PurchaseController extends Controller
         return (float) DB::table('return_purchases')->where('purchase_id', $purchaseId)->sum('grand_total');
     }
 
+    /**
+     * payment_status: 1 = Due, 2 = Paid (net of returns).
+     */
+    protected function syncPurchasePaymentStatus(?Purchase $purchase): void
+    {
+        if (!$purchase) {
+            return;
+        }
+        $returned = $this->returnedAmount((int) $purchase->id);
+        $balance = (float) $purchase->grand_total - $returned - (float) $purchase->paid_amount;
+        $purchase->payment_status = $balance > 0.00001 ? 1 : 2;
+        $purchase->save();
+    }
+
     public function suggestPurchaseBatch(Request $request)
     {
         if (!$this->userCanAccessPurchases('purchases-add') && !$this->userCanAccessPurchases('purchases-edit')) {
@@ -3511,6 +3626,7 @@ class PurchaseController extends Controller
         $returned = $this->returnedAmount((int) $purchase->id);
         $paid = (float) ($purchase->paid_amount ?? 0);
         $due = max(0, ($purchase->grand_total - $returned - $paid) / $rate);
+        $paymentStatus = $due > 0.00001 ? 1 : 2;
         $statusLabels = [1 => 'Received', 2 => 'Partial', 3 => 'Pending', 4 => 'Ordered'];
         $decimals = (int) (config('decimal') ?? 2);
         return [
@@ -3526,8 +3642,8 @@ class PurchaseController extends Controller
             'returned_amount' => round($returned / $rate, $decimals),
             'paid_amount' => round($paid / $rate, $decimals),
             'due' => round($due, $decimals),
-            'payment_status' => $purchase->payment_status,
-            'payment_status_label' => $purchase->payment_status == 2 ? 'Paid' : 'Due',
+            'payment_status' => $paymentStatus,
+            'payment_status_label' => $paymentStatus == 2 ? 'Paid' : 'Due',
             'currency_id' => $purchase->currency_id,
             'currency_code' => $purchase->currency->code ?? 'USD',
             'exchange_rate' => (float) ($purchase->exchange_rate ?: 1),

@@ -12,7 +12,7 @@ import {
   cookie,
 } from './services';
 import { isPosPathname } from './services/posApp';
-import { hasToken, restoreSessionToken, clearToken, PERSISTENT_COOKIE_OPTIONS } from './services/tokenStorage';
+import { hasToken, restoreSessionToken, clearToken, SESSION_COOKIE_OPTIONS } from './services/tokenStorage';
 import authStore from './stores/authStore';
 import roleStore from './stores/roleStore';
 import generalSettingStore from './stores/generalSettingStore';
@@ -181,11 +181,11 @@ function App() {
       if (result?.user) {
         setIsAuthenticated(true);
         const u = result.user;
-        if (u.id != null) cookie.set('user_id', u.id, PERSISTENT_COOKIE_OPTIONS);
-        if (u.name) cookie.set('user_name', u.name, PERSISTENT_COOKIE_OPTIONS);
+        if (u.id != null) cookie.set('user_id', u.id, SESSION_COOKIE_OPTIONS);
+        if (u.name) cookie.set('user_name', u.name, SESSION_COOKIE_OPTIONS);
         const roleId = u.role_id ?? u.role?.id;
-        if (roleId != null) cookie.set('role_id', roleId, PERSISTENT_COOKIE_OPTIONS);
-        if (u.role?.name) cookie.set('role_name', u.role.name, PERSISTENT_COOKIE_OPTIONS);
+        if (roleId != null) cookie.set('role_id', roleId, SESSION_COOKIE_OPTIONS);
+        if (u.role?.name) cookie.set('role_name', u.role.name, SESSION_COOKIE_OPTIONS);
       } else {
         authStore.clearAuth();
         clearToken();

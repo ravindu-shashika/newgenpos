@@ -89,6 +89,10 @@ class SupplierController extends Controller
             $total_paid = Payment::join('purchases', 'purchases.id', '=', 'payments.purchase_id')
                 ->where('purchases.supplier_id', $supplier->id)
                 ->whereNull('purchases.deleted_at')
+                ->where(function ($q) {
+                    $q->whereNull('payments.cheque_status')
+                        ->orWhere('payments.cheque_status', '!=', 'returned');
+                })
                 ->sum('payments.amount');
 
             return $opening_balance - $total_paid;
@@ -97,6 +101,10 @@ class SupplierController extends Controller
         $total_paid = Payment::join('purchases', 'purchases.id', '=', 'payments.purchase_id')
             ->where('purchases.supplier_id', $supplier->id)
             ->whereNull('purchases.deleted_at')
+            ->where(function ($q) {
+                $q->whereNull('payments.cheque_status')
+                    ->orWhere('payments.cheque_status', '!=', 'returned');
+            })
             ->sum('payments.amount');
 
         $total_returns = ReturnPurchase::where('supplier_id', $supplier->id)->sum('grand_total');
@@ -418,6 +426,10 @@ class SupplierController extends Controller
             $total_paid = Payment::join('purchases', 'purchases.id', '=', 'payments.purchase_id')
                 ->where('purchases.supplier_id', $supplier->id)
                 ->whereNull('purchases.deleted_at')
+                ->where(function ($q) {
+                    $q->whereNull('payments.cheque_status')
+                        ->orWhere('payments.cheque_status', '!=', 'returned');
+                })
                 ->sum('payments.amount');
             $balance_due = $opening_balance - $total_paid;
         } else {
@@ -425,6 +437,10 @@ class SupplierController extends Controller
             $total_paid = Payment::join('purchases', 'purchases.id', '=', 'payments.purchase_id')
                 ->where('purchases.supplier_id', $supplier->id)
                 ->whereNull('purchases.deleted_at')
+                ->where(function ($q) {
+                    $q->whereNull('payments.cheque_status')
+                        ->orWhere('payments.cheque_status', '!=', 'returned');
+                })
                 ->sum('payments.amount');
 
             $total_returns = ReturnPurchase::where('supplier_id', $supplier->id)->sum('grand_total');

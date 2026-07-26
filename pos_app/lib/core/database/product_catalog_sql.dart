@@ -123,13 +123,17 @@ SELECT
   COUNT(p.id) AS total_items,
   SUM(
     CASE
-      WHEN COALESCE(pq.qty, 0) <= 0
-        OR (
-          COALESCE(pq.qty, 0) > 0 AND COALESCE(pq.qty, 0) <= ?
-        ) THEN 1
+      WHEN COALESCE(pq.qty, 0) > 0 AND COALESCE(pq.qty, 0) <= ?
+        THEN 1
       ELSE 0
     END
   ) AS low_stock_count,
+  SUM(
+    CASE
+      WHEN COALESCE(pq.qty, 0) <= 0 THEN 1
+      ELSE 0
+    END
+  ) AS out_of_stock_count,
   SUM(CASE WHEN COALESCE(pq.qty, 0) > ? THEN 1 ELSE 0 END) AS in_stock_count,
   SUM(
     CASE
@@ -192,6 +196,14 @@ LIMIT ?
 SELECT id AS product_id
 FROM products
 WHERE code LIKE ? OR alt_code LIKE ?
+LIMIT ?
+''';
+
+  /// Match variant SKUs by exact code or prefix (not contains — avoids XL vs L).
+  static const inventoryVariantCodeSearchSql = '''
+SELECT DISTINCT product_id AS product_id
+FROM product_variants
+WHERE item_code = ? OR item_code LIKE ?
 LIMIT ?
 ''';
 }

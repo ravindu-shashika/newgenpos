@@ -3060,6 +3060,34 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
         return [$custom_fields->values()->all(), $field_names];
     }
 
+    /**
+     * Format unique sale dates for a sale-report product row.
+     */
+    private function formatSaleReportDates($productSaleRows): string
+    {
+        $dateFormat = config('date_format', 'd/m/Y');
+        $timestamps = collect($productSaleRows)
+            ->map(function ($row) {
+                $raw = $row->sale_date ?? $row->created_at ?? null;
+                return $raw ? strtotime((string) $raw) : null;
+            })
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values();
+
+        if ($timestamps->isEmpty()) {
+            return '—';
+        }
+
+        $formatted = $timestamps->map(fn ($ts) => date($dateFormat, $ts));
+        if ($formatted->count() <= 3) {
+            return $formatted->implode(', ');
+        }
+
+        return $formatted->first().' – '.$formatted->last();
+    }
+
     public function saleReport(Request $request)
     {
         if (!$this->userCanSaleReport()) {
@@ -3115,10 +3143,10 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
         }
 
         $data = $request->all();
-        $start_date = $data['start_date'] . ' 00:00:00';
-        $end_date   = $data['end_date'] . ' 23:59:59';
-        $warehouse_id = $data['warehouse_id'];
-        $category_id = $data['category_id'];
+        $start_date = $data['start_date'];
+        $end_date   = $data['end_date'];
+        $warehouse_id = (int) ($data['warehouse_id'] ?? 0);
+        $category_id = (int) ($data['category_id'] ?? 0);
         $variant_id = [];
         $totalData = 0;
 
@@ -3146,22 +3174,24 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
             $field_names[] = str_replace(" ", "_", strtolower($fieldName));
         }
 
+        // Filter by sale date (sales.created_at), not product_sales row timestamp.
+        $soldProductQuery = Product_Sale::query()
+            ->whereHas('sale', function ($s) use ($start_date, $end_date, $warehouse_id) {
+                $s->whereNull('deleted_at')
+                    ->whereDate('created_at', '>=', $start_date)
+                    ->whereDate('created_at', '<=', $end_date);
+                if ($warehouse_id > 0) {
+                    $s->where('warehouse_id', $warehouse_id);
+                }
+                if ($this->own_data) {
+                    $s->where('user_id', $this->current_user_id);
+                }
+            });
+
         if($request->input('search.value')) {
             $search = $request->input('search.value');
 
-            $soldProductIds = Product_Sale::whereBetween('created_at', [$start_date, $end_date])
-                ->when($warehouse_id > 0, function ($q) use ($warehouse_id) {
-                    $q->whereHas('sale', function ($s) use ($warehouse_id) {
-                        $s->where('warehouse_id', $warehouse_id);
-                    });
-                })
-                ->when($this->own_data, function ($q) {
-                    $q->whereHas('sale', function ($s) {
-                        $s->where('user_id', $this->current_user_id);
-                    });
-                })
-                ->pluck('product_id')
-                ->unique();
+            $soldProductIds = (clone $soldProductQuery)->pluck('product_id')->unique();
 
             $totalData = Product::where('is_active', true)
                 ->whereIn('id', $soldProductIds)
@@ -3181,19 +3211,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                 ->get();
         }
         else {
-            $soldProductIds = Product_Sale::whereBetween('created_at', [$start_date, $end_date])
-                ->when($warehouse_id > 0, function ($q) use ($warehouse_id) {
-                    $q->whereHas('sale', function ($s) use ($warehouse_id) {
-                        $s->where('warehouse_id', $warehouse_id);
-                    });
-                })
-                ->when($this->own_data, function ($q) {
-                    $q->whereHas('sale', function ($s) {
-                        $s->where('user_id', $this->current_user_id);
-                    });
-                })
-                ->pluck('product_id')
-                ->unique();
+            $soldProductIds = (clone $soldProductQuery)->pluck('product_id')->unique();
 
             $totalData = Product::where('is_active', true)
                 ->whereIn('id', $soldProductIds)
@@ -3224,7 +3242,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                         $imeis = $this->findImeis($product->id, $variant_id);
                         $nestedData['name'] = $product->name . ' [' . $variant_data->name . ']'.'<br>'. 'Product Code: ' . $item_code . ($imeis != 'N/A' ? '<br>' . 'IMEI: ' . str_replace("<br/>", ",", $imeis) : '');
                         $nestedData['category'] = $product->category->name;
-                        //sale data
+                        //sale data — filtered by sale date
                         $nestedData['sold_amount'] = DB::table('sales')
                                                     ->join('product_sales', 'sales.id', '=', 'product_sales.sale_id')->where([
                                                         ['product_sales.product_id', $product->id],
@@ -3233,40 +3251,46 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                                                     ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
                                                     ->whereDate('sales.created_at','>=', $start_date)->whereDate('sales.created_at','<=', $end_date)->sum(DB::raw('product_sales.total / sales.exchange_rate'));
 
-                        $lims_product_sale_data = Product_Sale::select('sale_unit_id', 'qty', 'sale_id')->where([
-                                                ['product_id', $product->id],
-                                                ['variant_id', $variant_id]
-                                        ])->whereDate('created_at', '>=' , $start_date)->whereDate('created_at', '<=' , $end_date)->get();
+                        $lims_product_sale_data = DB::table('sales')
+                                    ->join('product_sales', 'sales.id', '=', 'product_sales.sale_id')
+                                    ->where([
+                                        ['product_sales.product_id', $product->id],
+                                        ['product_sales.variant_id', $variant_id],
+                                    ])
+                                    ->whereNull('sales.deleted_at')
+                                    ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
+                                    ->whereDate('sales.created_at', '>=', $start_date)
+                                    ->whereDate('sales.created_at', '<=', $end_date)
+                                    ->select('product_sales.sale_unit_id', 'product_sales.qty', 'product_sales.sale_id', 'sales.created_at as sale_date')
+                                    ->get();
 
                         $sold_qty = 0;
                         if(count($lims_product_sale_data)) {
                             foreach ($lims_product_sale_data as $product_sale) {
                                 $unit = DB::table('units')->find($product_sale->sale_unit_id);
-                                if($unit->operator == '*'){
+                                if($unit && $unit->operator == '*'){
                                     $sold_qty += $product_sale->qty * $unit->operation_value;
                                 }
-                                elseif($unit->operator == '/'){
+                                elseif($unit && $unit->operator == '/'){
                                     $sold_qty += $product_sale->qty / $unit->operation_value;
                                 }
                             }
                         }
                         $nestedData['sold_qty'] = $sold_qty;
 
+                        // Only list variants that were actually sold in the sale-date range.
+                        if ((float) $nestedData['sold_amount'] == 0 && (float) $sold_qty == 0) {
+                            continue;
+                        }
+
                         $product_variant_data = ProductVariant::where([
                             ['product_id', $product->id],
                             ['variant_id', $variant_id]
                         ])->select('qty')->first();
-                        $nestedData['in_stock'] = $product_variant_data->qty;
+                        $nestedData['in_stock'] = $product_variant_data->qty ?? 0;
+                        $nestedData['sale_date'] = $this->formatSaleReportDates($lims_product_sale_data);
 
-                        $sale_ids = Product_Sale::where([
-                                ['product_id', $product->id],
-                                ['variant_id', $variant_id]
-                            ])
-                            ->whereDate('created_at', '>=', $start_date)
-                            ->whereDate('created_at', '<=', $end_date)
-                            ->pluck('sale_id')
-                            ->unique()
-                            ->toArray();
+                        $sale_ids = $lims_product_sale_data->pluck('sale_id')->unique()->toArray();
                         // dd($product->id, $variant_id);
                         $sale_data_custom = Sale::whereIn('id', $sale_ids)->get();
                         $sale_data_custom_fields = $this->reportCustomField($sale_data_custom, $custom_fields);
@@ -3291,27 +3315,40 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                                                 ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
                                                 ->whereDate('sales.created_at','>=', $start_date)->whereDate('sales.created_at','<=', $end_date)->sum(DB::raw('product_sales.total / sales.exchange_rate'));
 
-                    $lims_product_sale_data = Product_Sale::select('sale_unit_id', 'qty', 'sale_id')->where('product_id', $product->id)->whereDate('created_at', '>=' , $start_date)->whereDate('created_at', '<=' , $end_date)->get();
+                    $lims_product_sale_data = DB::table('sales')
+                                ->join('product_sales', 'sales.id', '=', 'product_sales.sale_id')
+                                ->where('product_sales.product_id', $product->id)
+                                ->whereNull('sales.deleted_at')
+                                ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
+                                ->whereDate('sales.created_at', '>=', $start_date)
+                                ->whereDate('sales.created_at', '<=', $end_date)
+                                ->select('product_sales.sale_unit_id', 'product_sales.qty', 'product_sales.sale_id', 'sales.created_at as sale_date')
+                                ->get();
 
                     $sold_qty = 0;
                     if(count($lims_product_sale_data)) {
                         foreach ($lims_product_sale_data as $product_sale) {
                             if($product_sale->sale_unit_id > 0) {
                                 $unit = DB::table('units')->find($product_sale->sale_unit_id);
-                                if($unit->operator == '*'){
+                                if($unit && $unit->operator == '*'){
                                     $sold_qty += $product_sale->qty * $unit->operation_value;
                                 }
-                                elseif($unit->operator == '/'){
+                                elseif($unit && $unit->operator == '/'){
                                     $sold_qty += $product_sale->qty / $unit->operation_value;
                                 }
                             }
                             else
-                                $sold_qty = $product_sale->qty;
+                                $sold_qty += $product_sale->qty;
                         }
                     }
                     $nestedData['sold_qty'] = $sold_qty;
 
+                    if ((float) $nestedData['sold_amount'] == 0 && (float) $sold_qty == 0) {
+                        continue;
+                    }
+
                     $nestedData['in_stock'] = $product->qty;
+                    $nestedData['sale_date'] = $this->formatSaleReportDates($lims_product_sale_data);
 
                     $sale_ids = $lims_product_sale_data->pluck('sale_id')->unique()->toArray();
                     $sale_data_custom = Sale::whereIn('id', $sale_ids)->get();
@@ -3351,24 +3388,26 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                                     ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
                                     ->whereDate('sales.created_at','>=', $start_date)
                                     ->whereDate('sales.created_at','<=', $end_date)
-                                    ->select('product_sales.sale_unit_id', 'product_sales.qty', 'sale_id')
+                                    ->select('product_sales.sale_unit_id', 'product_sales.qty', 'sale_id', 'sales.created_at as sale_date')
                                     ->get();
 
                         $sold_qty = 0;
                         if(count($lims_product_sale_data)) {
                             foreach ($lims_product_sale_data as $product_sale) {
                                 $unit = DB::table('units')->find($product_sale->sale_unit_id);
-                                if($unit->operator == '*'){
+                                if($unit && $unit->operator == '*'){
                                     $sold_qty += $product_sale->qty * $unit->operation_value;
                                 }
-                                elseif($unit->operator == '/'){
+                                elseif($unit && $unit->operator == '/'){
                                     $sold_qty += $product_sale->qty / $unit->operation_value;
                                 }
                             }
                         }
                         $nestedData['sold_qty'] = $sold_qty;
 
-
+                        if ((float) $nestedData['sold_amount'] == 0 && (float) $sold_qty == 0) {
+                            continue;
+                        }
 
                         $product_warehouse = Product_Warehouse::where([
                             ['product_id', $product->id],
@@ -3379,16 +3418,9 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                             $nestedData['in_stock'] = $product_warehouse->qty;
                         else
                             $nestedData['in_stock'] = 0;
+                        $nestedData['sale_date'] = $this->formatSaleReportDates($lims_product_sale_data);
 
-                        $sale_ids = Product_Sale::where([
-                                ['product_id', $product->id],
-                                ['variant_id', $variant_id]
-                            ])
-                            ->whereDate('created_at', '>=', $start_date)
-                            ->whereDate('created_at', '<=', $end_date)
-                            ->pluck('sale_id')
-                            ->unique()
-                            ->toArray();
+                        $sale_ids = $lims_product_sale_data->pluck('sale_id')->unique()->toArray();
                         $sale_data_custom = Sale::whereIn('id', $sale_ids)->get();
                         $sale_data_custom_fields = $this->reportCustomField($sale_data_custom, $custom_fields);
                         foreach ($sale_data_custom_fields as $key => $value) {
@@ -3419,7 +3451,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                                 ->when($this->own_data, fn($q) => $q->where('sales.user_id', $this->current_user_id))
                                 ->whereDate('sales.created_at','>=', $start_date)
                                 ->whereDate('sales.created_at','<=', $end_date)
-                                ->select('product_sales.sale_unit_id', 'product_sales.qty', 'sale_id')
+                                ->select('product_sales.sale_unit_id', 'product_sales.qty', 'sale_id', 'sales.created_at as sale_date')
                                 ->get();
 
                     $sold_qty = 0;
@@ -3427,16 +3459,20 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                         foreach ($lims_product_sale_data as $product_sale) {
                             if($product_sale->sale_unit_id) {
                                 $unit = DB::table('units')->find($product_sale->sale_unit_id);
-                                if($unit->operator == '*'){
+                                if($unit && $unit->operator == '*'){
                                     $sold_qty += $product_sale->qty * $unit->operation_value;
                                 }
-                                elseif($unit->operator == '/'){
+                                elseif($unit && $unit->operator == '/'){
                                     $sold_qty += $product_sale->qty / $unit->operation_value;
                                 }
                             }
                         }
                     }
                     $nestedData['sold_qty'] = $sold_qty;
+
+                    if ((float) $nestedData['sold_amount'] == 0 && (float) $sold_qty == 0) {
+                        continue;
+                    }
 
                     $product_warehouse = Product_Warehouse::where([
                         ['product_id', $product->id],
@@ -3446,6 +3482,7 @@ $cash_payment_purchase = $payment_sent - $cheque_payment_purchase - $credit_card
                         $nestedData['in_stock'] = $product_warehouse->qty;
                     else
                         $nestedData['in_stock'] = 0;
+                    $nestedData['sale_date'] = $this->formatSaleReportDates($lims_product_sale_data);
 
                     $sale_ids = $lims_product_sale_data->pluck('sale_id')->unique()->toArray();
                     $sale_data_custom = Sale::whereIn('id', $sale_ids)->when($this->own_data, fn($q) => $q->where('user_id', $this->current_user_id))->get();

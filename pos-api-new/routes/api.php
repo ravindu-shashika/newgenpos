@@ -514,6 +514,7 @@ Route::controller(SaleController::class)->group(function () {
             Route::get('getpayment/{id}', 'getPayment');
             Route::post('updatepayment', 'updatePayment');
             Route::post('deletepayment', 'deletePayment');
+            Route::post('return-cheque-payment', 'returnChequePayment');
             Route::get('purchase_by_csv', 'purchaseByCsv');
             Route::get('deleted_data', 'showDeletedPurchases')
                 ;

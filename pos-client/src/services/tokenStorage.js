@@ -1,42 +1,45 @@
 import CookieService from './cookie';
 
 const TOKEN_KEY = 'access_token';
-/** Keep session after browser close (30 days). */
-const TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
-export const PERSISTENT_COOKIE_OPTIONS = {
+
+/**
+ * Browser-session cookies only (no maxAge/expires).
+ * Cleared when the browser process is closed — next open requires login.
+ */
+export const SESSION_COOKIE_OPTIONS = {
   path: '/',
-  maxAge: TOKEN_MAX_AGE,
   sameSite: 'lax',
 };
 
-/** Read Sanctum Bearer token (cookie first, then localStorage). */
-export function getToken() {
-  const fromCookie = CookieService.get(TOKEN_KEY);
-  if (fromCookie) return String(fromCookie);
+/** @deprecated Use SESSION_COOKIE_OPTIONS — auth is no longer persisted across browser restarts. */
+export const PERSISTENT_COOKIE_OPTIONS = SESSION_COOKIE_OPTIONS;
 
+function readSessionStorage() {
   try {
-    const fromStorage = localStorage.getItem(TOKEN_KEY);
-    return fromStorage ? String(fromStorage) : null;
+    return sessionStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
-/** Persist token after login (cookie + localStorage). */
-export function setToken(token) {
-  if (!token) return;
-  const value = String(token);
-  CookieService.set(TOKEN_KEY, value, PERSISTENT_COOKIE_OPTIONS);
+function writeSessionStorage(value) {
   try {
-    localStorage.setItem(TOKEN_KEY, value);
+    sessionStorage.setItem(TOKEN_KEY, value);
   } catch {
     // private mode / quota
   }
 }
 
-/** Remove token on logout. */
-export function clearToken() {
-  CookieService.remove(TOKEN_KEY, { path: '/' });
+function removeSessionStorage() {
+  try {
+    sessionStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Drop legacy localStorage token that survived PC reboot / browser close. */
+function removeLegacyLocalStorageToken() {
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {
@@ -44,32 +47,53 @@ export function clearToken() {
   }
 }
 
+/** Read Sanctum Bearer token (cookie first, then sessionStorage). */
+export function getToken() {
+  const fromCookie = CookieService.get(TOKEN_KEY);
+  if (fromCookie) return String(fromCookie);
+
+  const fromSession = readSessionStorage();
+  return fromSession ? String(fromSession) : null;
+}
+
+/** Store token for this browser session only (cookie + sessionStorage). */
+export function setToken(token) {
+  if (!token) return;
+  const value = String(token);
+  CookieService.set(TOKEN_KEY, value, SESSION_COOKIE_OPTIONS);
+  writeSessionStorage(value);
+  removeLegacyLocalStorageToken();
+}
+
+/** Remove token on logout. */
+export function clearToken() {
+  CookieService.remove(TOKEN_KEY, { path: '/' });
+  removeSessionStorage();
+  removeLegacyLocalStorageToken();
+}
+
 /**
- * Restore session on app boot:
- * - cookie present → sync to localStorage
- * - cookie missing but localStorage has token → restore cookie (survives browser close)
+ * Restore session on app boot for the current browser process only.
+ * - Does not restore from localStorage (that survived overnight / PC off).
+ * - Rewrites any old long-lived cookie as a session cookie.
  */
 export function restoreSessionToken() {
+  removeLegacyLocalStorageToken();
+
   const fromCookie = CookieService.get(TOKEN_KEY);
   if (fromCookie) {
     const value = String(fromCookie);
-    try {
-      localStorage.setItem(TOKEN_KEY, value);
-    } catch {
-      // ignore
-    }
+    // Ensure cookie is session-scoped (migrates old 30-day cookies).
+    CookieService.set(TOKEN_KEY, value, SESSION_COOKIE_OPTIONS);
+    writeSessionStorage(value);
     return value;
   }
 
-  try {
-    const fromStorage = localStorage.getItem(TOKEN_KEY);
-    if (fromStorage) {
-      const value = String(fromStorage);
-      CookieService.set(TOKEN_KEY, value, PERSISTENT_COOKIE_OPTIONS);
-      return value;
-    }
-  } catch {
-    // ignore
+  const fromSession = readSessionStorage();
+  if (fromSession) {
+    const value = String(fromSession);
+    CookieService.set(TOKEN_KEY, value, SESSION_COOKIE_OPTIONS);
+    return value;
   }
 
   return null;
@@ -91,5 +115,6 @@ export default {
   restoreSessionToken,
   syncTokenFromCookie,
   hasToken,
+  SESSION_COOKIE_OPTIONS,
   PERSISTENT_COOKIE_OPTIONS,
 };

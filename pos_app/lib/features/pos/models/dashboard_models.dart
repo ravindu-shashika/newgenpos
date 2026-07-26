@@ -121,3 +121,4 @@ class DashboardTransaction {
   final double total;
   final bool isPaid;
 }
+

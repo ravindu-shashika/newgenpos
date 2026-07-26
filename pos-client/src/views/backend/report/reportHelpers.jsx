@@ -2,8 +2,16 @@ import React from 'react';
 
 export function formatMoney(value, decimal = 2) {
     const n = Number(value);
-    if (Number.isNaN(n)) return Number(0).toFixed(decimal);
-    return n.toFixed(decimal);
+    if (Number.isNaN(n)) {
+        return (0).toLocaleString('en-US', {
+            minimumFractionDigits: decimal,
+            maximumFractionDigits: decimal,
+        });
+    }
+    return n.toLocaleString('en-US', {
+        minimumFractionDigits: decimal,
+        maximumFractionDigits: decimal,
+    });
 }
 
 export function sumRows(rows, key) {

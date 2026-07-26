@@ -15,6 +15,7 @@ import {
 } from '../../../components/ui';
 import { api } from '../../../services';
 import usePermissions from '../../../stores/usePermissions';
+import { formatMoney } from '../report/reportHelpers.jsx';
 
 const PAGE_SIZES = [10, 25, 50, -1];
 
@@ -145,9 +146,9 @@ export default function SalesList({ controllerName }) {
         { label: 'Warehouse', key: 'warehouse_name' },
         { label: 'Status', key: 'sale_status_label' },
         { label: 'Payment', key: 'payment_status_label' },
-        { label: 'Grand Total', key: 'grand_total', align: 'right' },
-        { label: 'Paid', key: 'paid_amount', align: 'right' },
-        { label: 'Due', key: 'due', align: 'right' },
+        { label: 'Grand Total', key: 'grand_total', align: 'right', render: (row) => formatMoney(row.grand_total) },
+        { label: 'Paid', key: 'paid_amount', align: 'right', render: (row) => formatMoney(row.paid_amount) },
+        { label: 'Due', key: 'due', align: 'right', render: (row) => formatMoney(row.due) },
         {
             label: 'Action',
             key: 'action',

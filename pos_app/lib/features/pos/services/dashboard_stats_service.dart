@@ -26,8 +26,7 @@ class DashboardStatsService {
         .get();
 
     final sales = allCompleted
-        .where((s) =>
-            !s.createdAt.isBefore(start) && s.createdAt.isBefore(end))
+        .where((s) => !s.createdAt.isBefore(start) && s.createdAt.isBefore(end))
         .toList();
 
     final yesterdaySales = allCompleted
@@ -42,8 +41,7 @@ class DashboardStatsService {
         yesterdaySales.fold<double>(0, (sum, sale) => sum + sale.grandTotal);
 
     final grossProfit = totalSales * (_defaultMarginPercent / 100);
-    final yesterdayGross =
-        yesterdayTotal * (_defaultMarginPercent / 100);
+    final yesterdayGross = yesterdayTotal * (_defaultMarginPercent / 100);
 
     final count = sales.length;
     final yesterdayCount = yesterdaySales.length;
@@ -51,14 +49,18 @@ class DashboardStatsService {
     final yesterdayAvg =
         yesterdayCount == 0 ? 0.0 : yesterdayTotal / yesterdayCount;
 
-    final totalQty =
-        sales.fold<double>(0, (sum, sale) => sum + sale.totalQty);
+    final totalQty = sales.fold<double>(0, (sum, sale) => sum + sale.totalQty);
     final basketSize = count == 0 ? 0.0 : totalQty / count;
 
     final dailyRevenue = _buildDailyRevenue(allCompleted, start);
     final topProducts = await _buildTopProducts(sales);
     final staffPerformance = await _buildStaffPerformance(sales);
-    final recent = sales.take(12).map(_mapTransaction).toList();
+    final yearStart = DateTime(target.year, 1, 1);
+    final recent = allCompleted
+        .where((s) =>
+            !s.createdAt.isBefore(yearStart) && s.createdAt.isBefore(end))
+        .map(_mapTransaction)
+        .toList();
 
     return DashboardStats(
       totalSales: totalSales,
@@ -118,8 +120,7 @@ class DashboardStatsService {
       final dayEnd = dayStart.add(const Duration(days: 1));
       final amount = allCompleted
           .where((s) =>
-              !s.createdAt.isBefore(dayStart) &&
-              s.createdAt.isBefore(dayEnd))
+              !s.createdAt.isBefore(dayStart) && s.createdAt.isBefore(dayEnd))
           .fold<double>(0, (sum, s) => sum + s.grandTotal);
       final isToday = dayStart.year == todayStart.year &&
           dayStart.month == todayStart.month &&
@@ -138,8 +139,7 @@ class DashboardStatsService {
 
     final saleIds = sales.map((s) => s.id).toSet();
     final allLines = await _db.select(_db.localSaleLines).get();
-    final lines =
-        allLines.where((line) => saleIds.contains(line.localSaleId));
+    final lines = allLines.where((line) => saleIds.contains(line.localSaleId));
 
     final totals = <String, ({String name, double qty, double revenue})>{};
     for (final line in lines) {
@@ -190,22 +190,18 @@ class DashboardStatsService {
 
     if (totals.isEmpty) return const [];
 
-    final maxSales = totals.values
-        .fold<double>(0, (m, e) => e.sales > m ? e.sales : m);
+    final maxSales =
+        totals.values.fold<double>(0, (m, e) => e.sales > m ? e.sales : m);
 
-    final rows = totals.entries
-        .map((e) {
-          final name = userNames[e.key]?.trim();
-          return StaffPerformanceRow(
-            name: name != null && name.isNotEmpty
-                ? name
-                : 'Operator #${e.key}',
-            transactionCount: e.value.count,
-            totalSales: e.value.sales,
-            progress: maxSales <= 0 ? 0 : e.value.sales / maxSales,
-          );
-        })
-        .toList()
+    final rows = totals.entries.map((e) {
+      final name = userNames[e.key]?.trim();
+      return StaffPerformanceRow(
+        name: name != null && name.isNotEmpty ? name : 'Operator #${e.key}',
+        transactionCount: e.value.count,
+        totalSales: e.value.sales,
+        progress: maxSales <= 0 ? 0 : e.value.sales / maxSales,
+      );
+    }).toList()
       ..sort((a, b) => b.totalSales.compareTo(a.totalSales));
 
     return [

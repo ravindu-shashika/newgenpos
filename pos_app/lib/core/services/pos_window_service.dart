@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:win32/win32.dart';
 import '../branding/pos_branding.dart';
@@ -16,6 +17,7 @@ class PosWindowService with WindowListener {
   bool _kioskActive = false;
   bool _windowMinimized = false;
   bool _listenerAttached = false;
+  bool _closing = false;
   String _appTitle = PosBranding.appName;
   GlobalKey<NavigatorState>? _navigatorKey;
   Future<bool> Function(BuildContext context)? _beforeExit;
@@ -32,6 +34,7 @@ class PosWindowService with WindowListener {
   final ValueNotifier<bool> maximizedNotifier = ValueNotifier<bool>(false);
 
   bool get isKioskActive => _kioskActive;
+  bool get isClosing => _closing;
 
   static bool get isSupported =>
       !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
@@ -150,12 +153,17 @@ class PosWindowService with WindowListener {
   }
 
   Future<void> requestClose([BuildContext? context]) async {
+    if (_closing) return;
     final ctx = context ?? _navigatorKey?.currentContext;
     if (ctx == null || !ctx.mounted) return;
     if (_beforeExit != null && !await _beforeExit!(ctx)) return;
     if (!ctx.mounted) return;
     if (!await confirmClose(ctx)) return;
-    await closeApp();
+    if (!ctx.mounted) {
+      await closeApp();
+      return;
+    }
+    await closeApp(ctx);
   }
 
   Future<void> toggleMaximize() async {
@@ -302,13 +310,164 @@ class PosWindowService with WindowListener {
     unawaited(_restoreKioskLayout());
   }
 
-  Future<void> closeApp() async {
-    if (!isSupported) return;
-    await windowManager.destroy();
+  Future<void> closeApp([BuildContext? context]) async {
+    if (_closing) return;
+    _closing = true;
+
+    final ctx = context ?? _navigatorKey?.currentContext;
+    if (ctx != null && ctx.mounted) {
+      _showClosingOverlay(ctx);
+      // Let the closing UI paint before native teardown (can take a few seconds).
+      await SchedulerBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      await SchedulerBinding.instance.endOfFrame;
+    }
+
+    if (!isSupported) {
+      _closing = false;
+      return;
+    }
+
+    try {
+      await windowManager.setPreventClose(false);
+      await windowManager.setClosable(true);
+      await windowManager.destroy();
+    } catch (_) {
+      _closing = false;
+    }
+  }
+
+  void _showClosingOverlay(BuildContext context) {
+    unawaited(
+      showGeneralDialog<void>(
+        context: context,
+        useRootNavigator: true,
+        barrierDismissible: false,
+        barrierLabel: 'Closing',
+        barrierColor: Colors.black.withValues(alpha: 0.72),
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (dialogContext, _, __) {
+          return const Material(
+            type: MaterialType.transparency,
+            child: SizedBox.expand(
+              child: _PosClosingOverlay(),
+            ),
+          );
+        },
+        transitionBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   void onWindowClose() {
     unawaited(requestClose());
+  }
+}
+
+/// Full-window feedback while the desktop process tears down.
+class _PosClosingOverlay extends StatefulWidget {
+  const _PosClosingOverlay();
+
+  @override
+  State<_PosClosingOverlay> createState() => _PosClosingOverlayState();
+}
+
+class _PosClosingOverlayState extends State<_PosClosingOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
+    return ColoredBox(
+      color: Colors.transparent,
+      child: Center(
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, child) {
+            final t = Curves.easeInOut.transform(_pulse.value);
+            return Transform.scale(
+              scale: 0.98 + (0.04 * t),
+              child: child,
+            );
+          },
+          child: Container(
+            width: 280,
+            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 28,
+                  offset: Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3.2,
+                    color: primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Closing…',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please wait while the POS shuts down',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

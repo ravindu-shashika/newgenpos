@@ -1209,15 +1209,19 @@ class AdjustmentController extends Controller
                 }
 
                 $productVariantId = null;
+                $variantLabel = '';
                 $code = $product->code;
 
                 if ($productAdjustment->variant_id) {
-                    $productVariant = ProductVariant::select('id', 'item_code')
+                    $productVariant = ProductVariant::select('id', 'item_code', 'variant_id')
                         ->FindExactProduct($productAdjustment->product_id, $productAdjustment->variant_id)
                         ->first();
                     if ($productVariant) {
                         $code = $productVariant->item_code;
                         $productVariantId = $productVariant->id;
+                        $variantLabel = (string) (DB::table('variant_master_values')
+                            ->where('id', $productVariant->variant_id)
+                            ->value('value') ?? '');
                     }
                 }
 
@@ -1251,6 +1255,7 @@ class AdjustmentController extends Controller
                     'action' => $productAdjustment->action,
                     'variant_id' => $productAdjustment->variant_id,
                     'product_variant_id' => $productVariantId,
+                    'variant_label' => $variantLabel,
                     'is_batch' => $isBatch,
                     'batch_number_mode' => $isBatch && ($product->batch_number_mode ?? 'auto') === 'manual'
                         ? 'manual'

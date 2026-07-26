@@ -208,6 +208,8 @@ class AppliedReturnSettlement {
   Map<String, dynamic> toSyncJson() => {
         if (returnId != null) 'return_id': returnId,
         'return_client_uuid': returnClientUuid,
+        if (returnReferenceNo.isNotEmpty)
+          'return_reference_no': returnReferenceNo,
         'amount': amount,
       };
 }

@@ -42,7 +42,6 @@ class PosAppShell extends ConsumerStatefulWidget {
 }
 
 class _PosAppShellState extends ConsumerState<PosAppShell> {
-
   late final PageController _pageController;
   bool _pageSyncing = false;
 
@@ -86,10 +85,10 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       _pageSyncing = true;
       _pageController
           .animateToPage(
-            target,
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeInOutCubic,
-          )
+        target,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOutCubic,
+      )
           .whenComplete(() {
         if (mounted) setState(() => _pageSyncing = false);
       });
@@ -135,9 +134,17 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
     final db = ref.read(appDatabaseProvider);
     final stats = await DashboardStatsService(db).load();
     if (!mounted) return;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+    final weekStart = todayStart.subtract(const Duration(days: 6));
+    final weekTransactions = stats.recentTransactions
+        .where((t) =>
+            !t.createdAt.isBefore(weekStart) && t.createdAt.isBefore(todayEnd))
+        .toList();
     await showRecentTransactionsDialog(
       context: context,
-      transactions: stats.recentTransactions,
+      transactions: weekTransactions,
       db: db,
     );
   }
@@ -190,10 +197,10 @@ class _PosAppShellState extends ConsumerState<PosAppShell> {
       _pageSyncing = true;
       _pageController
           .animateToPage(
-            target,
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeInOutCubic,
-          )
+        target,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOutCubic,
+      )
           .whenComplete(() {
         if (mounted) setState(() => _pageSyncing = false);
       });

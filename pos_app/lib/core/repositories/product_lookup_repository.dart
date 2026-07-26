@@ -246,6 +246,9 @@ class ProductLookupRepository {
   }
 
   /// Search by product name or code (prefix on codes for index use).
+  ///
+  /// - Base product code (e.g. `72029460`) → all variants for that product.
+  /// - Specific variant code (e.g. `L-72029460`) → that variant only.
   Future<List<ScannedProduct>> searchLocal({
     required String query,
     required int warehouseId,
@@ -257,6 +260,8 @@ class ProductLookupRepository {
 
     final candidates = <_SearchCandidate>[];
     final seenKeys = <String>{};
+    final expandedProductIds = <int>{};
+    final variantsByProductId = <int, List<ProductVariant>>{};
 
     void addCandidate({
       required Product product,
@@ -277,8 +282,48 @@ class ProductLookupRepository {
       );
     }
 
+    Future<List<ProductVariant>> variantsFor(int productId) async {
+      final cached = variantsByProductId[productId];
+      if (cached != null) return cached;
+      final rows = await (_db.select(_db.productVariants)
+            ..where((v) => v.productId.equals(productId)))
+          .get();
+      variantsByProductId[productId] = rows;
+      return rows;
+    }
+
+    /// Parent product code → every variant card; plain product → one card.
+    Future<void> addProductExpanded(Product product) async {
+      if (expandedProductIds.contains(product.id)) return;
+      if (candidates.length >= limit) return;
+
+      final variants = await variantsFor(product.id);
+      if (variants.isEmpty) {
+        addCandidate(product: product);
+        return;
+      }
+
+      expandedProductIds.add(product.id);
+      // Drop a bare parent row if we already added one before expanding.
+      candidates.removeWhere(
+        (c) => c.product.id == product.id && c.variantId == null,
+      );
+      seenKeys.remove('${product.id}_0');
+
+      for (final v in variants) {
+        if (candidates.length >= limit) break;
+        addCandidate(
+          product: product,
+          variantId: v.variantId,
+          code: v.itemCode,
+          additionalPrice: v.additionalPrice,
+        );
+      }
+    }
+
     final codeLike = _isCodeLikeTerm(term);
     final escaped = term.replaceAll('%', '').replaceAll('_', '');
+    var codeSearchMatched = false;
 
     if (codeLike) {
       final prefix = '$escaped%';
@@ -287,36 +332,60 @@ class ProductLookupRepository {
             ..limit(limit))
           .get();
       for (final p in productRows) {
-        addCandidate(product: p);
+        await addProductExpanded(p);
       }
+      if (productRows.isNotEmpty) codeSearchMatched = true;
 
       if (candidates.length < limit) {
-        final variantRows = await (_db.select(_db.productVariants)
-              ..where((v) => v.itemCode.like(prefix))
+        // Specific variant SKU: exact first, else prefix only.
+        // Never use contains — `L-72029460` must not match `XL-72029460`.
+        var variantRows = await (_db.select(_db.productVariants)
+              ..where((v) => v.itemCode.equals(escaped))
               ..limit(limit))
             .get();
-        if (variantRows.isNotEmpty) {
-          final productIds = variantRows.map((v) => v.productId).toSet().toList();
-          final products = await (_db.select(_db.products)
-                ..where((p) => p.id.isIn(productIds)))
+        final exactVariantHit = variantRows.isNotEmpty;
+        if (variantRows.isEmpty) {
+          variantRows = await (_db.select(_db.productVariants)
+                ..where((v) => v.itemCode.like(prefix))
+                ..limit(limit * 4))
               .get();
-          final byId = {for (final p in products) p.id: p};
-          for (final v in variantRows) {
-            if (candidates.length >= limit) break;
-            final product = byId[v.productId];
-            if (product == null) continue;
-            addCandidate(
-              product: product,
-              variantId: v.variantId,
-              code: v.itemCode,
-              additionalPrice: v.additionalPrice,
-            );
+        }
+        if (variantRows.isNotEmpty) {
+          codeSearchMatched = true;
+          final productIds = variantRows
+              .map((v) => v.productId)
+              .where((id) => !expandedProductIds.contains(id))
+              .toSet()
+              .toList();
+          if (productIds.isNotEmpty) {
+            final products = await (_db.select(_db.products)
+                  ..where((p) => p.id.isIn(productIds)))
+                .get();
+            final byId = {for (final p in products) p.id: p};
+            for (final v in variantRows) {
+              if (candidates.length >= limit) break;
+              if (expandedProductIds.contains(v.productId)) continue;
+              final product = byId[v.productId];
+              if (product == null) continue;
+              addCandidate(
+                product: product,
+                variantId: v.variantId,
+                code: v.itemCode,
+                additionalPrice: v.additionalPrice,
+              );
+            }
+          }
+          // Exact variant SKU: do not widen with name/FTS (would pull siblings).
+          if (exactVariantHit) {
+            codeSearchMatched = true;
           }
         }
       }
     }
 
-    if (candidates.length < limit) {
+    // Skip FTS/name when a code/SKU search already matched — avoids
+    // expanding siblings after an exact variant hit like L-72029460.
+    if (candidates.length < limit && !codeSearchMatched) {
       final ftsMatch = ProductCatalogSql.ftsMatchExpression(term);
       if (ftsMatch != null) {
         try {
@@ -333,7 +402,7 @@ class ProductLookupRepository {
               if (candidates.length >= limit) break;
               final product = byId[id];
               if (product == null) continue;
-              addCandidate(product: product);
+              await addProductExpanded(product);
             }
           }
         } catch (_) {
@@ -342,7 +411,7 @@ class ProductLookupRepository {
       }
     }
 
-    if (candidates.length < limit && !codeLike) {
+    if (candidates.length < limit && !codeLike && !codeSearchMatched) {
       final prefix = '${escaped.substring(0, escaped.length.clamp(0, 3))}%';
       final productRows = await (_db.select(_db.products)
             ..where(
@@ -354,7 +423,7 @@ class ProductLookupRepository {
             ..limit(limit))
           .get();
       for (final p in productRows) {
-        addCandidate(product: p);
+        await addProductExpanded(p);
         if (candidates.length >= limit) break;
       }
     }
@@ -400,7 +469,11 @@ class ProductLookupRepository {
       );
     }
 
-    results.sort((a, b) => a.name.compareTo(b.name));
+    results.sort((a, b) {
+      final byName = a.name.compareTo(b.name);
+      if (byName != 0) return byName;
+      return a.code.compareTo(b.code);
+    });
     return results;
   }
 

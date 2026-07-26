@@ -43,7 +43,6 @@ export default function ReturnPurchaseList({ controllerName }) {
     const authPerms = authStore.getPermissions();
     const canView = perms.canView || hasPurchaseReturnAccess(authPerms);
     const canAdd = perms.canAdd || authPerms.some((p) => /purchase-return.*add|purchase-returns-create|returns-add/.test(p));
-    const canEdit = perms.canEdit || authPerms.some((p) => /returns-edit|purchase-return.*edit|purchase-returns-edit/.test(p));
     const canDelete = perms.canDelete || authPerms.some((p) => /returns-delete|purchase-return.*delete|purchase-returns-delete/.test(p));
 
     const [rows, setRows] = useState([]);
@@ -159,10 +158,6 @@ export default function ReturnPurchaseList({ controllerName }) {
                     canView && {
                         label: '👁 View',
                         onClick: () => openView(row.id),
-                    },
-                    canEdit && {
-                        label: '✎ Edit',
-                        onClick: () => navigate(`/return-purchase/${row.id}/edit`),
                     },
                     canDelete && {
                         label: '🗑 Delete',

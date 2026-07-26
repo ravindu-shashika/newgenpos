@@ -95,19 +95,65 @@ class PosCashRegisterController extends Controller
     public function close(Request $request)
     {
         $request->validate([
-            'cash_register_id' => 'required|integer|exists:cash_registers,id',
+            'cash_register_id' => 'required|integer',
             'closing_balance' => 'required|numeric',
             'actual_cash' => 'required|numeric|min:0',
             'user_id' => 'sometimes|integer|exists:users,id',
+            'warehouse_id' => 'sometimes|integer|exists:warehouses,id',
         ]);
 
-        if (!$this->resolvePosUserId($request)) {
+        $userId = $this->resolvePosUserId($request);
+        if (!$userId) {
             return $this->spaJson($request, [
                 'message' => 'user_id is required to close cash register',
             ], 422);
         }
 
-        return app(CashRegisterController::class)->close($request);
+        $requestedId = (int) $request->input('cash_register_id');
+        $register = CashRegister::find($requestedId);
+
+        // Offline sync may send a stale local/server id — fall back to this user's open register.
+        if (!$register || (int) $register->user_id !== $userId) {
+            $openQuery = CashRegister::where('user_id', $userId)->where('status', true);
+            if ($request->filled('warehouse_id')) {
+                $openQuery->where('warehouse_id', (int) $request->input('warehouse_id'));
+            }
+            $register = $openQuery->orderByDesc('id')->first();
+        }
+
+        if (!$register) {
+            // Already closed on server (or never opened there) — idempotent for POS sync.
+            return $this->spaJson($request, [
+                'message' => __('db.Cash register closed successfully'),
+                'already_closed' => true,
+                'cash_register_id' => $requestedId > 0 ? $requestedId : null,
+            ]);
+        }
+
+        if ((int) $register->user_id !== $userId) {
+            return $this->spaJson($request, [
+                'message' => __('db.Sorry! You are not allowed to access this module'),
+            ], 403);
+        }
+
+        if (!(bool) $register->status) {
+            return $this->spaJson($request, [
+                'message' => __('db.Cash register closed successfully'),
+                'already_closed' => true,
+                'cash_register_id' => $register->id,
+            ]);
+        }
+
+        $register->closing_balance = $request->input('closing_balance');
+        $register->actual_cash = $request->input('actual_cash');
+        $register->status = 0;
+        $register->save();
+
+        return $this->spaJson($request, [
+            'message' => __('db.Cash register closed successfully'),
+            'already_closed' => false,
+            'cash_register_id' => $register->id,
+        ]);
     }
 
     protected function resolvePosUserId(Request $request): ?int

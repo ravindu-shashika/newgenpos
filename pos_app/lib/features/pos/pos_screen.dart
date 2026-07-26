@@ -1461,17 +1461,7 @@ class _PosScreenState extends ConsumerState<PosScreen>
         return;
       }
 
-      final exact = await ref.read(productLookupRepositoryProvider).lookup(
-            code: term,
-            warehouseId: warehouseId,
-            customerId: customerId,
-            priceType: _checkout.priceType,
-          );
-      if (exact != null) {
-        _pickSearchResult(exact);
-        return;
-      }
-
+      // Prefer search so a base product code expands all variants in the grid.
       final items = await ref.read(productLookupRepositoryProvider).searchLocal(
             query: term,
             warehouseId: warehouseId,
@@ -1481,11 +1471,22 @@ class _PosScreenState extends ConsumerState<PosScreen>
 
       if (!mounted) return;
       if (items.isEmpty) {
-        _showSnack('No product found for "$term"', error: true);
+        final exact = await ref.read(productLookupRepositoryProvider).lookup(
+              code: term,
+              warehouseId: warehouseId,
+              customerId: customerId,
+              priceType: _checkout.priceType,
+            );
+        if (!mounted) return;
+        if (exact == null) {
+          _showSnack('No product found for "$term"', error: true);
+          return;
+        }
+        _pickSearchResult(exact);
         return;
       }
 
-      // Single match: add to cart. Multiple: stay on filtered grid.
+      // Single match: add to cart. Multiple (e.g. all sizes): stay on grid.
       if (items.length == 1) {
         _pickSearchResult(items.first);
       }

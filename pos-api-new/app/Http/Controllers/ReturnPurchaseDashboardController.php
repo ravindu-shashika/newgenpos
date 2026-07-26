@@ -299,16 +299,25 @@ class ReturnPurchaseDashboardController extends Controller
             }
         }
 
-        // Old Blade create: actual_qty and default qty use full purchase line qty (not remaining).
         $purchaseQty = (float) $pp->qty;
         if ($purchaseQty <= 0) {
             return null;
         }
 
+        $alreadyReturned = (float) ($pp->return_qty ?? 0);
+        $remainingQty = max(0, $purchaseQty - $alreadyReturned);
+        if ($remainingQty <= 0) {
+            return null;
+        }
+
+        $unitDiscount = (float) $pp->discount / max($purchaseQty, 1);
+        $unitTax = (float) $pp->tax / max($purchaseQty, 1);
+        $unitCost = (float) $pp->total / max($purchaseQty, 1);
+
         if ((int) $product->tax_method === 1) {
-            $productCost = (float) $pp->net_unit_cost + ((float) $pp->discount / max($purchaseQty, 1));
+            $productCost = (float) $pp->net_unit_cost + $unitDiscount;
         } else {
-            $productCost = ((float) $pp->total / max($purchaseQty, 1)) + ((float) $pp->discount / max($purchaseQty, 1));
+            $productCost = $unitCost + $unitDiscount;
         }
 
         $tax = Tax::where('rate', $pp->tax_rate)->first();
@@ -323,8 +332,9 @@ class ReturnPurchaseDashboardController extends Controller
             $batchNo = ProductBatch::select('batch_no')->find($pp->product_batch_id)->batch_no ?? 'N/A';
         }
 
-        $unitCost = (float) $pp->total / max($purchaseQty, 1);
-        $unitTax = (float) $pp->tax / max($purchaseQty, 1);
+        $lineDiscount = $unitDiscount * $remainingQty;
+        $lineTax = $unitTax * $remainingQty;
+        $lineSubtotal = $unitCost * $remainingQty;
 
         return [
             'product_purchase_id' => $pp->id,
@@ -334,25 +344,27 @@ class ReturnPurchaseDashboardController extends Controller
             'name' => $product->name,
             'code' => $code,
             'batch_no' => $batchNo,
-            'actual_qty' => round($purchaseQty, $decimal),
-            'qty' => round($purchaseQty, $decimal),
+            'purchase_qty' => round($purchaseQty, $decimal),
+            'actual_qty' => round($remainingQty, $decimal),
+            'qty' => round($remainingQty, $decimal),
             'net_unit_cost' => round((float) $pp->net_unit_cost, $decimal),
-            'line_discount' => round((float) $pp->discount, $decimal),
-            'line_tax' => round((float) $pp->tax, $decimal),
-            'line_subtotal' => round((float) $pp->total, $decimal),
-            'discount' => round((float) $pp->discount, $decimal),
-            'tax' => round((float) $pp->tax, $decimal),
-            'subtotal' => round((float) $pp->total, $decimal),
+            'line_discount' => round($lineDiscount, $decimal),
+            'line_tax' => round($lineTax, $decimal),
+            'line_subtotal' => round($lineSubtotal, $decimal),
+            'discount' => round($lineDiscount, $decimal),
+            'tax' => round($lineTax, $decimal),
+            'subtotal' => round($lineSubtotal, $decimal),
             'tax_rate' => (float) $pp->tax_rate,
             'tax_name' => $tax->name ?? 'No Tax',
             'tax_method' => (int) $product->tax_method,
             'unit_cost' => round($unitCost, $decimal),
             'unit_tax' => round($unitTax, $decimal),
+            'unit_discount' => round($unitDiscount, $decimal),
             'product_cost' => round($productCost, $decimal),
             'purchase_unit' => $unitName,
             'is_imei' => (bool) $product->is_imei,
             'imei_number' => $pp->imei_number ?? '',
-            'return_qty' => round((float) ($pp->return_qty ?? 0), $decimal),
+            'return_qty' => round($alreadyReturned, $decimal),
         ];
     }
 }

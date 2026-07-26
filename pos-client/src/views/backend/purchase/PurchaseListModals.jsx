@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Modal,
-    ConfirmModal,
     FormField,
     SelectInput,
     TextInput,
 } from '../../../components/ui';
 import { api } from '../../../services';
+import { formatMoney } from '../report/reportHelpers.jsx';
 
 const basePath =
     import.meta.env.VITE_APP_DEFAULT_PATH ||
@@ -119,10 +119,10 @@ export function PurchaseViewModal({ purchaseId, onClose }) {
                                         <td>{line.batch_no}</td>
                                         <td>{line.qty} {line.unit_code}</td>
                                         <td>{line.returned_qty}</td>
-                                        <td>{line.unit_cost}</td>
-                                        <td>{line.tax} ({line.tax_rate}%)</td>
-                                        <td>{line.discount}</td>
-                                        <td>{line.subtotal}</td>
+                                        <td>{formatMoney(line.unit_cost)}</td>
+                                        <td>{formatMoney(line.tax)} ({line.tax_rate}%)</td>
+                                        <td>{formatMoney(line.discount)}</td>
+                                        <td>{formatMoney(line.subtotal)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -132,10 +132,10 @@ export function PurchaseViewModal({ purchaseId, onClose }) {
                         <p className="mb-1"><strong>Order tax:</strong> {p.order_tax} ({p.order_tax_rate}%)</p>
                         <p className="mb-1"><strong>Order discount:</strong> {p.order_discount}</p>
                         <p className="mb-1"><strong>Shipping:</strong> {p.shipping_cost}</p>
-                        <p className="mb-1"><strong>Grand total:</strong> {p.grand_total}</p>
-                        <p className="mb-1"><strong>Paid:</strong> {p.paid_amount}</p>
-                        <p className="mb-1"><strong>Returned:</strong> {p.returned_amount}</p>
-                        <p className="mb-1"><strong>Due:</strong> {p.due}</p>
+                        <p className="mb-1"><strong>Grand total:</strong> {formatMoney(p.grand_total)}</p>
+                        <p className="mb-1"><strong>Paid:</strong> {formatMoney(p.paid_amount)}</p>
+                        <p className="mb-1"><strong>Returned:</strong> {formatMoney(p.returned_amount)}</p>
+                        <p className="mb-1"><strong>Due:</strong> {formatMoney(p.due)}</p>
                         {p.note && <p className="mb-1"><strong>Note:</strong> {p.note}</p>}
                         <p className="mb-0"><strong>Created by:</strong> {p.created_by}</p>
                     </div>
@@ -220,7 +220,7 @@ export function PurchaseAddPaymentModal({ row, accounts, onClose, onSuccess, sho
         <Modal isOpen onClose={onClose} title="Add Payment" hideHint>
             <form onSubmit={handleSubmit}>
                 <p className="small text-muted mb-3">
-                    Reference: <strong>{row.reference_no}</strong> · Due: <strong>{row.due}</strong>{' '}
+                    Reference: <strong>{row.reference_no}</strong> · Due: <strong>{formatMoney(row.due)}</strong>{' '}
                     {row.currency_code} (rate {row.exchange_rate})
                 </p>
                 <div className="ui-form-grid two">
@@ -312,8 +312,13 @@ export function PurchasePaymentsModal({
     const [payments, setPayments] = useState([]);
     const [editId, setEditId] = useState(null);
     const [deleteId, setDeleteId] = useState(null);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [returnPayment, setReturnPayment] = useState(null);
+    const [returnReason, setReturnReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [editForm, setEditForm] = useState(null);
+
+    const canReturnCheque = canEditPayment || canDeletePayment;
 
     const accountOptions = useMemo(
         () => (accounts || []).map((a) => ({ value: String(a.id), label: a.name })),
@@ -338,6 +343,14 @@ export function PurchasePaymentsModal({
     }, [loadPayments]);
 
     const startEdit = (payment) => {
+        if (payment.is_deleted) {
+            showToast('Deleted payments cannot be edited.', 'error');
+            return;
+        }
+        if (payment.cheque_returned) {
+            showToast('Returned cheque payments cannot be edited.', 'error');
+            return;
+        }
         setEditId(payment.id);
         setEditForm({
             edit_paying_amount: String(payment.paying_amount),
@@ -383,15 +396,45 @@ export function PurchasePaymentsModal({
 
     const handleDelete = async () => {
         try {
-            await api.post('purchases/deletepayment', { id: deleteId });
-            showToast('Payment deleted successfully.', 'success');
+            await api.post('purchases/deletepayment', {
+                id: deleteId,
+                reason: deleteReason.trim() || undefined,
+            });
+            showToast('Payment marked as deleted. Purchase balance restored.', 'success');
             setDeleteId(null);
+            setDeleteReason('');
             await loadPayments();
             onChanged();
         } catch (err) {
             showToast(err?.response?.data?.message || err?.message || 'Failed to delete payment.', 'error');
         }
     };
+
+    const handleReturnCheque = async () => {
+        if (!returnPayment) return;
+        if (!returnReason.trim()) {
+            showToast('Return reason is required.', 'error');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            await api.post('purchases/return-cheque-payment', {
+                id: returnPayment.id,
+                reason: returnReason.trim(),
+            });
+            showToast('Cheque marked as returned. Purchase balance restored.', 'success');
+            setReturnPayment(null);
+            setReturnReason('');
+            await loadPayments();
+            onChanged();
+        } catch (err) {
+            showToast(err?.response?.data?.message || err?.message || 'Failed to mark cheque returned.', 'error');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const showActions = canEditPayment || canDeletePayment || canReturnCheque;
 
     return (
         <>
@@ -479,39 +522,86 @@ export function PurchasePaymentsModal({
                                     <th>Amount</th>
                                     <th>Paid by</th>
                                     <th>Payment date</th>
-                                    {(canEditPayment || canDeletePayment) && <th>Action</th>}
+                                    {showActions && <th>Action</th>}
                                 </tr>
                             </thead>
                             <tbody>
                                 {payments.length === 0 && (
                                     <tr>
-                                        <td colSpan={canEditPayment || canDeletePayment ? 7 : 6} className="text-muted text-center">
+                                        <td colSpan={showActions ? 7 : 6} className="text-muted text-center">
                                             No payments found.
                                         </td>
                                     </tr>
                                 )}
                                 {payments.map((p) => (
-                                    <tr key={p.id}>
+                                    <tr
+                                        key={p.id}
+                                        className={
+                                            p.is_deleted
+                                                ? 'table-secondary'
+                                                : p.cheque_returned
+                                                    ? 'table-warning'
+                                                    : undefined
+                                        }
+                                    >
                                         <td>{p.created_at}</td>
                                         <td>{p.payment_reference}</td>
                                         <td>{p.account_name}</td>
-                                        <td>{p.amount}</td>
-                                        <td>{p.paying_method}</td>
+                                        <td>{formatMoney(p.amount)}</td>
+                                        <td>
+                                            {p.paying_method}
+                                            {p.cheque_no ? ` (${p.cheque_no})` : ''}
+                                            {p.cheque_returned && !p.is_deleted && (
+                                                <span className="badge bg-warning text-dark ms-1" title={p.cheque_return_reason || ''}>
+                                                    Returned
+                                                </span>
+                                            )}
+                                            {p.is_deleted && (
+                                                <span className="badge bg-secondary ms-1" title={p.void_reason || ''}>
+                                                    Deleted
+                                                </span>
+                                            )}
+                                        </td>
                                         <td>{p.payment_at}</td>
-                                        {(canEditPayment || canDeletePayment) && (
+                                        {showActions && (
                                             <td>
-                                                <div className="ui-btn-group">
-                                                    {canEditPayment && (
-                                                        <button type="button" className="ui-btn ghost sm" onClick={() => startEdit(p)}>
-                                                            <i className="fa fa-pencil ui-btn-icon" /> Edit
-                                                        </button>
-                                                    )}
-                                                    {canDeletePayment && (
-                                                        <button type="button" className="ui-btn danger sm" onClick={() => setDeleteId(p.id)}>
-                                                            <i className="fa fa-trash ui-btn-icon" /> Delete
-                                                        </button>
-                                                    )}
-                                                </div>
+                                                {p.is_deleted ? (
+                                                    <span className="small text-muted">
+                                                        {p.deleted_at ? `Deleted ${p.deleted_at}` : 'Deleted'}
+                                                    </span>
+                                                ) : (
+                                                    <div className="ui-btn-group">
+                                                        {canEditPayment && !p.cheque_returned && (
+                                                            <button type="button" className="ui-btn ghost sm" onClick={() => startEdit(p)}>
+                                                                <i className="fa fa-pencil ui-btn-icon" /> Edit
+                                                            </button>
+                                                        )}
+                                                        {canReturnCheque && p.paying_method === 'Cheque' && !p.cheque_returned && (
+                                                            <button
+                                                                type="button"
+                                                                className="ui-btn ghost sm"
+                                                                onClick={() => {
+                                                                    setReturnPayment(p);
+                                                                    setReturnReason('');
+                                                                }}
+                                                            >
+                                                                <i className="fa fa-undo ui-btn-icon" /> Mark returned
+                                                            </button>
+                                                        )}
+                                                        {canDeletePayment && (
+                                                            <button
+                                                                type="button"
+                                                                className="ui-btn danger sm"
+                                                                onClick={() => {
+                                                                    setDeleteId(p.id);
+                                                                    setDeleteReason('');
+                                                                }}
+                                                            >
+                                                                <i className="fa fa-trash ui-btn-icon" /> Delete
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                         )}
                                     </tr>
@@ -522,13 +612,83 @@ export function PurchasePaymentsModal({
                 )}
             </Modal>
             {deleteId && (
-                <ConfirmModal
-                    title="Delete Payment"
-                    danger
-                    message="Are you sure you want to delete this payment?"
-                    onConfirm={handleDelete}
-                    onClose={() => setDeleteId(null)}
-                />
+                <Modal
+                    isOpen
+                    onClose={() => { setDeleteId(null); setDeleteReason(''); }}
+                    title="Delete payment"
+                    size="sm"
+                    hideHint
+                >
+                    <p className="small mb-3">
+                        The payment will be kept in history as <strong>Deleted</strong>, and the purchase due balance will be restored.
+                    </p>
+                    <FormField label="Reason (optional)">
+                        <textarea
+                            className="ui-input"
+                            rows={2}
+                            value={deleteReason}
+                            onChange={(e) => setDeleteReason(e.target.value)}
+                            placeholder="e.g. Entered by mistake"
+                        />
+                    </FormField>
+                    <div className="ui-btn-group mt-3">
+                        <button type="button" className="ui-btn danger sm" onClick={handleDelete}>
+                            <i className="fa fa-trash ui-btn-icon" /> Mark deleted
+                        </button>
+                        <button
+                            type="button"
+                            className="ui-btn ghost sm"
+                            onClick={() => { setDeleteId(null); setDeleteReason(''); }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </Modal>
+            )}
+            {returnPayment && (
+                <Modal
+                    isOpen
+                    onClose={() => { setReturnPayment(null); setReturnReason(''); }}
+                    title="Mark cheque returned"
+                    size="sm"
+                    hideHint
+                >
+                    <p className="small text-muted mb-2">
+                        Cheque <strong>{returnPayment.cheque_no || '—'}</strong> · Amount{' '}
+                        <strong>{formatMoney(returnPayment.amount)}</strong>
+                    </p>
+                    <p className="small mb-3">
+                        This will restore the amount to the purchase due balance. The payment stays in history as returned.
+                    </p>
+                    <FormField label="Return reason *">
+                        <textarea
+                            className="ui-input"
+                            rows={3}
+                            value={returnReason}
+                            onChange={(e) => setReturnReason(e.target.value)}
+                            placeholder="e.g. Cheque bounced / insufficient funds"
+                            autoFocus
+                        />
+                    </FormField>
+                    <div className="ui-btn-group mt-3">
+                        <button
+                            type="button"
+                            className="ui-btn primary sm"
+                            disabled={submitting || !returnReason.trim()}
+                            onClick={handleReturnCheque}
+                        >
+                            <i className={`fa ${submitting ? 'fa-spinner fa-spin' : 'fa-undo'} ui-btn-icon`} />
+                            {submitting ? 'Saving…' : 'Confirm return'}
+                        </button>
+                        <button
+                            type="button"
+                            className="ui-btn ghost sm"
+                            onClick={() => { setReturnPayment(null); setReturnReason(''); }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </Modal>
             )}
         </>
     );

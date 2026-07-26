@@ -1,9 +1,9 @@
 import api from './api';
 import CookieService from './cookie';
-import { setToken, clearToken, PERSISTENT_COOKIE_OPTIONS } from './tokenStorage';
+import { setToken, clearToken, SESSION_COOKIE_OPTIONS } from './tokenStorage';
 import authStore from '../stores/authStore';
 
-const options = { ...PERSISTENT_COOKIE_OPTIONS };
+const options = { ...SESSION_COOKIE_OPTIONS };
 
 class AuthService {
   async doUserLogin(credentials) {
@@ -64,6 +64,11 @@ class AuthService {
     CookieService.remove('permissions', removeOpts);
     CookieService.remove('role_id', removeOpts);
     CookieService.remove('role_name', removeOpts);
+    try {
+      localStorage.removeItem('access_token');
+    } catch {
+      // ignore
+    }
   }
 }
 

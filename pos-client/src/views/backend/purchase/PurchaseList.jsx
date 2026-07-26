@@ -22,6 +22,7 @@ import {
     PurchaseAddPaymentModal,
     PurchasePaymentsModal,
 } from './PurchaseListModals';
+import { formatMoney } from '../report/reportHelpers.jsx';
 
 function canViewDeletedPurchases() {
     const roleId = authStore.getUser()?.role_id;
@@ -167,10 +168,10 @@ export default function PurchaseList({ controllerName }) {
         { label: 'Supplier', key: 'supplier_name', sortable: true },
         { label: 'Warehouse', key: 'warehouse_name' },
         { label: 'Status', key: 'status_label' },
-        { label: 'Grand Total', key: 'grand_total', align: 'right' },
-        { label: 'Returned', key: 'returned_amount', align: 'right' },
-        { label: 'Paid', key: 'paid_amount', align: 'right' },
-        { label: 'Due', key: 'due', align: 'right' },
+        { label: 'Grand Total', key: 'grand_total', align: 'right', render: (row) => formatMoney(row.grand_total) },
+        { label: 'Returned', key: 'returned_amount', align: 'right', render: (row) => formatMoney(row.returned_amount) },
+        { label: 'Paid', key: 'paid_amount', align: 'right', render: (row) => formatMoney(row.paid_amount) },
+        { label: 'Due', key: 'due', align: 'right', render: (row) => formatMoney(row.due) },
         { label: 'Payment', key: 'payment_status_label' },
         {
             label: 'Action',

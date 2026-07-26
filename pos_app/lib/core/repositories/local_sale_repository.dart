@@ -483,6 +483,8 @@ class LocalSaleRepository {
         receiptLines.fold<double>(0, (s, l) => s + l.discount);
     final orderDiscount = sale.orderDiscount;
     final tendered = _tenderedFromPayload(sale.payloadJson, sale.paidAmount);
+    final returnSettlements =
+        ReturnSettlementSummary.fromPayloadJson(sale.payloadJson);
 
     return LocalReceipt(
       referenceNo: ref,
@@ -501,6 +503,8 @@ class LocalSaleRepository {
       itemDiscount: itemDiscount,
       orderDiscount: orderDiscount,
       totalDiscount: sale.totalDiscount,
+      returnCredit: returnSettlements.credit,
+      returnReferences: returnSettlements.references,
       serverSaleId: sale.serverSaleId,
       lines: receiptLines,
     );

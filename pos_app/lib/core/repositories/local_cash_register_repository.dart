@@ -288,18 +288,14 @@ class LocalCashRegisterRepository {
           warehouseId: reg.warehouseId,
           userId: reg.userId,
         );
-        int? serverId;
-        if (check['open'] == true && check['cash_register_id'] != null) {
-          final raw = check['cash_register_id'];
-          serverId = raw is int ? raw : int.tryParse(raw.toString());
-        } else {
+        int? serverId = _parseCashRegisterId(check);
+        if (check['open'] != true || serverId == null) {
           final res = await api.openCashRegister(
             warehouseId: reg.warehouseId,
             userId: reg.userId,
             cashInHand: reg.cashInHand,
           );
-          final raw = res['cash_register_id'];
-          serverId = raw is int ? raw : int.tryParse(raw.toString());
+          serverId = _parseCashRegisterId(res);
         }
         if (serverId == null) continue;
 
@@ -335,25 +331,113 @@ class LocalCashRegisterRepository {
         final refreshed = await getById(reg.id);
         serverId = refreshed?.serverRegisterId;
       }
+
+      // Never send local SQLite id as a server id when it was never synced.
+      if (serverId == null) {
+        try {
+          final check = await api.checkCashRegister(
+            warehouseId: reg.warehouseId,
+            userId: reg.userId,
+          );
+          if (check['open'] == true) {
+            serverId = _parseCashRegisterId(check);
+            if (serverId != null) {
+              await (_db.update(_db.localCashRegisters)
+                    ..where((r) => r.id.equals(reg.id)))
+                  .write(
+                LocalCashRegistersCompanion(
+                  serverRegisterId: Value(serverId),
+                ),
+              );
+            }
+          } else {
+            // Nothing open on server — local close is done.
+            await (_db.update(_db.localCashRegisters)
+                  ..where((r) => r.id.equals(reg.id)))
+                .write(
+              LocalCashRegistersCompanion(
+                syncStatus: const Value('closed_synced'),
+                syncedAt: Value(DateTime.now()),
+                errorMessage: const Value(null),
+              ),
+            );
+            continue;
+          }
+        } catch (e) {
+          await (_db.update(_db.localCashRegisters)
+                ..where((r) => r.id.equals(reg.id)))
+              .write(
+            LocalCashRegistersCompanion(
+              errorMessage: Value(e.toString()),
+            ),
+          );
+          continue;
+        }
+      }
+
       if (serverId == null) continue;
 
       try {
-        await api.closeCashRegister(
+        final res = await api.closeCashRegister(
           registerId: serverId,
           userId: reg.userId,
           closingBalance: reg.closingBalance ?? 0,
           actualCash: reg.actualCash ?? 0,
+          warehouseId: reg.warehouseId,
         );
+        final closedId = _parseCashRegisterId(res) ?? serverId;
         await (_db.update(_db.localCashRegisters)
               ..where((r) => r.id.equals(reg.id)))
             .write(
           LocalCashRegistersCompanion(
+            serverRegisterId: Value(closedId),
             syncStatus: const Value('closed_synced'),
             syncedAt: Value(DateTime.now()),
             errorMessage: const Value(null),
           ),
         );
       } catch (e) {
+        // Stale id: if nothing is open for this user/warehouse, treat as closed.
+        try {
+          final check = await api.checkCashRegister(
+            warehouseId: reg.warehouseId,
+            userId: reg.userId,
+          );
+          if (check['open'] != true) {
+            await (_db.update(_db.localCashRegisters)
+                  ..where((r) => r.id.equals(reg.id)))
+                .write(
+              LocalCashRegistersCompanion(
+                syncStatus: const Value('closed_synced'),
+                syncedAt: Value(DateTime.now()),
+                errorMessage: const Value(null),
+              ),
+            );
+            continue;
+          }
+          final liveId = _parseCashRegisterId(check);
+          if (liveId != null && liveId != serverId) {
+            await api.closeCashRegister(
+              registerId: liveId,
+              userId: reg.userId,
+              closingBalance: reg.closingBalance ?? 0,
+              actualCash: reg.actualCash ?? 0,
+              warehouseId: reg.warehouseId,
+            );
+            await (_db.update(_db.localCashRegisters)
+                  ..where((r) => r.id.equals(reg.id)))
+                .write(
+              LocalCashRegistersCompanion(
+                serverRegisterId: Value(liveId),
+                syncStatus: const Value('closed_synced'),
+                syncedAt: Value(DateTime.now()),
+                errorMessage: const Value(null),
+              ),
+            );
+            continue;
+          }
+        } catch (_) {}
+
         await (_db.update(_db.localCashRegisters)
               ..where((r) => r.id.equals(reg.id)))
             .write(
@@ -363,6 +447,17 @@ class LocalCashRegisterRepository {
         );
       }
     }
+  }
+
+  static int? _parseCashRegisterId(Map<String, dynamic> res) {
+    dynamic raw = res['cash_register_id'];
+    final nested = res['data'];
+    if (raw == null && nested is Map) {
+      raw = nested['cash_register_id'];
+    }
+    if (raw == null || raw == false || raw == 'false') return null;
+    if (raw is int) return raw;
+    return int.tryParse(raw.toString());
   }
 
   Future<void> _attachServerRegisterId(int localId, int serverId) async {

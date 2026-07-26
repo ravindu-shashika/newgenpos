@@ -47,7 +47,6 @@ class PosProfessionalWideDialogShell extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             PosProfessionalDialogHeader(
@@ -58,7 +57,7 @@ class PosProfessionalWideDialogShell extends StatelessWidget {
             ),
             Divider(height: 1, color: Theme.of(context).dividerColor),
             if (headerExtra != null) headerExtra!,
-            Flexible(child: body),
+            Expanded(child: body),
             if (footer != null) ...[
               Divider(height: 1, color: Theme.of(context).dividerColor),
               Padding(
@@ -117,15 +116,11 @@ class PosProfessionalDialogShell extends StatelessWidget {
               onClose: onClose ?? () => Navigator.of(context).pop(),
             ),
             Divider(height: 1, color: Theme.of(context).dividerColor),
-            Flexible(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 280),
-                curve: Curves.easeOutCubic,
-                constraints: BoxConstraints(maxHeight: maxBodyHeight),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-                  child: body,
-                ),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxBodyHeight),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                child: body,
               ),
             ),
             if (footer != null) ...[
@@ -262,8 +257,7 @@ class PosProfessionalDialogFooter extends StatelessWidget {
         const Spacer(),
         if (primaryLabel != null)
           FilledButton(
-            onPressed:
-                primaryEnabled && !primaryLoading ? onPrimary : null,
+            onPressed: primaryEnabled && !primaryLoading ? onPrimary : null,
             style: destructiveStyle?.merge(tallStyle) ?? tallStyle,
             child: primaryLoading
                 ? SizedBox(
@@ -330,7 +324,8 @@ class PosProfessionalDialog extends StatelessWidget {
   }
 }
 
-InputDecoration posProfessionalSearchDecoration(BuildContext context, String hint) {
+InputDecoration posProfessionalSearchDecoration(
+    BuildContext context, String hint) {
   return InputDecoration(
     hintText: hint,
     filled: true,
@@ -381,7 +376,9 @@ class PosProfessionalPickerTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? context.posBrand.primary : Theme.of(context).dividerColor,
+              color: selected
+                  ? context.posBrand.primary
+                  : Theme.of(context).dividerColor,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -423,7 +420,8 @@ class PosProfessionalPickerTile extends StatelessWidget {
                     color: context.posBrand.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.check, size: 16, color: Theme.of(context).colorScheme.surface),
+                  child: Icon(Icons.check,
+                      size: 16, color: Theme.of(context).colorScheme.surface),
                 ),
             ],
           ),
@@ -449,7 +447,12 @@ class PosProfessionalEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+          Icon(icon,
+              size: 40,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurfaceVariant
+                  .withValues(alpha: 0.6)),
           SizedBox(height: 12),
           Text(
             message,
@@ -544,11 +547,17 @@ Future<void> showRecentTransactionsDialog({
     context: context,
     builder: (ctx) => PosProfessionalDialog(
       title: 'Recent Transactions',
-      subtitle: 'Today at this terminal · tap a bill for items',
+      subtitle:
+          'Last 7 days at this terminal · ${transactions.length} bill${transactions.length == 1 ? '' : 's'} · tap for items',
       icon: Icons.receipt_long_outlined,
+      maxBodyHeight: 480,
       body: transactions.isEmpty
           ? const _RecentTransactionsEmpty()
-          : _RecentTransactionsList(transactions: transactions, db: db),
+          : _RecentTransactionsList(
+              transactions: transactions,
+              db: db,
+              showDate: true,
+            ),
       primaryLabel: 'Close',
       onPrimary: () => Navigator.pop(ctx),
     ),
@@ -580,7 +589,7 @@ class _RecentTransactionsEmpty extends StatelessWidget {
           ),
           SizedBox(height: 18),
           Text(
-            'No sales recorded today yet',
+            'No sales in the last 7 days',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 17,
@@ -608,21 +617,26 @@ class _RecentTransactionsList extends StatelessWidget {
   const _RecentTransactionsList({
     required this.transactions,
     this.db,
+    this.showDate = false,
   });
 
   final List<DashboardTransaction> transactions;
   final AppDatabase? db;
+  final bool showDate;
 
   @override
   Widget build(BuildContext context) {
     final timeFmt = DateFormat('h:mm a');
+    final dateTimeFmt = DateFormat('MMM d · h:mm a');
 
     return ListView.separated(
-      shrinkWrap: true,
       itemCount: transactions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
         final t = transactions[i];
+        final when = showDate
+            ? dateTimeFmt.format(t.createdAt)
+            : timeFmt.format(t.createdAt);
         return Material(
           color: Colors.transparent,
           child: InkWell(
@@ -635,96 +649,113 @@ class _RecentTransactionsList extends StatelessWidget {
                     ),
             borderRadius: BorderRadius.circular(10),
             child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: context.posBrand.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  t.paymentIcon,
-                  style: TextStyle(fontSize: 18),
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      t.referenceNo,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: context.posBrand.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    SizedBox(height: 4),
-                    Row(
+                    alignment: Alignment.center,
+                    child: Text(
+                      t.paymentIcon,
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          t.paymentLabel,
+                          t.referenceNo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
-                        Text(
-                          ' · ',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                        Text(
-                          timeFmt.format(t.createdAt),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (t.itemCount > 0) ...[
-                          Text(
-                            ' · ',
-                            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                          Text(
-                            '${t.itemCount} item${t.itemCount == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                t.paymentLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            Text(
+                              ' · ',
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                            ),
+                            Text(
+                              when,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
+                            if (t.itemCount > 0) ...[
+                              Text(
+                                ' · ',
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                              ),
+                              Text(
+                                '${t.itemCount} item${t.itemCount == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
+                  ),
+                  if (db != null) ...[
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    SizedBox(width: 4),
                   ],
-                ),
+                  Text(
+                    formatPosMoney(t.total),
+                    style:
+                        context.posStyles.productPrice.copyWith(fontSize: 15),
+                  ),
+                ],
               ),
-              if (db != null) ...[
-                Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                SizedBox(width: 4),
-              ],
-              Text(
-                formatPosMoney(t.total),
-                style: context.posStyles.productPrice.copyWith(fontSize: 15),
-              ),
-            ],
-          ),
-        ),
+            ),
           ),
         );
       },

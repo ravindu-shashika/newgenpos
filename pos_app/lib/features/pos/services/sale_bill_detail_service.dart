@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show OrderingTerm;
 
 import '../../../core/database/app_database.dart';
+import '../models/local_receipt.dart';
 import '../models/sale_bill_detail.dart';
 import '../sale_reference.dart';
 
@@ -33,11 +34,16 @@ class SaleBillDetailService {
       }
     }
 
+    final returnSettlements =
+        ReturnSettlementSummary.fromPayloadJson(sale.payloadJson);
+
     return SaleBillDetail(
       sale: sale,
       lines: lines,
       customerName: customerName,
       paymentLabel: _paymentLabel(sale.payloadJson),
+      returnCredit: returnSettlements.credit,
+      returnReferences: returnSettlements.references,
     );
   }
 

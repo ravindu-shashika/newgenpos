@@ -15,6 +15,8 @@ use App\Payment\PaystackPayment;
 use App\Payment\RazorpayPayment;
 use App\Models\PaymentWithCheque;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\PaymentWithCreditCard;
 
 class PaymentService
@@ -44,12 +46,14 @@ class PaymentService
     public function payForPurchase(array $data) {
         $lims_purchase_data = Purchase::find($data['purchase_id']);
         $lims_purchase_data->paid_amount += $data['amount'];
-        $balance = $lims_purchase_data->grand_total - $lims_purchase_data->paid_amount;
-        // dd($data, $balance, $lims_purchase_data);
-        if($balance > 0)
-            $lims_purchase_data->payment_status = 1;
-        else
-            $lims_purchase_data->payment_status = 2;
+        $returned = 0.0;
+        if (Schema::hasTable('return_purchases') && Schema::hasColumn('return_purchases', 'purchase_id')) {
+            $returned = (float) DB::table('return_purchases')
+                ->where('purchase_id', $lims_purchase_data->id)
+                ->sum('grand_total');
+        }
+        $balance = (float) $lims_purchase_data->grand_total - $returned - (float) $lims_purchase_data->paid_amount;
+        $lims_purchase_data->payment_status = $balance > 0.00001 ? 1 : 2;
 
         $lims_purchase_data->save();
 

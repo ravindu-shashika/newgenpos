@@ -68,8 +68,9 @@ class CashRegisterService {
         userId: userId,
       );
       if (res['open'] == true && res['cash_register_id'] != null) {
-        final raw = res['cash_register_id'];
-        final serverId = raw is int ? raw : int.tryParse(raw.toString());
+        final raw = res['cash_register_id'] ??
+            (res['data'] is Map ? (res['data'] as Map)['cash_register_id'] : null);
+        final serverId = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
         if (serverId != null) {
           return _repo.importOpenFromServer(
             serverRegisterId: serverId,
